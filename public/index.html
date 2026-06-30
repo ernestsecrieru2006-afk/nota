@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>nota.</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- ── Loading ─────────────────────────────────────────────────────── -->
+    <div id="screen-loading" class="screen active">
+      <div class="center-content">
+        <div class="logo">nota.</div>
+        <div class="spinner"></div>
+      </div>
+    </div>
+
+    <!-- ── Error ───────────────────────────────────────────────────────── -->
+    <div id="screen-error" class="screen">
+      <div class="center-content">
+        <div class="logo">nota.</div>
+        <div class="error-icon">✗</div>
+        <p class="error-text" id="error-text">Ceva nu a mers bine.</p>
+      </div>
+    </div>
+
+    <!-- ── Bill ────────────────────────────────────────────────────────── -->
+    <div id="screen-bill" class="screen">
+      <header class="bill-header">
+        <div class="logo small">nota.</div>
+        <div class="bill-meta">
+          <span class="restaurant-name" id="restaurant-name">Carmelo · Ristorante</span>
+          <span class="table-badge" id="table-badge">Masa —</span>
+        </div>
+      </header>
+
+      <div class="modes-bar">
+        <button class="mode-btn active" data-mode="items">Pozițiile mele</button>
+        <button class="mode-btn" data-mode="equal">Împărțim egal</button>
+        <button class="mode-btn" data-mode="rest">Plătesc restul</button>
+      </div>
+
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+
+      <div id="equal-picker" class="equal-picker" style="display:none">
+        <span class="picker-label">Câți suntem la masă?</span>
+        <div class="picker-row">
+          <button class="stepper-btn" id="guest-minus">−</button>
+          <span class="stepper-val" id="guest-count">2</span>
+          <button class="stepper-btn" id="guest-plus">+</button>
+        </div>
+      </div>
+
+      <ul class="items-list" id="items-list" role="list"></ul>
+
+      <div class="bill-footer">
+        <div class="bill-summary">
+          <div class="summary-row">
+            <span class="summary-label">Total masă</span>
+            <span class="summary-val" id="bill-total">— lei</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label achitat-label">Achitat</span>
+            <span class="summary-val achitat-val" id="bill-paid">0 lei</span>
+          </div>
+          <div class="summary-row">
+            <span class="summary-label rest-label">Rest de plată</span>
+            <span class="summary-val rest-val" id="bill-rest">— lei</span>
+          </div>
+        </div>
+        <div class="footer-divider"></div>
+        <div class="footer-row my-row">
+          <span class="footer-label my-label">Partea ta</span>
+          <span class="footer-val my-val" id="my-total">0 lei</span>
+        </div>
+        <button class="cta-btn" id="continue-btn" disabled>Continuă →</button>
+      </div>
+    </div>
+
+    <!-- ── Payment (MIA) ───────────────────────────────────────────────── -->
+    <div id="screen-payment" class="screen">
+      <header class="simple-header">
+        <button class="back-btn" id="back-btn">‹</button>
+        <div class="logo small">nota.</div>
+        <div class="header-spacer"></div>
+      </header>
+
+      <div class="payment-body">
+        <div class="pay-hero">
+          <span class="pay-hero-label">De plătit</span>
+          <span class="pay-hero-amount" id="pay-amount">0 lei</span>
+        </div>
+
+        <div class="pay-items-card">
+          <ul id="pay-items-list"></ul>
+        </div>
+
+        <div class="tip-section">
+          <span class="tip-label">Bacșiș <span class="tip-label-opt">(opțional)</span></span>
+          <div class="tip-btns">
+            <button class="tip-btn active" data-tip="0">Fără</button>
+            <button class="tip-btn" data-tip="10">10%</button>
+            <button class="tip-btn" data-tip="15">15%</button>
+            <button class="tip-btn" data-tip="20">20%</button>
+          </div>
+          <div class="tip-breakdown">
+            <div class="tip-bd-row">
+              <span>Partea ta</span>
+              <span id="breakdown-base">0 lei</span>
+            </div>
+            <div class="tip-bd-row tip-bd-tip" id="tip-bd-tip-row" style="display:none">
+              <span id="breakdown-tip-label">Bacșiș</span>
+              <span id="breakdown-tip">0 lei</span>
+            </div>
+            <div class="tip-bd-row tip-bd-total">
+              <span>Total de plătit</span>
+              <span id="tip-total">0 lei</span>
+            </div>
+          </div>
+        </div>
+
+        <button class="cta-btn mia-btn" id="mia-btn">
+          <span>Plătește cu MIA</span>
+          <span class="mia-btn-amt" id="mia-btn-amt">0 lei</span>
+        </button>
+
+        <button class="cta-btn coming-soon-btn" disabled>
+          Sau cu cardul / Apple Pay &nbsp;<span class="soon-badge">în curând</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ── Bank app simulation ─────────────────────────────────────────── -->
+    <div id="screen-bank" class="screen">
+      <div class="bank-body">
+        <div class="bank-topbar">
+          <span class="bank-app-label">Aplicația băncii tale</span>
+          <button class="bank-close-btn" id="bank-close-btn">✕</button>
+        </div>
+
+        <p class="bank-opening-msg">Se deschide aplicația băncii tale…</p>
+
+        <div class="mia-tag-pill">MIA · Request to Pay</div>
+
+        <div class="bank-amount-block">
+          <span class="bank-amount-label">Sumă solicitată</span>
+          <span class="bank-amount-val" id="bank-amount">0 lei</span>
+        </div>
+
+        <div class="bank-merchant-card">
+          <span class="bank-merchant-label">Comerciant</span>
+          <span class="bank-merchant-name">Carmelo · Ristorante</span>
+        </div>
+
+        <div class="bank-faceid-row">
+          <span class="faceid-glyph">⬡</span>
+          <div>
+            <p class="faceid-title">Confirmă cu Face ID</p>
+            <p class="faceid-sub">sau PIN-ul aplicației</p>
+          </div>
+        </div>
+
+        <button class="bank-confirm-btn" id="bank-confirm-btn">Confirmă plata</button>
+        <button class="bank-cancel-link" id="bank-cancel-link">Anulează</button>
+      </div>
+    </div>
+
+    <!-- ── Success / Receipt ───────────────────────────────────────────── -->
+    <div id="screen-success" class="screen">
+      <div class="success-body">
+        <div class="success-badge">✓</div>
+        <h1 class="success-title">Plată confirmată!</h1>
+
+        <div class="receipt">
+          <div class="receipt-top">
+            <div class="receipt-logo">nota.</div>
+            <div class="receipt-heading">BON FISCAL ELECTRONIC</div>
+            <div class="receipt-sub">emis prin iiko</div>
+          </div>
+          <div class="receipt-dots">· · · · · · · · · · · · · ·</div>
+          <div class="receipt-info-block">
+            <p id="receipt-restaurant-line"></p>
+            <p id="receipt-table-line"></p>
+            <p id="receipt-nr-line"></p>
+          </div>
+          <div class="receipt-dots">· · · · · · · · · · · · · ·</div>
+          <ul class="receipt-items" id="receipt-items"></ul>
+          <div class="receipt-dots">· · · · · · · · · · · · · ·</div>
+          <div class="receipt-totals">
+            <div class="receipt-row">
+              <span>Total plătit</span>
+              <span id="receipt-total">0 lei</span>
+            </div>
+            <div class="receipt-row muted">
+              <span>TVA inclus (20%)</span>
+              <span id="receipt-vat">0 lei</span>
+            </div>
+          </div>
+          <div class="receipt-footer-msg">Mulțumim! Poftă bună! 🍷</div>
+        </div>
+
+        <button class="cta-btn ghost-btn" id="home-btn">← Înapoi la notă</button>
+      </div>
+    </div>
+
+  <!-- ── Empty table (waiter hasn't opened order yet) ──────────────────── -->
+  <div id="screen-empty" class="screen">
+    <div class="center-content">
+      <div class="logo small">nota.</div>
+      <div class="empty-glyph">◎</div>
+      <p class="empty-title">Masă pregătită</p>
+      <p class="empty-sub" id="empty-table-badge">Masa —</p>
+      <p class="empty-msg">Ospătarul adaugă comanda.<br>Pagina se actualizează automat.</p>
+      <div class="spinner" style="margin-top: 4px;"></div>
+    </div>
+  </div>
+
+  </div><!-- .app -->
+
+  <!-- Connection-lost banner (outside .app — always overlays everything) -->
+  <div id="conn-banner" class="conn-banner" role="alert" aria-live="assertive"></div>
+
+  <!-- Toast notification -->
+  <div id="toast" class="toast" role="alert" aria-live="assertive"></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

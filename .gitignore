@@ -1,0 +1,14 @@
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+
+# Node.js (reinstall with npm install)
+node_modules/
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/

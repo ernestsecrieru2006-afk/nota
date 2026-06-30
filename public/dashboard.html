@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>nota. · Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="dashboard.css" />
+</head>
+<body>
+
+  <!-- ── Top navigation ──────────────────────────────────────────────────── -->
+  <nav class="topnav">
+    <span class="nav-logo">nota.</span>
+    <div class="nav-tabs">
+      <button class="nav-tab active">Plăți</button>
+      <button class="nav-tab disabled">
+        Marketing <span class="badge-soon">în curând</span>
+      </button>
+      <button class="nav-tab disabled">
+        Rezervări <span class="badge-soon">în curând</span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- ── Page content ────────────────────────────────────────────────────── -->
+  <main class="dash-content">
+
+    <!-- Header -->
+    <div class="dash-header">
+      <div>
+        <h1 class="dash-title">Carmelo · Ristorante</h1>
+        <p class="dash-date" id="date-label"></p>
+      </div>
+      <div class="live-badge">
+        <div class="live-dot"></div>
+        LIVE
+      </div>
+    </div>
+
+    <!-- ── Stat cards ─────────────────────────────────────────────────────── -->
+    <div class="stats-row">
+      <div class="stat-card stat-revenue">
+        <div class="stat-label">Încasat azi</div>
+        <div class="stat-value" id="stat-incasat">—</div>
+      </div>
+      <div class="stat-card stat-payments">
+        <div class="stat-label">Plăți</div>
+        <div class="stat-value" id="stat-plati">—</div>
+      </div>
+      <div class="stat-card stat-tips">
+        <div class="stat-label">Bacșiș colectat</div>
+        <div class="stat-value" id="stat-bacsisuri">—</div>
+      </div>
+      <div class="stat-card stat-tables">
+        <div class="stat-label">Mese servite</div>
+        <div class="stat-value" id="stat-mese">—</div>
+      </div>
+    </div>
+
+    <!-- ── Two-column content ─────────────────────────────────────────────── -->
+    <div class="content-grid">
+
+      <!-- Left: top dishes + hourly chart -->
+      <div class="left-col">
+
+        <div class="card">
+          <h2 class="card-title">Top preparate</h2>
+          <div id="top-dishes">
+            <div class="skeleton-list">
+              <div class="skeleton-row"></div>
+              <div class="skeleton-row"></div>
+              <div class="skeleton-row"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h2 class="card-title">Ore de vârf</h2>
+          <div id="hourly-chart">
+            <div class="skeleton-chart"></div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Right: recent payments (live) -->
+      <div class="right-col">
+        <div class="card card-recent">
+          <h2 class="card-title">
+            Plăți recente
+            <span class="live-section-dot" title="actualizare în timp real">●</span>
+          </h2>
+          <div id="recent-payments">
+            <div class="skeleton-list">
+              <div class="skeleton-row"></div>
+              <div class="skeleton-row"></div>
+              <div class="skeleton-row"></div>
+              <div class="skeleton-row"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- .content-grid -->
+
+    <!-- Dev helper (only useful during development) -->
+    <div class="dev-bar">
+      <span class="dev-label">Dev</span>
+      <button class="dev-btn" id="seed-btn">Adaugă date demo →</button>
+    </div>
+
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="dashboard.js"></script>
+</body>
+</html>
