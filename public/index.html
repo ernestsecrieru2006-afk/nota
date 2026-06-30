@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1a1a1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>nota. — plata la masă</title>
+<style>
+  :root {
+    --bg:        #F7F5F0;
+    --surface:   #FFFFFF;
+    --border:    #E8E3D9;
+    --text:      #1A1A18;
+    --muted:     #7A7567;
+    --gold:      #C8922A;
+    --gold-soft: #F5EDD8;
+    --green:     #2D6A4F;
+    --green-bg:  #EAF4EE;
+    --red:       #B83232;
+    --red-bg:    #FCEAEA;
+    --blue:      #2953A6;
+    --blue-bg:   #EAF0FB;
+    --radius:    12px;
+    --safe-b:    env(safe-area-inset-bottom, 0px);
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior: none;
+  }
+
+  /* ── layout ─────────────────────────────────── */
+  #app {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  /* ── header ─────────────────────────────────── */
+  header {
+    background: var(--text);
+    color: #fff;
+    padding: 20px 20px 16px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .header-left {}
+  .brand {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -.5px;
+    color: var(--gold);
+  }
+  .table-label {
+    font-size: 13px;
+    color: rgba(255,255,255,.5);
+    margin-top: 2px;
+    letter-spacing: .02em;
+  }
+  .table-number {
+    font-size: 13px;
+    font-weight: 600;
+    color: rgba(255,255,255,.85);
+  }
+  #live-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #4ade80;
+    box-shadow: 0 0 0 3px rgba(74,222,128,.2);
+    animation: pulse 2s infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+  }
+
+  /* ── scroll area ─────────────────────────────── */
+  #scroll-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 16px 0;
+  }
+
+  /* ── section labels ──────────────────────────── */
+  .section-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 8px 0 6px;
+  }
+
+  /* ── item card ───────────────────────────────── */
+  .item {
+    background: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: border-color .15s, background .15s, transform .1s;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .item:active { transform: scale(.98); }
+
+  .item.selected {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+  }
+  .item.claimed-other {
+    border-color: var(--border);
+    background: #F9F9F7;
+    opacity: .7;
+    cursor: not-allowed;
+  }
+  .item.paid {
+    border-color: #D1E8D9;
+    background: var(--green-bg);
+    cursor: default;
+  }
+
+  .item-check {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    border: 2px solid var(--border);
+    flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: all .15s;
+  }
+  .item.selected .item-check {
+    background: var(--gold);
+    border-color: var(--gold);
+  }
+  .item.selected .item-check::after {
+    content: '';
+    width: 10px; height: 6px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translateY(-1px);
+    display: block;
+  }
+  .item.paid .item-check {
+    background: var(--green);
+    border-color: var(--green);
+  }
+  .item.paid .item-check::after {
+    content: '';
+    width: 10px; height: 6px;
+    border-left: 2px solid #fff;
+    border-bottom: 2px solid #fff;
+    transform: rotate(-45deg) translateY(-1px);
+    display: block;
+  }
+  .item.claimed-other .item-check {
+    background: #E5E5E0;
+    border-color: #E5E5E0;
+  }
+
+  .item-info { flex: 1; min-width: 0; }
+  .item-name {
+    font-size: 15px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .item-status {
+    font-size: 12px;
+    margin-top: 3px;
+  }
+  .item.available .item-status { color: var(--muted); }
+  .item.selected .item-status { color: var(--gold); font-weight: 500; }
+  .item.claimed-other .item-status { color: var(--muted); }
+  .item.paid .item-status { color: var(--green); font-weight: 500; }
+
+  .item-price {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .item.paid .item-price { color: var(--green); }
+  .item.claimed-other .item-price { color: var(--muted); }
+
+  /* ── empty state ─────────────────────────────── */
+  #empty {
+    display: none;
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+  }
+  #empty .icon { font-size: 48px; margin-bottom: 12px; }
+  #empty h2 { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 8px; }
+  #empty p { font-size: 14px; line-height: 1.6; }
+
+  /* ── loading skeleton ────────────────────────── */
+  #loading {
+    padding: 8px 0;
+  }
+  .skeleton {
+    background: linear-gradient(90deg, #EDEAE2 25%, #E5E2D8 50%, #EDEAE2 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.4s infinite;
+    border-radius: var(--radius);
+    margin-bottom: 8px;
+  }
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+
+  /* ── bottom action bar ───────────────────────── */
+  #action-bar {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 16px 16px calc(16px + var(--safe-b));
+    flex-shrink: 0;
+    transition: transform .25s cubic-bezier(.4,0,.2,1);
+  }
+  #action-bar.hidden { transform: translateY(100%); }
+
+  .total-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+  .total-label { font-size: 13px; color: var(--muted); font-weight: 500; }
+  .total-amount {
+    font-size: 26px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    letter-spacing: -.5px;
+    color: var(--text);
+    transition: all .2s;
+  }
+
+  /* tip selector */
+  .tip-row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    align-items: center;
+  }
+  .tip-label { font-size: 12px; color: var(--muted); margin-right: 4px; white-space: nowrap; }
+  .tip-btn {
+    flex: 1;
+    padding: 6px 0;
+    border: 1.5px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--muted);
+    cursor: pointer;
+    transition: all .15s;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tip-btn.active {
+    border-color: var(--gold);
+    background: var(--gold-soft);
+    color: var(--gold);
+    font-weight: 600;
+  }
+
+  #pay-btn {
+    width: 100%;
+    padding: 16px;
+    background: var(--text);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: .01em;
+    transition: background .15s, transform .1s;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+  }
+  #pay-btn:active { transform: scale(.98); }
+  #pay-btn:disabled {
+    background: #C5C2BA;
+    cursor: not-allowed;
+    transform: none;
+  }
+  #pay-btn .btn-icon { font-size: 18px; }
+
+  /* ── MIA payment overlay ─────────────────────── */
+  #pay-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,24,.85);
+    backdrop-filter: blur(4px);
+    z-index: 100;
+    align-items: flex-end;
+    justify-content: center;
+  }
+  #pay-overlay.active { display: flex; }
+
+  #pay-sheet {
+    background: var(--surface);
+    border-radius: 24px 24px 0 0;
+    padding: 24px 24px calc(24px + var(--safe-b));
+    width: 100%;
+    max-width: 480px;
+    animation: slideUp .3s cubic-bezier(.4,0,.2,1);
+  }
+  @keyframes slideUp {
+    from { transform: translateY(100%); opacity: 0; }
+    to   { transform: translateY(0);   opacity: 1; }
+  }
+
+  .sheet-handle {
+    width: 40px; height: 4px;
+    background: #DDD;
+    border-radius: 2px;
+    margin: 0 auto 20px;
+  }
+  .sheet-title { font-size: 20px; font-weight: 700; margin-bottom: 4px; }
+  .sheet-sub { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+
+  .pay-amount-big {
+    font-size: 48px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    margin: 16px 0 24px;
+    letter-spacing: -1px;
+  }
+  .pay-amount-big span { font-size: 24px; font-weight: 500; color: var(--muted); }
+
+  /* MIA logo placeholder */
+  .mia-logo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .mia-badge {
+    background: var(--blue-bg);
+    color: var(--blue);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    letter-spacing: .04em;
+  }
+
+  #confirm-pay-btn {
+    width: 100%;
+    padding: 17px;
+    background: var(--blue);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background .15s;
+    -webkit-tap-highlight-color: transparent;
+    margin-bottom: 10px;
+  }
+  #confirm-pay-btn:active { background: #1e3f82; }
+
+  #cancel-pay-btn {
+    width: 100%;
+    padding: 14px;
+    background: transparent;
+    color: var(--muted);
+    border: none;
+    font-size: 15px;
+    cursor: pointer;
+  }
+
+  /* ── success screen ──────────────────────────── */
+  #success-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: var(--green);
+    z-index: 200;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+    animation: fadeIn .3s ease;
+  }
+  #success-overlay.active { display: flex; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  .success-check {
+    width: 80px; height: 80px;
+    background: rgba(255,255,255,.2);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 40px;
+    margin-bottom: 24px;
+    animation: popIn .4s cubic-bezier(.34,1.56,.64,1) .1s both;
+  }
+  @keyframes popIn {
+    from { transform: scale(0); opacity: 0; }
+    to   { transform: scale(1); opacity: 1; }
+  }
+  .success-title { font-size: 26px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+  .success-amount { font-size: 18px; color: rgba(255,255,255,.8); margin-bottom: 40px; font-variant-numeric: tabular-nums; }
+  #success-close {
+    background: rgba(255,255,255,.2);
+    color: #fff;
+    border: none;
+    border-radius: var(--radius);
+    padding: 14px 40px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* ── waiting screen (payment pending) ───────── */
+  #waiting-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(26,26,24,.85);
+    backdrop-filter: blur(4px);
+    z-index: 150;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #fff;
+    gap: 16px;
+  }
+  #waiting-overlay.active { display: flex; }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid rgba(255,255,255,.2);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .waiting-text { font-size: 18px; font-weight: 600; }
+  .waiting-sub { font-size: 14px; color: rgba(255,255,255,.6); }
+
+  /* ── toast ───────────────────────────────────── */
+  #toast {
+    position: fixed;
+    bottom: calc(100px + var(--safe-b));
+    left: 50%; transform: translateX(-50%) translateY(20px);
+    background: var(--text);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0;
+    pointer-events: none;
+    transition: all .25s;
+    white-space: nowrap;
+    z-index: 300;
+  }
+  #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* ── spacer for action bar ───────────────────── */
+  #bar-spacer { height: 160px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <header>
+    <div class="header-left">
+      <div class="brand">nota.</div>
+      <div class="table-label">Masa <span class="table-number" id="table-num">—</span></div>
+    </div>
+    <div id="live-dot"></div>
+  </header>
+
+  <div id="scroll-area">
+    <!-- loading skeleton -->
+    <div id="loading">
+      <div class="skeleton" style="height:68px"></div>
+      <div class="skeleton" style="height:68px"></div>
+      <div class="skeleton" style="height:68px;opacity:.7"></div>
+      <div class="skeleton" style="height:68px;opacity:.5"></div>
+    </div>
+
+    <!-- empty state -->
+    <div id="empty">
+      <div class="icon">🍽</div>
+      <h2>Nicio comandă activă</h2>
+      <p>Comenzile de la masă ta vor apărea<br>automat aici.</p>
+    </div>
+
+    <!-- items injected here -->
+    <div id="items-list"></div>
+
+    <div id="bar-spacer"></div>
+  </div>
+
+  <!-- fixed bottom bar -->
+  <div id="action-bar" class="hidden">
+    <div class="total-row">
+      <div>
+        <div class="total-label">Eu plătesc</div>
+        <div class="total-amount" id="total-display">0 lei</div>
+      </div>
+    </div>
+    <div class="tip-row">
+      <span class="tip-label">Bacșiș:</span>
+      <button class="tip-btn active" data-tip="0">Fără</button>
+      <button class="tip-btn" data-tip="5">5%</button>
+      <button class="tip-btn" data-tip="10">10%</button>
+      <button class="tip-btn" data-tip="15">15%</button>
+    </div>
+    <button id="pay-btn" disabled>
+      <span class="btn-icon">💳</span>
+      <span id="pay-btn-text">Selectează feluri</span>
+    </button>
+  </div>
+</div>
+
+<!-- MIA payment sheet -->
+<div id="pay-overlay">
+  <div id="pay-sheet">
+    <div class="sheet-handle"></div>
+    <div class="sheet-title">Plată prin MIA</div>
+    <div class="sheet-sub">Plăți Instant Moldova</div>
+    <div class="pay-amount-big">
+      <span id="sheet-amount">0</span> <span>lei</span>
+    </div>
+    <div class="mia-logo">
+      <div class="mia-badge">MIA</div>
+      Plăți Instant • Securizat
+    </div>
+    <button id="confirm-pay-btn">Deschide MIA și plătește</button>
+    <button id="cancel-pay-btn">Anulează</button>
+  </div>
+</div>
+
+<!-- waiting -->
+<div id="waiting-overlay">
+  <div class="spinner"></div>
+  <div class="waiting-text">Așteptăm confirmarea</div>
+  <div class="waiting-sub">Aprobă plata în aplicația MIA</div>
+</div>
+
+<!-- success -->
+<div id="success-overlay">
+  <div class="success-check">✓</div>
+  <div class="success-title">Plată confirmată!</div>
+  <div class="success-amount" id="success-amount-text"></div>
+  <button id="success-close">Gata, mulțumesc!</button>
+</div>
+
+<!-- toast -->
+<div id="toast"></div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+// ── init ─────────────────────────────────────────────────────────────────────
+const params       = new URLSearchParams(location.search);
+const tableNumber  = parseInt(params.get('t') || '1', 10);
+const restaurantId = params.get('r') || '1';
+
+document.getElementById('table-num').textContent = tableNumber;
+document.title = `Masa ${tableNumber} — nota.`;
+
+const socket = io({ transports: ['websocket', 'polling'] });
+
+// ── state ────────────────────────────────────────────────────────────────────
+let order      = null;
+let mySelected = new Set();   // item ids I've checked
+let tipPercent = 0;
+
+// ── socket ───────────────────────────────────────────────────────────────────
+socket.on('connect', () => {
+  socket.emit('join-table', { tableNumber, restaurantId });
+});
+
+socket.on('order-update', incoming => {
+  order = incoming;
+  // Remove selections that are no longer available to us
+  if (order.items) {
+    for (const id of [...mySelected]) {
+      const item = order.items.find(it => it.id == id);
+      if (!item || item.status !== 'claimed' && item.status !== 'available') {
+        mySelected.delete(id);
+      }
+    }
+  }
+  render();
+});
+
+socket.on('disconnect', () => {
+  // quietly reconnect
+});
+
+// ── render ───────────────────────────────────────────────────────────────────
+function render() {
+  const loading  = document.getElementById('loading');
+  const empty    = document.getElementById('empty');
+  const list     = document.getElementById('items-list');
+  const actionBar= document.getElementById('action-bar');
+
+  loading.style.display = 'none';
+
+  if (!order || !order.items || order.items.length === 0) {
+    empty.style.display = 'block';
+    list.innerHTML = '';
+    actionBar.classList.add('hidden');
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  const available = order.items.filter(i => i.status === 'available');
+  const myItems   = order.items.filter(i => i.status === 'claimed' && i.claimed_by === socket.id);
+  const others    = order.items.filter(i => i.status === 'claimed' && i.claimed_by !== socket.id);
+  const paid      = order.items.filter(i => i.status === 'paid');
+
+  let html = '';
+
+  if (available.length || myItems.length) {
+    html += `<div class="section-label">Disponibile</div>`;
+    const selectableItems = [...myItems, ...available];
+    for (const item of selectableItems) {
+      const isMine    = mySelected.has(item.id) || item.claimed_by === socket.id;
+      const cls       = isMine ? 'selected' : 'available';
+      const statusTxt = isMine ? 'Selectat de tine' : 'Disponibil';
+      html += itemCard(item, cls, statusTxt);
+    }
+  }
+
+  if (others.length) {
+    html += `<div class="section-label">Rezervat</div>`;
+    for (const item of others) {
+      html += itemCard(item, 'claimed-other', 'Selectat de altcineva');
+    }
+  }
+
+  if (paid.length) {
+    html += `<div class="section-label">Achitat</div>`;
+    for (const item of paid) {
+      html += itemCard(item, 'paid', 'Achitat ✓');
+    }
+  }
+
+  list.innerHTML = html;
+
+  // attach click handlers
+  list.querySelectorAll('.item[data-id]').forEach(el => {
+    el.addEventListener('click', () => toggleItem(parseInt(el.dataset.id)));
+  });
+
+  updateActionBar();
+}
+
+function itemCard(item, cls, statusTxt) {
+  const clickable = cls === 'available' || cls === 'selected';
+  return `
+    <div class="item ${cls}" ${clickable ? `data-id="${item.id}"` : ''}>
+      <div class="item-check"></div>
+      <div class="item-info">
+        <div class="item-name">${escHtml(item.name)}</div>
+        <div class="item-status">${statusTxt}</div>
+      </div>
+      <div class="item-price">${fmt(item.price)} lei</div>
+    </div>`;
+}
+
+function updateActionBar() {
+  const bar    = document.getElementById('action-bar');
+  const total  = document.getElementById('total-display');
+  const btn    = document.getElementById('pay-btn');
+  const btnTxt = document.getElementById('pay-btn-text');
+  const sheet  = document.getElementById('sheet-amount');
+
+  const selectedItems = (order?.items || []).filter(
+    it => mySelected.has(it.id) || (it.claimed_by === socket.id && it.status === 'claimed')
+  );
+  const base    = selectedItems.reduce((s, it) => s + Number(it.price), 0);
+  const tip     = Math.round(base * tipPercent / 100);
+  const grand   = base + tip;
+
+  bar.classList.toggle('hidden', selectedItems.length === 0 && !mySelected.size);
+
+  if (base === 0) {
+    bar.classList.remove('hidden');  // keep bar visible so user can select
+    total.textContent = '0 lei';
+    btn.disabled = true;
+    btnTxt.textContent = 'Selectează feluri';
+    return;
+  }
+
+  bar.classList.remove('hidden');
+  total.textContent = `${fmt(grand)} lei`;
+  btn.disabled = false;
+  btnTxt.textContent = `Plătește ${fmt(grand)} lei`;
+  sheet.textContent = fmt(grand);
+}
+
+// ── interactions ─────────────────────────────────────────────────────────────
+function toggleItem(id) {
+  if (mySelected.has(id)) {
+    mySelected.delete(id);
+    // release from server
+    socket.emit('claim-items', [], () => {});
+    updateActionBar();
+    render();
+  } else {
+    mySelected.add(id);
+    // attempt claim
+    socket.emit('claim-items', [id], ({ claimed, contested }) => {
+      if (contested && contested.includes(id)) {
+        mySelected.delete(id);
+        toast('Cineva tocmai a selectat acest fel!');
+      }
+      render();
+    });
+    updateActionBar();
+    render();
+  }
+}
+
+// tip buttons
+document.querySelectorAll('.tip-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tip-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    tipPercent = parseInt(btn.dataset.tip);
+    updateActionBar();
+  });
+});
+
+// open payment sheet
+document.getElementById('pay-btn').addEventListener('click', () => {
+  if (mySelected.size === 0) return;
+  document.getElementById('pay-overlay').classList.add('active');
+});
+
+// cancel
+document.getElementById('cancel-pay-btn').addEventListener('click', () => {
+  document.getElementById('pay-overlay').classList.remove('active');
+});
+document.getElementById('pay-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) {
+    document.getElementById('pay-overlay').classList.remove('active');
+  }
+});
+
+// confirm pay
+document.getElementById('confirm-pay-btn').addEventListener('click', async () => {
+  document.getElementById('pay-overlay').classList.remove('active');
+  document.getElementById('waiting-overlay').classList.add('active');
+
+  const items   = (order?.items || []).filter(
+    it => mySelected.has(it.id) || (it.claimed_by === socket.id && it.status === 'claimed')
+  );
+  const base    = items.reduce((s, it) => s + Number(it.price), 0);
+  const tip     = Math.round(base * tipPercent / 100);
+
+  // emit pay-claimed via socket
+  socket.emit('pay-claimed', {
+    tipLei:      tip,
+    tableNumber,
+    orderId:     order?.id,
+    restaurantId,
+  }, ({ success, error, deepLinkUrl, _mock }) => {
+    if (error) {
+      document.getElementById('waiting-overlay').classList.remove('active');
+      toast('Eroare: ' + error);
+      return;
+    }
+
+    // If real MIA → open deep link
+    if (deepLinkUrl && !_mock) {
+      window.location.href = deepLinkUrl;
+    }
+    // If mock → waiting overlay stays until order-update fires (auto 2s)
+  });
+});
+
+// listen for payment success via order-update (items become 'paid')
+socket.on('order-update', () => {
+  // If all my selected items are now paid → show success
+  const items = (order?.items || []);
+  const allPaid = [...mySelected].every(id => {
+    const it = items.find(i => i.id == id);
+    return it && it.status === 'paid';
+  });
+  if (allPaid && mySelected.size > 0 &&
+      document.getElementById('waiting-overlay').classList.contains('active')) {
+    const items2 = items.filter(it => mySelected.has(it.id));
+    const base   = items2.reduce((s, it) => s + Number(it.price), 0);
+    const tip    = Math.round(base * tipPercent / 100);
+    showSuccess(base + tip);
+  }
+});
+
+function showSuccess(amount) {
+  document.getElementById('waiting-overlay').classList.remove('active');
+  document.getElementById('success-amount-text').textContent = `${fmt(amount)} lei achitați`;
+  document.getElementById('success-overlay').classList.add('active');
+  mySelected.clear();
+}
+
+document.getElementById('success-close').addEventListener('click', () => {
+  document.getElementById('success-overlay').classList.remove('active');
+  render();
+});
+
+// ── utils ────────────────────────────────────────────────────────────────────
+function fmt(n) { return Number(n).toFixed(0); }
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+let toastTimer;
+function toast(msg, dur = 2800) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// initial render while loading
+render();
+</script>
+</body>
+</html>
