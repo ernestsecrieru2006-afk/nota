@@ -979,6 +979,9 @@ setInterval(reconcilePendingPayments, 30_000);
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, _next) => {
+  if (err.status) {
+    return res.status(err.status).json({ error: err.message || 'Request error' });
+  }
   console.error('[express error]', err);
   res.status(500).json({ error: 'Internal server error' });
 });
