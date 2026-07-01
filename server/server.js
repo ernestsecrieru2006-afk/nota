@@ -53,7 +53,7 @@ app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
 
 app.use(express.json());
-app.use(express.static(join(__dirname, '../public')));
+app.use(express.static(join(__dirname, '../public'), { extensions: ['html'] }));
 
 // ─── auth routes ─────────────────────────────────────────────────────────────
 
@@ -254,6 +254,55 @@ app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
 // Dashboard page itself is public but API calls require token (stored in localStorage)
 
 // ─── dev / demo routes ────────────────────────────────────────────────────────
+
+// Seed 5 demo dishes into an open order for the given table (default: table 1).
+// POST /api/dev/seed-table   { tableNumber: 1, restaurantId: 1 }
+app.post('/api/dev/seed-table', async (req, res) => {
+  try {
+    const tableNumber  = req.body.tableNumber  ?? 1;
+    const restaurantId = req.body.restaurantId ?? 1;
+
+    const { rows: [tbl] } = await pool.query(
+      'SELECT id FROM tables WHERE restaurant_id = $1 AND number = $2',
+      [restaurantId, tableNumber]
+    );
+    if (!tbl) return res.status(404).json({ error: `Table ${tableNumber} not found` });
+
+    // Get or create an open order for this table
+    let { rows: [order] } = await pool.query(
+      `SELECT id FROM orders WHERE table_id = $1 AND status = 'open' LIMIT 1`,
+      [tbl.id]
+    );
+    if (!order) {
+      const { rows: [o] } = await pool.query(
+        `INSERT INTO orders (table_id, table_number, restaurant_id, status)
+         VALUES ($1, $2, $3, 'open') RETURNING id`,
+        [tbl.id, tableNumber, restaurantId]
+      );
+      order = o;
+    }
+
+    // Reset existing items so we can re-seed cleanly
+    await pool.query(`DELETE FROM order_items WHERE order_id = $1`, [order.id]);
+
+    const DEMO_DISHES = [
+      ['Spaghetti Carbonara', 185],
+      ['Risotto ai Funghi',   210],
+      ['Branzino al Forno',   290],
+      ['Tiramisù',             95],
+      ['Vino Rosso (pahar)',   75],
+    ];
+
+    for (const [name, price] of DEMO_DISHES) {
+      await pool.query(
+        `INSERT INTO order_items (order_id, name, price, status) VALUES ($1, $2, $3, 'available')`,
+        [order.id, name, price]
+      );
+    }
+
+    res.json({ ok: true, orderId: order.id, items: DEMO_DISHES.length });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 app.post('/api/dev/seed-payments', async (req, res) => {
   try {
