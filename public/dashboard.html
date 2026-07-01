@@ -3,47 +3,59 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#090e0b">
+<meta name="theme-color" content="#0A0A0A">
 <title>nota. — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
+/* ── Design tokens: Minimalist Graphite + Emerald accent ── */
 :root {
-  --bg:        #090e0b;
-  --panel:     #0f1912;
-  --panel2:    #132118;
-  --border:    #1e3028;
-  --surface:   #192b1f;
-  --text:      #e8f0eb;
-  --text2:     #8fa895;
-  --muted:     #5c7565;
-  --muted2:    #243b2c;
+  /* Graphite base */
+  --bg:      #0A0A0A;
+  --panel:   #141414;
+  --card:    #1A1A1A;
+  --surface: #202020;
+  --border:  #2A2A2A;
+  --border2: #383838;
 
-  --green:     #22c55e;
-  --green-hi:  #4ade80;
-  --green-dim: #16a34a;
-  --green-bg:  rgba(34,197,94,.08);
-  --green-bg2: rgba(34,197,94,.16);
+  /* Typography */
+  --text:    #F0F0F0;
+  --text2:   #A3A3A3;
+  --muted:   #737373;
+  --muted2:  #404040;
 
-  --amber:     #f59e0b;
-  --amber-bg:  rgba(245,158,11,.1);
-  --red:       #f87171;
-  --red-bg:    rgba(248,113,113,.1);
-  --teal:      #2dd4bf;
-  --purple:    #a78bfa;
+  /* Emerald — restrained primary accent */
+  --em:      #10B981;
+  --em-hi:   #4EDEA3;
+  --em-dim:  #059669;
+  --em-bg:   rgba(16,185,129,.07);
+  --em-bg2:  rgba(16,185,129,.13);
 
-  --r:   10px;
-  --rl:  14px;
-  --rxl: 18px;
-  --sh:  0 2px 12px rgba(0,0,0,.4);
-  --shl: 0 8px 32px rgba(0,0,0,.5);
+  /* Supporting accents — muted, not neon */
+  --amber:   #D97706;
+  --amber-hi:#F59E0B;
+  --amber-bg:rgba(217,119,6,.08);
+  --red:     #EF4444;
+  --red-bg:  rgba(239,68,68,.08);
+  --blue:    #3B82F6;
+  --blue-bg: rgba(59,130,246,.08);
+
+  --r:  8px;
+  --rl: 12px;
+  --rxl:16px;
+  --sh: 0 1px 3px rgba(0,0,0,.5), 0 1px 8px rgba(0,0,0,.3);
+  --shd:0 4px 20px rgba(0,0,0,.7);
 }
 
+/* ── Reset ─────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   font-size: 14px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
@@ -56,20 +68,22 @@ html, body {
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: radial-gradient(ellipse at 40% 50%, rgba(34,197,94,.06) 0%, transparent 70%);
+  background:
+    radial-gradient(ellipse at 50% 0%, rgba(16,185,129,.06) 0%, transparent 60%);
 }
 .login-card {
-  background: var(--panel);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--rxl);
   padding: 40px;
   width: 100%;
   max-width: 400px;
-  box-shadow: var(--shl);
+  box-shadow: var(--shd);
 }
 .login-brand {
-  font-size: 30px; font-weight: 800;
-  color: var(--green); letter-spacing: -1px; margin-bottom: 6px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 28px; font-weight: 800;
+  color: var(--em); letter-spacing: -1px; margin-bottom: 6px;
 }
 .login-sub { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
 
@@ -80,27 +94,29 @@ html, body {
   letter-spacing: .07em; text-transform: uppercase;
 }
 .field input {
-  width: 100%; background: var(--bg); border: 1px solid var(--border);
+  width: 100%; background: var(--surface); border: 1px solid var(--border);
   border-radius: var(--r); padding: 12px 14px;
   color: var(--text); font-size: 14px; outline: none;
+  font-family: inherit;
   transition: border-color .15s, box-shadow .15s;
 }
 .field input:focus {
-  border-color: var(--green);
-  box-shadow: 0 0 0 3px rgba(34,197,94,.12);
+  border-color: var(--em);
+  box-shadow: 0 0 0 3px rgba(16,185,129,.12);
 }
 #login-btn {
-  width: 100%; margin-top: 8px; padding: 14px;
-  background: var(--green); color: #fff;
+  width: 100%; margin-top: 8px; padding: 13px;
+  background: var(--em); color: #fff;
   border: none; border-radius: var(--r);
-  font-size: 15px; font-weight: 700; cursor: pointer;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  font-family: inherit;
   transition: background .15s, transform .1s;
   letter-spacing: .01em;
 }
-#login-btn:hover { background: var(--green-dim); }
+#login-btn:hover  { background: var(--em-dim); }
 #login-btn:active { transform: scale(.98); }
 #login-error {
-  color: var(--red); font-size: 13px;
+  color: var(--red); font-size: 12px;
   margin-top: 10px; min-height: 18px;
 }
 .login-register {
@@ -108,533 +124,466 @@ html, body {
   font-size: 13px; color: var(--muted);
 }
 .login-register a {
-  color: var(--green); cursor: pointer; text-decoration: none;
-  font-weight: 500;
+  color: var(--em); cursor: pointer; text-decoration: none; font-weight: 500;
 }
 .login-register a:hover { text-decoration: underline; }
 #register-extra { display: none; }
 
-/* ── DASHBOARD ─────────────────────────────────────────── */
+/* ── DASHBOARD SHELL ────────────────────────────────────── */
 #dashboard { display: none; height: 100vh; overflow: hidden; }
 
 .dash-layout {
   display: grid;
-  grid-template-columns: 240px 1fr 296px;
+  grid-template-columns: 232px 1fr 288px;
   height: 100vh;
   overflow: hidden;
 }
 
-/* ── SIDEBAR ───────────────────────────────────────────── */
+/* ── SIDEBAR ────────────────────────────────────────────── */
 .sidebar {
   background: var(--panel);
   border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
   overflow: hidden;
 }
-
 .sidebar-top {
-  padding: 28px 20px 20px;
+  padding: 26px 20px 18px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 .s-brand {
-  font-size: 26px; font-weight: 800;
-  color: var(--green); letter-spacing: -1px;
+  font-family: 'Manrope', sans-serif;
+  font-size: 24px; font-weight: 800;
+  color: var(--em); letter-spacing: -1px;
 }
-.s-tagline {
-  font-size: 11px; color: var(--muted);
-  margin-top: 2px; letter-spacing: .03em;
-}
+.s-tagline { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
-.sidebar-nav {
-  flex: 1;
-  padding: 16px 12px;
-  overflow-y: auto;
-}
-.nav-section-label {
-  font-size: 10px; font-weight: 700;
-  letter-spacing: .1em; text-transform: uppercase;
-  color: var(--muted); padding: 0 8px;
-  margin: 0 0 8px;
+.sidebar-nav { flex: 1; padding: 14px 10px; overflow-y: auto; }
+.nav-group-label {
+  font-size: 10px; font-weight: 700; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted2);
+  padding: 0 10px; margin-bottom: 6px;
 }
 .nav-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 10px 12px; border-radius: var(--r);
+  padding: 9px 10px; border-radius: var(--r);
   font-size: 13px; font-weight: 500; color: var(--text2);
   cursor: pointer; transition: all .15s;
   margin-bottom: 2px; text-decoration: none;
 }
 .nav-item:hover { background: var(--surface); color: var(--text); }
-.nav-item.active {
-  background: var(--green-bg2);
-  color: var(--green);
-}
-.nav-item .ni-icon {
-  width: 20px; height: 20px; font-size: 15px;
+.nav-item.active { background: var(--em-bg2); color: var(--em); font-weight: 600; }
+.nav-icon {
+  width: 18px; height: 18px; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
+  font-size: 14px; opacity: .8;
 }
 
-.sidebar-stats {
-  padding: 16px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
+.sidebar-stats { padding: 12px 10px; }
 .ss-label {
-  font-size: 10px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .08em;
-  color: var(--muted); margin-bottom: 10px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--muted2);
+  padding: 0 10px; margin-bottom: 8px;
 }
-.ss-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--r);
-  padding: 12px 14px;
-  margin-bottom: 8px;
+.ss-row {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 11px 13px; margin-bottom: 6px;
 }
-.ss-card-label {
-  font-size: 11px; color: var(--muted);
-  font-weight: 500; text-transform: uppercase;
-  letter-spacing: .04em; margin-bottom: 4px;
+.ss-row-label {
+  font-size: 10px; font-weight: 600; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .05em; margin-bottom: 3px;
 }
-.ss-card-value {
-  font-size: 22px; font-weight: 800;
+.ss-row-val {
+  font-size: 20px; font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.5px; color: var(--green);
+  letter-spacing: -.5px; color: var(--em);
 }
-.ss-card-sub {
-  font-size: 11px; color: var(--muted); margin-top: 2px;
-}
+.ss-row-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
 
 .sidebar-footer {
-  padding: 16px;
+  padding: 14px;
   border-top: 1px solid var(--border);
   flex-shrink: 0;
 }
-.restaurant-badge {
-  display: flex; align-items: center; gap: 10px;
-}
+.rb-wrap { display: flex; align-items: center; gap: 10px; }
 .rb-avatar {
-  width: 34px; height: 34px; border-radius: 8px;
-  background: var(--green-bg2);
-  border: 1px solid var(--border);
+  width: 32px; height: 32px; border-radius: 7px;
+  background: var(--em-bg2); border: 1px solid var(--border2);
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; font-weight: 700; color: var(--green);
-  flex-shrink: 0;
+  font-size: 13px; font-weight: 800; color: var(--em);
+  flex-shrink: 0; font-family: 'Manrope', sans-serif;
 }
 .rb-info { flex: 1; min-width: 0; }
 .rb-name {
   font-size: 13px; font-weight: 600;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.rb-sub { font-size: 11px; color: var(--muted); }
+.rb-role { font-size: 11px; color: var(--muted); }
 .logout-btn {
   background: none; border: 1px solid var(--border);
-  color: var(--muted); padding: 5px 10px; border-radius: 6px;
+  color: var(--muted); padding: 5px 9px; border-radius: 6px;
   font-size: 11px; cursor: pointer; flex-shrink: 0;
+  font-family: inherit;
   transition: all .15s;
 }
 .logout-btn:hover { border-color: var(--red); color: var(--red); }
 
-/* ── MAIN ──────────────────────────────────────────────── */
+/* ── MAIN CONTENT ───────────────────────────────────────── */
 .main {
   overflow-y: auto;
   background: var(--bg);
-  padding: 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
+  padding: 28px 28px 40px;
+  display: flex; flex-direction: column; gap: 22px;
 }
 
-/* main header */
 .main-header {
   display: flex; align-items: flex-start;
   justify-content: space-between; gap: 16px;
+  padding-bottom: 4px;
 }
 .main-title {
-  font-size: 24px; font-weight: 800;
-  letter-spacing: -.5px; color: var(--text);
+  font-size: 22px; font-weight: 800;
+  letter-spacing: -.4px; color: var(--text);
+  font-family: 'Manrope', sans-serif;
 }
-.main-date {
-  font-size: 13px; color: var(--muted); margin-top: 3px;
-}
-.live-badge {
-  display: flex; align-items: center; gap: 7px;
-  font-size: 12px; font-weight: 600; color: var(--green);
-  background: var(--green-bg); padding: 7px 14px;
-  border-radius: 20px; border: 1px solid rgba(34,197,94,.2);
-  flex-shrink: 0;
+.main-date { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+.live-pill {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 600; color: var(--em);
+  background: var(--em-bg); border: 1px solid rgba(16,185,129,.18);
+  padding: 6px 12px; border-radius: 20px; flex-shrink: 0;
 }
 .live-dot {
-  width: 7px; height: 7px; border-radius: 50%;
-  background: var(--green);
-  animation: livepulse 2s infinite;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--em);
+  animation: pulse 2.2s infinite;
 }
-@keyframes livepulse {
-  0%,100% { opacity:1; box-shadow: 0 0 0 0 rgba(34,197,94,.4); }
-  50% { opacity:.6; box-shadow: 0 0 0 4px rgba(34,197,94,0); }
+@keyframes pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: .35; }
 }
 
-/* stat cards row */
+/* ── STAT CARDS ─────────────────────────────────────────── */
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
+  gap: 12px;
 }
 .stat-card {
-  background: var(--panel);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--rl);
-  padding: 20px;
+  padding: 18px 18px 16px;
   box-shadow: var(--sh);
   transition: border-color .2s;
 }
-.stat-card:hover { border-color: rgba(34,197,94,.3); }
-.stat-card-label {
+.stat-card:hover { border-color: var(--border2); }
+.sc-label {
   font-size: 11px; font-weight: 600;
   text-transform: uppercase; letter-spacing: .07em;
   color: var(--muted); margin-bottom: 10px;
-  display: flex; align-items: center; gap: 6px;
 }
-.stat-card-icon {
-  width: 22px; height: 22px; border-radius: 6px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px;
-}
-.sci-green  { background: var(--green-bg); }
-.sci-amber  { background: var(--amber-bg); }
-.sci-teal   { background: rgba(45,212,191,.1); }
-.sci-purple { background: rgba(167,139,250,.1); }
-
-.stat-card-value {
-  font-size: 30px; font-weight: 800;
+.sc-val {
+  font-size: 28px; font-weight: 800;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -1px; line-height: 1.1;
+  letter-spacing: -.8px; line-height: 1.1;
   color: var(--text);
 }
-.stat-card-value.green { color: var(--green); }
-.stat-card-sub {
-  font-size: 12px; color: var(--muted); margin-top: 6px;
-}
-.delta {
-  display: inline-flex; align-items: center; gap: 3px;
-  font-size: 11px; font-weight: 600;
-  padding: 2px 6px; border-radius: 4px;
-  margin-top: 4px;
-}
-.delta.up   { color: var(--green-hi); background: var(--green-bg); }
-.delta.down { color: var(--red); background: var(--red-bg); }
+.sc-val.em { color: var(--em); }
+.sc-sub    { font-size: 11px; color: var(--muted); margin-top: 6px; }
 
-/* charts row */
+/* ── CHARTS ROW ─────────────────────────────────────────── */
 .charts-row {
   display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 14px;
+  grid-template-columns: 1fr 356px;
+  gap: 12px;
 }
 .chart-card {
-  background: var(--panel);
+  background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--rl);
   padding: 20px;
   box-shadow: var(--sh);
 }
-.chart-header {
+.chart-hd {
   display: flex; align-items: flex-start;
-  justify-content: space-between; margin-bottom: 20px;
+  justify-content: space-between; margin-bottom: 18px;
 }
-.chart-title { font-size: 14px; font-weight: 700; }
+.chart-title { font-size: 13px; font-weight: 700; }
 .chart-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .chart-badge {
-  font-size: 11px; font-weight: 600;
-  padding: 4px 10px; border-radius: 6px;
-  background: var(--green-bg);
-  color: var(--green); flex-shrink: 0;
+  font-size: 11px; font-weight: 700;
+  padding: 3px 9px; border-radius: 6px;
+  background: var(--em-bg); color: var(--em);
+  border: 1px solid rgba(16,185,129,.18);
+  flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
-.chart-area { position: relative; height: 180px; }
-.donut-area { position: relative; height: 220px; }
-
-/* donut center text */
-.donut-wrap { position: relative; }
+.chart-area  { position: relative; height: 176px; }
+.donut-area  { position: relative; height: 200px; }
+.donut-wrap  { position: relative; }
 .donut-center {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
   pointer-events: none;
 }
-.donut-center-val {
-  font-size: 22px; font-weight: 800;
-  color: var(--text); letter-spacing: -.5px;
+.donut-cval {
+  font-size: 20px; font-weight: 800;
   font-variant-numeric: tabular-nums;
+  color: var(--text); letter-spacing: -.5px;
 }
-.donut-center-lbl {
+.donut-clbl {
   font-size: 10px; color: var(--muted);
   text-transform: uppercase; letter-spacing: .08em;
-  font-weight: 600; margin-top: 2px;
+  font-weight: 600; margin-top: 1px;
 }
 
-/* tables section */
-.section { }
-.section-header {
-  display: flex; align-items: center; justify-content: space-between;
-  margin-bottom: 14px;
+/* ── TABLES GRID ────────────────────────────────────────── */
+.section-hd {
+  display: flex; align-items: center;
+  justify-content: space-between; margin-bottom: 12px;
 }
-.section-title {
-  font-size: 14px; font-weight: 700;
-}
-.section-sub { font-size: 12px; color: var(--muted); }
+.section-title { font-size: 13px; font-weight: 700; }
+.section-meta  { font-size: 11px; color: var(--muted); }
 
 #tables-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(auto-fill, minmax(108px, 1fr));
+  gap: 8px;
 }
-.table-tile {
-  background: var(--panel);
+.t-tile {
+  background: var(--card);
   border: 1px solid var(--border);
-  border-radius: var(--rl);
-  padding: 16px 12px;
+  border-radius: var(--rl); padding: 14px 10px;
   text-align: center;
-  cursor: default;
-  transition: border-color .2s, background .2s, box-shadow .2s;
+  transition: border-color .18s, background .18s;
 }
-.table-tile:hover { box-shadow: var(--sh); }
-.table-tile.t-active {
-  border-color: var(--amber);
-  background: var(--amber-bg);
-}
-.table-tile.t-paid {
-  border-color: rgba(34,197,94,.4);
-  background: var(--green-bg);
-}
-.table-tile.t-empty { opacity: .4; }
+.t-tile.t-active { border-color: var(--amber); background: var(--amber-bg); }
+.t-tile.t-paid   { border-color: rgba(16,185,129,.35); background: var(--em-bg); }
+.t-tile.t-empty  { opacity: .38; }
 
-.tile-num {
-  font-size: 10px; color: var(--muted);
-  font-weight: 600; margin-bottom: 8px;
-  text-transform: uppercase; letter-spacing: .05em;
+.t-num {
+  font-size: 9px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--muted); margin-bottom: 7px;
 }
-.tile-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  margin: 0 auto 8px;
-  background: var(--muted2);
-  transition: background .2s;
+.t-indicator {
+  width: 7px; height: 7px; border-radius: 50%;
+  margin: 0 auto 7px; background: var(--muted2);
 }
-.t-active .tile-dot { background: var(--amber); box-shadow: 0 0 8px rgba(245,158,11,.4); }
-.t-paid   .tile-dot { background: var(--green); box-shadow: 0 0 8px rgba(34,197,94,.4); }
+.t-active .t-indicator { background: var(--amber-hi); box-shadow: 0 0 6px rgba(245,158,11,.45); }
+.t-paid   .t-indicator { background: var(--em);       box-shadow: 0 0 6px rgba(16,185,129,.4); }
 
-.tile-amount {
-  font-size: 14px; font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -.3px;
+.t-amount {
+  font-size: 13px; font-weight: 700;
+  font-variant-numeric: tabular-nums; letter-spacing: -.2px;
 }
-.tile-amount.zero { color: var(--muted); font-size: 12px; font-weight: 400; }
-.tile-status {
-  font-size: 10px; color: var(--muted); margin-top: 4px;
-  font-weight: 500;
-}
-.t-active .tile-status { color: var(--amber); }
-.t-paid   .tile-status { color: var(--green); }
+.t-amount.zero { color: var(--muted); font-size: 11px; font-weight: 400; }
+.t-status { font-size: 10px; color: var(--muted); margin-top: 3px; }
+.t-active .t-status { color: var(--amber-hi); }
+.t-paid   .t-status { color: var(--em-hi); }
 
-/* coming soon section */
+/* ── COMING SOON ────────────────────────────────────────── */
+.cs-section-hd {
+  display: flex; align-items: baseline; gap: 12px;
+  margin-bottom: 14px;
+}
+.cs-section-title { font-size: 13px; font-weight: 700; }
+.cs-section-desc  { font-size: 12px; color: var(--muted); }
+
 .cs-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 14px;
+  gap: 12px;
 }
+
+/* Prominent preview cards */
 .cs-card {
-  position: relative;
-  background: var(--panel);
-  border: 1px solid var(--border);
+  position: relative; overflow: hidden;
+  background: var(--card);
   border-radius: var(--rxl);
-  padding: 28px;
-  overflow: hidden;
+  padding: 28px 28px 26px;
   box-shadow: var(--sh);
+  transition: border-color .2s, box-shadow .2s;
 }
-.cs-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(0,0,0,.4));
-  pointer-events: none;
-}
+.cs-card:hover { box-shadow: 0 6px 32px rgba(0,0,0,.6); }
+
+.cs-card.ce { border: 1px solid rgba(16,185,129,.3); }
+.cs-card.ai { border: 1px solid rgba(217,119,6,.3); }
+
+/* Accent glow in top-right corner */
 .cs-glow {
-  position: absolute;
-  top: -40px; right: -40px;
-  width: 160px; height: 160px;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: .25;
-  pointer-events: none;
+  position: absolute; top: -48px; right: -48px;
+  width: 200px; height: 200px; border-radius: 50%;
+  filter: blur(80px); opacity: .1; pointer-events: none;
 }
+.ce .cs-glow { background: #10B981; }
+.ai .cs-glow { background: #F59E0B; }
+
+/* "În curând" badge — prominent, not locked */
 .cs-badge {
   display: inline-flex; align-items: center; gap: 5px;
   font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .1em;
-  padding: 4px 10px; border-radius: 6px;
-  margin-bottom: 16px;
-  border: 1px solid;
+  padding: 4px 10px; border-radius: 20px;
+  margin-bottom: 18px;
 }
-.cs-badge.locked {
-  background: rgba(167,139,250,.1);
-  border-color: rgba(167,139,250,.3);
-  color: var(--purple);
+.ce .cs-badge {
+  background: var(--em-bg2); color: var(--em-hi);
+  border: 1px solid rgba(16,185,129,.3);
 }
-.cs-icon {
-  font-size: 36px; margin-bottom: 14px; display: block;
+.ai .cs-badge {
+  background: var(--amber-bg); color: var(--amber-hi);
+  border: 1px solid rgba(217,119,6,.3);
 }
-.cs-title {
-  font-size: 20px; font-weight: 800;
-  letter-spacing: -.5px; margin-bottom: 6px;
+.cs-badge-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  animation: pulse 2s infinite;
 }
+.ce .cs-badge-dot { background: var(--em); }
+.ai .cs-badge-dot { background: var(--amber-hi); }
+
+.cs-icon { font-size: 34px; margin-bottom: 14px; display: block; }
+
+.cs-name {
+  font-family: 'Manrope', sans-serif;
+  font-size: 22px; font-weight: 800;
+  letter-spacing: -.5px; margin-bottom: 5px;
+}
+.ce .cs-name { color: var(--em-hi); }
+.ai .cs-name { color: var(--amber-hi); }
+
 .cs-tagline {
-  font-size: 13px; font-weight: 600;
-  color: var(--text2); margin-bottom: 10px;
+  font-size: 13px; font-weight: 500;
+  color: var(--text2); margin-bottom: 14px;
 }
 .cs-desc {
-  font-size: 12px; color: var(--muted); line-height: 1.6;
+  font-size: 13px; color: var(--text2);
+  line-height: 1.65; margin-bottom: 16px;
 }
-.cs-features {
-  margin-top: 16px;
-  display: flex; flex-direction: column; gap: 6px;
-}
-.cs-feature {
+.cs-features { display: flex; flex-direction: column; gap: 7px; }
+.cs-feat {
+  display: flex; align-items: flex-start; gap: 8px;
   font-size: 12px; color: var(--muted);
-  display: flex; align-items: center; gap: 7px;
 }
-.cs-feature::before {
-  content: '';
-  width: 4px; height: 4px; border-radius: 50%;
-  background: var(--muted2); flex-shrink: 0;
+.cs-feat-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  margin-top: 5px; flex-shrink: 0;
 }
-
-/* club eats accent */
-.cs-card.club .cs-glow { background: #22c55e; }
-.cs-card.club .cs-title { color: var(--green-hi); }
-
-/* ai booking accent */
-.cs-card.ai .cs-glow { background: #a78bfa; }
-.cs-card.ai .cs-title { color: var(--purple); }
+.ce .cs-feat-dot { background: var(--em); }
+.ai .cs-feat-dot { background: var(--amber-hi); }
 
 /* ── FEED PANEL ─────────────────────────────────────────── */
 .feed-panel {
   background: var(--panel);
   border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
   overflow: hidden;
 }
-.feed-header {
-  padding: 20px;
+.feed-hd {
+  padding: 18px 18px 16px;
   border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: flex; align-items: center;
+  justify-content: space-between; flex-shrink: 0;
+}
+.feed-title { font-size: 13px; font-weight: 700; }
+.feed-badge {
+  font-size: 10px; font-weight: 700;
+  background: var(--em-bg); color: var(--em);
+  border: 1px solid rgba(16,185,129,.18);
+  padding: 2px 9px; border-radius: 10px;
+}
+
+#payments-feed { overflow-y: auto; flex: 1; }
+
+.pay-row {
+  padding: 13px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 11px;
+  transition: background .18s;
+}
+.pay-row:hover { background: var(--surface); }
+.pay-row.pay-new {
+  animation: slideIn .35s cubic-bezier(.4,0,.2,1);
+  border-left: 2px solid var(--em);
+}
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.pay-icon-wrap {
+  width: 34px; height: 34px; border-radius: 9px;
+  background: var(--surface); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
 }
-.feed-title { font-size: 14px; font-weight: 700; }
-.feed-count {
-  font-size: 11px; font-weight: 700;
-  background: var(--green-bg);
-  color: var(--green); padding: 3px 10px;
-  border-radius: 10px; border: 1px solid rgba(34,197,94,.2);
-}
-
-#payments-feed { overflow-y: auto; flex: 1; padding-bottom: 8px; }
-
-.payment-row {
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  transition: background .2s;
-}
-.payment-row:hover { background: var(--surface); }
-.payment-row.pay-new {
-  animation: paySlide .4s cubic-bezier(.4,0,.2,1);
-  background: rgba(34,197,94,.05);
-  border-left: 2px solid var(--green);
-}
-@keyframes paySlide {
-  from { opacity: 0; transform: translateX(16px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
-
-.pay-icon {
-  width: 36px; height: 36px;
-  background: var(--green-bg);
-  border: 1px solid rgba(34,197,94,.2);
-  border-radius: 10px;
-  display: flex; align-items: center; justify-content: center;
-  font-size: 16px; flex-shrink: 0;
+.pay-icon-inner {
+  font-size: 9px; font-weight: 800; color: var(--em);
+  letter-spacing: .03em; font-family: 'Manrope', sans-serif;
+  line-height: 1;
 }
 .pay-info { flex: 1; min-width: 0; }
 .pay-table { font-size: 13px; font-weight: 600; }
-.pay-time  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.pay-meta  { font-size: 10px; color: var(--muted); margin-top: 2px; }
+.pay-right { text-align: right; flex-shrink: 0; }
 .pay-amount {
-  font-size: 15px; font-weight: 700;
+  font-size: 14px; font-weight: 700;
   font-variant-numeric: tabular-nums;
-  color: var(--green); text-align: right;
+  color: var(--em); letter-spacing: -.3px;
 }
-.pay-tip {
-  font-size: 11px; color: var(--muted);
-  text-align: right; margin-top: 2px;
-}
+.pay-tip { font-size: 10px; color: var(--muted); margin-top: 2px; }
 
 .feed-empty {
-  padding: 48px 20px; text-align: center; color: var(--muted);
+  padding: 48px 18px; text-align: center; color: var(--muted);
 }
-.feed-empty-icon { font-size: 36px; margin-bottom: 12px; opacity: .5; }
-.feed-empty-text { font-size: 13px; }
+.feed-empty-icon { font-size: 32px; margin-bottom: 10px; opacity: .4; }
+.feed-empty-text { font-size: 12px; }
 
-.feed-bottom {
+.feed-foot {
   border-top: 1px solid var(--border);
-  padding: 14px 16px;
-  flex-shrink: 0;
+  padding: 12px 14px; flex-shrink: 0;
 }
 #seed-btn {
-  width: 100%; padding: 11px;
+  width: 100%; padding: 10px;
   background: transparent;
   border: 1px solid var(--border);
   color: var(--muted); border-radius: var(--r);
   font-size: 12px; font-weight: 500; cursor: pointer;
+  font-family: inherit;
   transition: all .15s;
 }
-#seed-btn:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+#seed-btn:hover { border-color: var(--em); color: var(--em); background: var(--em-bg); }
 
 /* ── TOAST ──────────────────────────────────────────────── */
 #toast {
-  position: fixed; bottom: 24px; right: 24px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  color: var(--text);
-  padding: 13px 18px;
-  border-radius: var(--rl);
-  font-size: 14px; font-weight: 500;
+  position: fixed; bottom: 22px; right: 22px;
+  background: var(--card); border: 1px solid var(--border);
+  color: var(--text); padding: 12px 16px;
+  border-radius: var(--rl); font-size: 13px; font-weight: 500;
   opacity: 0; pointer-events: none;
-  transform: translateY(8px) scale(.97);
-  transition: all .25s cubic-bezier(.4,0,.2,1);
-  z-index: 999; max-width: 300px;
-  box-shadow: var(--shl);
+  transform: translateY(6px) scale(.97);
+  transition: all .22s cubic-bezier(.4,0,.2,1);
+  z-index: 999; max-width: 280px;
+  box-shadow: var(--shd);
 }
-#toast.show { opacity: 1; transform: translateY(0) scale(1); }
-#toast.success { border-color: var(--green); color: var(--green); }
+#toast.show    { opacity: 1; transform: translateY(0) scale(1); }
+#toast.success { border-color: var(--em); color: var(--em); }
 
 /* ── SCROLLBARS ─────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 3px; }
+::-webkit-scrollbar-thumb { background: var(--muted2); border-radius: 2px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted); }
 
 /* ── RESPONSIVE ─────────────────────────────────────────── */
 @media (max-width: 1200px) {
   .charts-row { grid-template-columns: 1fr; }
-  .donut-area { height: 160px; }
   .stat-grid  { grid-template-columns: repeat(2, 1fr); }
 }
-@media (max-width: 900px) {
-  .dash-layout { grid-template-columns: 200px 1fr; }
+@media (max-width: 960px) {
+  .dash-layout { grid-template-columns: 208px 1fr; }
   .feed-panel  { display: none; }
 }
 @media (max-width: 640px) {
@@ -642,6 +591,7 @@ html, body {
   .sidebar     { display: none; }
   .stat-grid   { grid-template-columns: 1fr 1fr; }
   .cs-grid     { grid-template-columns: 1fr; }
+  .main        { padding: 18px; }
 }
 </style>
 </head>
@@ -695,34 +645,36 @@ html, body {
       </div>
 
       <nav class="sidebar-nav">
-        <div class="nav-section-label" style="margin-top:4px">Navigare</div>
+        <div class="nav-group-label" style="margin-top:4px;margin-bottom:8px">Navigare</div>
         <a class="nav-item active">
-          <span class="ni-icon">◈</span>Tablou de bord
+          <span class="nav-icon">▪</span>Tablou de bord
         </a>
-        <a class="nav-item" id="qr-link" href="/qrcodes" target="_blank">
-          <span class="ni-icon">⬡</span>Coduri QR
+        <a class="nav-item" href="/qrcodes" target="_blank">
+          <span class="nav-icon">⬡</span>Coduri QR
         </a>
 
-        <div class="nav-section-label" style="margin-top:20px">Statistici (azi)</div>
-        <div class="sidebar-stats" style="padding:0">
-          <div class="ss-card">
-            <div class="ss-card-label">Total încasat</div>
-            <div class="ss-card-value" id="sb-total">— lei</div>
-            <div class="ss-card-sub" id="sb-count">— plăți</div>
-          </div>
-          <div class="ss-card">
-            <div class="ss-card-label">Bacșișuri</div>
-            <div class="ss-card-value" id="sb-tips" style="font-size:18px;color:var(--teal)">— lei</div>
+        <div style="margin-top:20px">
+          <div class="ss-label">Azi</div>
+          <div class="sidebar-stats" style="padding:0 0 0">
+            <div class="ss-row">
+              <div class="ss-row-label">Total încasat</div>
+              <div class="ss-row-val" id="sb-total">— lei</div>
+              <div class="ss-row-sub" id="sb-count">— plăți</div>
+            </div>
+            <div class="ss-row">
+              <div class="ss-row-label">Bacșișuri</div>
+              <div class="ss-row-val" id="sb-tips" style="color:var(--amber-hi);font-size:17px">— lei</div>
+            </div>
           </div>
         </div>
       </nav>
 
       <div class="sidebar-footer">
-        <div class="restaurant-badge">
+        <div class="rb-wrap">
           <div class="rb-avatar" id="rb-avatar">R</div>
           <div class="rb-info">
             <div class="rb-name" id="rest-name">Restaurant</div>
-            <div class="rb-sub">Owner</div>
+            <div class="rb-role">Owner</div>
           </div>
           <button class="logout-btn" id="logout-btn">Ieși</button>
         </div>
@@ -732,58 +684,46 @@ html, body {
     <!-- ── Main ─────────────────────────────────────────── -->
     <main class="main">
 
-      <!-- Header -->
+      <!-- Page header -->
       <div class="main-header">
         <div>
           <div class="main-title">Tablou de bord</div>
           <div class="main-date" id="main-date"></div>
         </div>
-        <div class="live-badge">
+        <div class="live-pill">
           <div class="live-dot"></div>Live
         </div>
       </div>
 
-      <!-- Stat cards -->
+      <!-- KPI cards -->
       <div class="stat-grid">
         <div class="stat-card">
-          <div class="stat-card-label">
-            <div class="stat-card-icon sci-green">💵</div>
-            Total încasat
-          </div>
-          <div class="stat-card-value green" id="stat-total">0</div>
-          <div class="stat-card-sub">lei, astăzi</div>
+          <div class="sc-label">Total încasat</div>
+          <div class="sc-val em" id="stat-total">0</div>
+          <div class="sc-sub">lei, astăzi</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-label">
-            <div class="stat-card-icon sci-teal">✓</div>
-            Plăți procesate
-          </div>
-          <div class="stat-card-value" id="stat-count">0</div>
-          <div class="stat-card-sub">tranzacții azi</div>
+          <div class="sc-label">Plăți procesate</div>
+          <div class="sc-val" id="stat-count">0</div>
+          <div class="sc-sub">tranzacții azi</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-label">
-            <div class="stat-card-icon sci-amber">★</div>
-            Bacșișuri
-          </div>
-          <div class="stat-card-value" id="stat-tips" style="color:var(--amber)">0</div>
-          <div class="stat-card-sub">lei, astăzi</div>
+          <div class="sc-label">Bacșișuri</div>
+          <div class="sc-val" id="stat-tips" style="color:var(--amber-hi)">0</div>
+          <div class="sc-sub">lei, astăzi</div>
         </div>
         <div class="stat-card">
-          <div class="stat-card-label">
-            <div class="stat-card-icon sci-purple">≈</div>
-            Bill mediu
-          </div>
-          <div class="stat-card-value" id="stat-avg" style="color:var(--purple)">0</div>
-          <div class="stat-card-sub">lei / plată</div>
+          <div class="sc-label">Bill mediu</div>
+          <div class="sc-val" id="stat-avg" style="color:var(--text2)">0</div>
+          <div class="sc-sub">lei / plată</div>
         </div>
       </div>
 
       <!-- Charts -->
       <div class="charts-row">
-        <!-- Area chart: revenue by hour -->
+        <!-- Revenue by hour: emerald area chart -->
         <div class="chart-card">
-          <div class="chart-header">
+          <div class="chart-hd">
             <div>
               <div class="chart-title">Venituri pe ore</div>
               <div class="chart-sub">Plăți procesate azi, oră cu oră</div>
@@ -795,12 +735,12 @@ html, body {
           </div>
         </div>
 
-        <!-- Donut: top dishes by revenue -->
+        <!-- Top dishes: categorical palette donut -->
         <div class="chart-card">
-          <div class="chart-header">
+          <div class="chart-hd">
             <div>
               <div class="chart-title">Top feluri</div>
-              <div class="chart-sub">Contribuție la venituri (30 zile)</div>
+              <div class="chart-sub">Contribuție venituri (30 zile)</div>
             </div>
           </div>
           <div class="donut-wrap">
@@ -808,71 +748,71 @@ html, body {
               <canvas id="dishes-chart"></canvas>
             </div>
             <div class="donut-center">
-              <div class="donut-center-val" id="donut-center-val">—</div>
-              <div class="donut-center-lbl">lei total</div>
+              <div class="donut-cval" id="donut-center-val">—</div>
+              <div class="donut-clbl">lei total</div>
             </div>
           </div>
         </div>
       </div>
 
       <!-- Tables -->
-      <div class="section">
-        <div class="section-header">
+      <div>
+        <div class="section-hd">
           <div class="section-title">Starea meselor</div>
-          <div class="section-sub" id="tables-summary"></div>
+          <div class="section-meta" id="tables-summary"></div>
         </div>
         <div id="tables-grid">
-          <div style="color:var(--muted);font-size:13px">Se încarcă mesele...</div>
+          <div style="color:var(--muted);font-size:13px">Se încarcă...</div>
         </div>
       </div>
 
-      <!-- Coming soon -->
-      <div class="section">
-        <div class="section-header">
-          <div class="section-title">În curând</div>
-          <div class="section-sub">Platforma nota. — viziunea completă</div>
+      <!-- Coming soon — prominent product previews -->
+      <div>
+        <div class="cs-section-hd">
+          <div class="cs-section-title">Urmează</div>
+          <div class="cs-section-desc">Viziunea completă a platformei nota.</div>
         </div>
         <div class="cs-grid">
 
           <!-- Club Eats -->
-          <div class="cs-card club">
+          <div class="cs-card ce">
             <div class="cs-glow"></div>
-            <div class="cs-badge locked">
-              <span>🔒</span> În curând
+            <div class="cs-badge">
+              <span class="cs-badge-dot"></span>În curând
             </div>
             <span class="cs-icon">🍴</span>
-            <div class="cs-title">Club Eats</div>
-            <div class="cs-tagline">Loialitate & marketing pentru restaurantul tău</div>
+            <div class="cs-name">Club Eats</div>
+            <div class="cs-tagline">Loialitate & marketing — clienți fideli pe termen lung</div>
             <div class="cs-desc">
-              Transformă vizitatorii ocazionali în clienți fideli. Campanii automate,
-              membership personalizat și oferte targetate — direct din dashboard.
+              Transformă fiecare masă într-o relație. Membership, puncte și campanii
+              automate care aduc oaspeții înapoi — fără efort din partea ta.
             </div>
             <div class="cs-features">
-              <div class="cs-feature">Program de puncte & recompense automate</div>
-              <div class="cs-feature">Campanii SMS/email segmentate</div>
-              <div class="cs-feature">Carduri de membership digitale</div>
-              <div class="cs-feature">Analiză comportament clienți recurenți</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Program de puncte & recompense</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Campanii SMS/email segmentate</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Carduri de membership digitale</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Promoții automate pentru ocazii speciale</div>
             </div>
           </div>
 
           <!-- AI Booking Agent -->
           <div class="cs-card ai">
             <div class="cs-glow"></div>
-            <div class="cs-badge locked">
-              <span>🔒</span> În curând
+            <div class="cs-badge">
+              <span class="cs-badge-dot"></span>În curând
             </div>
             <span class="cs-icon">🤖</span>
-            <div class="cs-title">AI Booking Agent</div>
-            <div class="cs-tagline">Rezervări automate, non-stop, fără efort</div>
+            <div class="cs-name">AI Booking Agent</div>
+            <div class="cs-tagline">Rezervări automate, non-stop, fără personal dedicat</div>
             <div class="cs-desc">
-              Un agent AI care preia rezervările, confirmă mesele și comunică cu oaspeții
-              — via WhatsApp, telefon sau site — în locul tău, 24/7.
+              Un agent AI care preia rezervările, confirmă mesele și comunică
+              cu oaspeții prin WhatsApp sau telefon — 24/7, în locul tău.
             </div>
             <div class="cs-features">
-              <div class="cs-feature">Acceptă rezervări automat prin WhatsApp & web</div>
-              <div class="cs-feature">Gestionează anulări și remindere</div>
-              <div class="cs-feature">Sincronizare cu calendarul restaurantului</div>
-              <div class="cs-feature">Răspunsuri personalizate în limba clientului</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Rezervări automate via WhatsApp & web</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Confirmare, remindere și anulări</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Sincronizare cu calendarul restaurantului</div>
+              <div class="cs-feat"><div class="cs-feat-dot"></div>Răspunsuri în română, engleză sau rusă</div>
             </div>
           </div>
 
@@ -881,11 +821,11 @@ html, body {
 
     </main>
 
-    <!-- ── Feed Panel ────────────────────────────────────── -->
+    <!-- ── Feed Panel ─────────────────────────────────────── -->
     <aside class="feed-panel">
-      <div class="feed-header">
+      <div class="feed-hd">
         <div class="feed-title">Plăți recente</div>
-        <div class="feed-count" id="feed-count">0</div>
+        <div class="feed-badge" id="feed-count">0</div>
       </div>
 
       <div id="payments-feed">
@@ -895,7 +835,7 @@ html, body {
         </div>
       </div>
 
-      <div class="feed-bottom">
+      <div class="feed-foot">
         <button id="seed-btn">+ Adaugă date demo</button>
       </div>
     </aside>
@@ -904,40 +844,49 @@ html, body {
 </div>
 
 <div id="toast"></div>
-
 <script src="/socket.io/socket.io.js"></script>
 <script>
-// ── state ─────────────────────────────────────────────────────────────────────
-let token      = localStorage.getItem('nota_token');
-let restaurant = JSON.parse(localStorage.getItem('nota_restaurant') || 'null');
-let loginMode  = 'login';
+// ── State ─────────────────────────────────────────────────────────────────────
+let token        = localStorage.getItem('nota_token');
+let restaurant   = JSON.parse(localStorage.getItem('nota_restaurant') || 'null');
+let loginMode    = 'login';
 let paymentCount = 0;
 let revenueChart = null;
 let dishesChart  = null;
 let socket;
 
-// ── init ──────────────────────────────────────────────────────────────────────
+// Categorical palette for top-dishes donut — distinguishable, refined, not all-green
+const DISH_PALETTE = [
+  '#10B981', // emerald (hero)
+  '#D97706', // amber
+  '#3B82F6', // blue
+  '#8B5CF6', // violet
+  '#F43F5E', // rose
+  '#64748B', // slate
+];
+
+// ── Init ──────────────────────────────────────────────────────────────────────
 document.getElementById('main-date').textContent = new Date().toLocaleDateString('ro-RO', {
-  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+  weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
 });
 
 if (token && restaurant) {
   showDashboard();
 } else {
   document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('dashboard').style.display    = 'none';
 }
 
-// ── login / register ──────────────────────────────────────────────────────────
+// ── Login / Register ──────────────────────────────────────────────────────────
 document.getElementById('mode-toggle').addEventListener('click', () => {
   loginMode = loginMode === 'login' ? 'register' : 'login';
   const isReg = loginMode === 'register';
-  document.getElementById('register-extra').style.display = isReg ? 'block' : 'none';
-  document.getElementById('login-btn').textContent   = isReg ? 'Creează cont' : 'Intră în cont';
-  document.getElementById('mode-text').textContent   = isReg ? 'Ai deja cont?' : 'Nu ai cont?';
-  document.getElementById('mode-toggle').textContent = isReg ? ' Conectează-te' : ' Înregistrează restaurantul';
-  document.getElementById('login-error').textContent = '';
-  document.getElementById('login-pass').autocomplete = isReg ? 'new-password' : 'current-password';
+  document.getElementById('register-extra').style.display  = isReg ? 'block' : 'none';
+  document.getElementById('login-btn').textContent          = isReg ? 'Creează cont' : 'Intră în cont';
+  document.getElementById('mode-text').textContent          = isReg ? 'Ai deja cont?' : 'Nu ai cont?';
+  document.getElementById('mode-toggle').textContent        = isReg ? ' Conectează-te' : ' Înregistrează restaurantul';
+  document.getElementById('login-error').textContent        = '';
+  document.getElementById('login-pass').autocomplete        = isReg ? 'new-password' : 'current-password';
 });
 
 document.getElementById('login-btn').addEventListener('click', async () => {
@@ -948,7 +897,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   if (!email || !password) { errEl.textContent = 'Completează toate câmpurile.'; return; }
 
   const btn = document.getElementById('login-btn');
-  btn.disabled = true;
+  btn.disabled    = true;
   btn.textContent = 'Se conectează...';
 
   try {
@@ -976,7 +925,7 @@ document.getElementById('login-btn').addEventListener('click', async () => {
   } catch {
     errEl.textContent = 'Eroare de rețea. Încearcă din nou.';
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = loginMode === 'register' ? 'Creează cont' : 'Intră în cont';
   }
 });
@@ -991,14 +940,14 @@ document.getElementById('logout-btn').addEventListener('click', () => {
   location.reload();
 });
 
-// ── show dashboard ────────────────────────────────────────────────────────────
+// ── Show Dashboard ────────────────────────────────────────────────────────────
 function showDashboard() {
   document.getElementById('login-screen').style.display = 'none';
   document.getElementById('dashboard').style.display    = 'block';
 
   const name = restaurant?.name || 'Restaurant';
-  document.getElementById('rest-name').textContent = name;
-  document.getElementById('rb-avatar').textContent = name.charAt(0).toUpperCase();
+  document.getElementById('rest-name').textContent  = name;
+  document.getElementById('rb-avatar').textContent  = name.charAt(0).toUpperCase();
 
   loadAll();
   connectSocket();
@@ -1008,104 +957,96 @@ async function loadAll() {
   await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments()]);
 }
 
-// ── API helper ────────────────────────────────────────────────────────────────
+// ── API Helper ────────────────────────────────────────────────────────────────
 async function api(path) {
   const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 401) { localStorage.clear(); location.reload(); }
   return res.json();
 }
 
-// ── stats ─────────────────────────────────────────────────────────────────────
+// ── Stats ─────────────────────────────────────────────────────────────────────
 async function loadStats() {
-  const data = await api('/api/dashboard/stats');
+  const data  = await api('/api/dashboard/stats');
   const total = Math.round(Number(data.total_lei));
   const count = Number(data.payment_count);
   const tips  = Math.round(Number(data.total_tips));
   const avg   = count > 0 ? Math.round(total / count) : 0;
 
-  document.getElementById('stat-total').textContent = `${total}`;
-  document.getElementById('stat-count').textContent = `${count}`;
-  document.getElementById('stat-tips').textContent  = `${tips}`;
-  document.getElementById('stat-avg').textContent   = `${avg}`;
-  document.getElementById('sb-total').textContent   = `${total} lei`;
-  document.getElementById('sb-count').textContent   = `${count} plăți`;
-  document.getElementById('sb-tips').textContent    = `${tips} lei`;
+  document.getElementById('stat-total').textContent        = `${total}`;
+  document.getElementById('stat-count').textContent        = `${count}`;
+  document.getElementById('stat-tips').textContent         = `${tips}`;
+  document.getElementById('stat-avg').textContent          = `${avg}`;
+  document.getElementById('sb-total').textContent          = `${total} lei`;
+  document.getElementById('sb-count').textContent          = `${count} plăți`;
+  document.getElementById('sb-tips').textContent           = `${tips} lei`;
   document.getElementById('chart-total-badge').textContent = `${total} lei`;
 }
 
-// ── top dishes (donut chart) ──────────────────────────────────────────────────
+// ── Top Dishes — Donut Chart ──────────────────────────────────────────────────
+let _dishesData = [];
+
 async function loadTopDishes() {
   const dishes = await api('/api/dashboard/top-dishes');
-  if (!dishes.length) {
-    if (dishesChart) {
-      dishesChart.data.labels   = [];
-      dishesChart.data.datasets[0].data = [];
-      dishesChart.update();
-    } else {
-      initDishesChart([]);
-    }
+  _dishesData  = dishes.slice(0, 6);
+
+  if (!_dishesData.length) {
     document.getElementById('donut-center-val').textContent = '—';
+    if (dishesChart) { dishesChart.data.labels = []; dishesChart.data.datasets[0].data = []; dishesChart.update(); }
+    else initDishesChart();
     return;
   }
 
-  const top  = dishes.slice(0, 6);
-  const total = top.reduce((s, d) => s + Number(d.revenue_lei), 0);
+  const total = _dishesData.reduce((s, d) => s + Number(d.revenue_lei), 0);
   document.getElementById('donut-center-val').textContent = Math.round(total);
 
-  const colors = ['#22c55e','#4ade80','#2dd4bf','#60a5fa','#a78bfa','#f59e0b'];
-
   if (dishesChart) {
-    dishesChart.data.labels   = top.map(d => d.name);
-    dishesChart.data.datasets[0].data             = top.map(d => Number(d.revenue_lei));
-    dishesChart.data.datasets[0].backgroundColor  = colors;
+    dishesChart.data.labels                        = _dishesData.map(d => d.name);
+    dishesChart.data.datasets[0].data              = _dishesData.map(d => Number(d.revenue_lei));
+    dishesChart.data.datasets[0].backgroundColor   = DISH_PALETTE;
     dishesChart.update('active');
   } else {
-    initDishesChart(top, colors);
+    initDishesChart();
   }
 }
 
-function initDishesChart(dishes, colors = []) {
+function initDishesChart() {
   const ctx = document.getElementById('dishes-chart').getContext('2d');
   dishesChart = new Chart(ctx, {
     type: 'doughnut',
     data: {
-      labels: dishes.map(d => d.name),
+      labels: _dishesData.map(d => d.name),
       datasets: [{
-        data: dishes.map(d => Number(d.revenue_lei)),
-        backgroundColor: colors,
-        borderColor: '#0f1912',
+        data: _dishesData.map(d => Number(d.revenue_lei)),
+        backgroundColor: DISH_PALETTE,
+        borderColor: '#1A1A1A',
         borderWidth: 3,
-        hoverOffset: 6,
+        hoverOffset: 5,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '70%',
+      cutout: '68%',
       plugins: {
         legend: {
           position: 'bottom',
           labels: {
-            color: '#8fa895',
-            font: { size: 11, family: 'system-ui' },
-            boxWidth: 10,
-            boxHeight: 10,
+            color: '#737373',
+            font: { size: 11, family: 'Inter, system-ui' },
+            boxWidth: 9, boxHeight: 9,
             padding: 10,
-            usePointStyle: true,
-            pointStyle: 'circle',
+            usePointStyle: true, pointStyle: 'circle',
           },
         },
         tooltip: {
-          backgroundColor: '#0f1912',
-          borderColor: '#1e3028',
-          borderWidth: 1,
-          titleColor: '#8fa895',
-          bodyColor: '#e8f0eb',
-          padding: 12,
+          backgroundColor: '#1A1A1A',
+          borderColor: '#2A2A2A', borderWidth: 1,
+          titleColor: '#A3A3A3', bodyColor: '#F0F0F0',
+          padding: 11,
           callbacks: {
             label: ctx => {
-              const d = dishes[ctx.dataIndex];
-              return ` ${Math.round(ctx.raw)} lei  ×${d?.times_ordered || ''}`;
+              const d = _dishesData[ctx.dataIndex];
+              return ` ${Math.round(ctx.raw)} lei  ×${d?.times_ordered ?? ''}`;
             },
           },
         },
@@ -1114,17 +1055,17 @@ function initDishesChart(dishes, colors = []) {
   });
 }
 
-// ── hourly revenue (area chart) ────────────────────────────────────────────────
+// ── Hourly Revenue — Area Chart ────────────────────────────────────────────────
 async function loadHourly() {
   const rows   = await api('/api/dashboard/hourly');
   const byHour = {};
   rows.forEach(r => { byHour[r.hour] = Number(r.total_lei); });
 
-  const labels = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2,'0')}:00`);
+  const labels = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, '0')}:00`);
   const data   = Array.from({ length: 24 }, (_, h) => byHour[h] || 0);
 
   if (revenueChart) {
-    revenueChart.data.labels = labels;
+    revenueChart.data.labels           = labels;
     revenueChart.data.datasets[0].data = data;
     revenueChart.update('active');
   } else {
@@ -1134,10 +1075,10 @@ async function loadHourly() {
 
 function initRevenueChart(labels, data) {
   const ctx  = document.getElementById('revenue-chart').getContext('2d');
-  const grad = ctx.createLinearGradient(0, 0, 0, 180);
-  grad.addColorStop(0,   'rgba(34,197,94,.25)');
-  grad.addColorStop(0.6, 'rgba(34,197,94,.06)');
-  grad.addColorStop(1,   'rgba(34,197,94,.00)');
+  const grad = ctx.createLinearGradient(0, 0, 0, 176);
+  grad.addColorStop(0,   'rgba(16,185,129,.22)');
+  grad.addColorStop(0.65,'rgba(16,185,129,.05)');
+  grad.addColorStop(1,   'rgba(16,185,129,.00)');
 
   revenueChart = new Chart(ctx, {
     type: 'line',
@@ -1145,14 +1086,14 @@ function initRevenueChart(labels, data) {
       labels,
       datasets: [{
         data,
-        borderColor: '#22c55e',
+        borderColor: '#10B981',
         backgroundColor: grad,
         fill: true,
-        tension: 0.42,
+        tension: 0.4,
         pointRadius: 0,
-        pointHoverRadius: 5,
-        pointHoverBackgroundColor: '#22c55e',
-        pointHoverBorderColor: '#0f1912',
+        pointHoverRadius: 4,
+        pointHoverBackgroundColor: '#10B981',
+        pointHoverBorderColor: '#1A1A1A',
         pointHoverBorderWidth: 2,
         borderWidth: 2,
       }],
@@ -1164,32 +1105,29 @@ function initRevenueChart(labels, data) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#0f1912',
-          borderColor: '#1e3028',
-          borderWidth: 1,
-          titleColor: '#5c7565',
-          bodyColor: '#e8f0eb',
-          padding: 12,
-          callbacks: { label: ctx => ` ${Math.round(ctx.raw)} lei` },
+          backgroundColor: '#1A1A1A',
+          borderColor: '#2A2A2A', borderWidth: 1,
+          titleColor: '#737373', bodyColor: '#F0F0F0',
+          padding: 11,
+          callbacks: { label: c => ` ${Math.round(c.raw)} lei` },
         },
       },
       scales: {
         x: {
-          grid: { color: 'rgba(30,48,40,.4)', drawTicks: false },
+          grid: { color: 'rgba(42,42,42,.7)', drawTicks: false },
           border: { color: 'transparent' },
           ticks: {
-            color: '#5c7565',
-            font: { size: 10, family: 'system-ui' },
-            maxTicksLimit: 8,
-            maxRotation: 0,
+            color: '#4A4A4A',
+            font: { size: 10, family: 'Inter, system-ui' },
+            maxTicksLimit: 8, maxRotation: 0,
           },
         },
         y: {
-          grid: { color: 'rgba(30,48,40,.4)', drawTicks: false },
+          grid: { color: 'rgba(42,42,42,.7)', drawTicks: false },
           border: { color: 'transparent' },
           ticks: {
-            color: '#5c7565',
-            font: { size: 10, family: 'system-ui' },
+            color: '#4A4A4A',
+            font: { size: 10, family: 'Inter, system-ui' },
             callback: v => v > 0 ? `${v} lei` : '',
           },
           beginAtZero: true,
@@ -1199,7 +1137,7 @@ function initRevenueChart(labels, data) {
   });
 }
 
-// ── tables ────────────────────────────────────────────────────────────────────
+// ── Tables ────────────────────────────────────────────────────────────────────
 async function loadTables() {
   const tables = await api('/api/dashboard/tables');
   const grid   = document.getElementById('tables-grid');
@@ -1211,9 +1149,9 @@ async function loadTables() {
 
   const active  = tables.filter(t => Number(t.available) > 0 || Number(t.claimed) > 0).length;
   const withPay = tables.filter(t => Number(t.paid) > 0).length;
-  const empty   = tables.length - active - withPay;
+  const free    = tables.length - active - withPay;
   document.getElementById('tables-summary').textContent =
-    `${active} active · ${withPay} achitate · ${empty} libere`;
+    `${active} active · ${withPay} achitate · ${free} libere`;
 
   grid.innerHTML = tables.map(t => {
     const unpaid  = Number(t.unpaid_lei);
@@ -1225,19 +1163,19 @@ async function loadTables() {
       ? `${t.available} disp · ${t.claimed} sel`
       : hasPaid ? 'Achitat' : 'Liberă';
     return `
-      <div class="table-tile ${cls}">
-        <div class="tile-num">Masa ${t.number}</div>
-        <div class="tile-dot"></div>
-        <div class="tile-amount ${unpaid === 0 ? 'zero' : ''}">${amtTxt || '—'}</div>
-        <div class="tile-status">${stTxt}</div>
+      <div class="t-tile ${cls}">
+        <div class="t-num">Masa ${t.number}</div>
+        <div class="t-indicator"></div>
+        <div class="t-amount ${unpaid === 0 ? 'zero' : ''}">${amtTxt || '—'}</div>
+        <div class="t-status">${stTxt}</div>
       </div>`;
   }).join('');
 }
 
-// ── recent payments ───────────────────────────────────────────────────────────
+// ── Recent Payments ───────────────────────────────────────────────────────────
 async function loadRecentPayments() {
   const payments = await api('/api/dashboard/recent');
-  paymentCount = payments.length;
+  paymentCount   = payments.length;
   document.getElementById('feed-count').textContent = paymentCount;
 
   const feed = document.getElementById('payments-feed');
@@ -1249,28 +1187,29 @@ async function loadRecentPayments() {
       </div>`;
     return;
   }
-  feed.innerHTML = payments.map(p => paymentRowHTML(p, false)).join('');
+  feed.innerHTML = payments.map(p => payRowHTML(p, false)).join('');
 }
 
-function paymentRowHTML(p, isNew) {
-  const total = Number(p.amount_lei) + Number(p.tip_lei);
+function payRowHTML(p, isNew) {
+  const total   = Number(p.amount_lei) + Number(p.tip_lei);
+  const hasTip  = Number(p.tip_lei) > 0;
   return `
-    <div class="payment-row ${isNew ? 'pay-new' : ''}">
-      <div class="pay-icon">💳</div>
+    <div class="pay-row ${isNew ? 'pay-new' : ''}">
+      <div class="pay-icon-wrap">
+        <span class="pay-icon-inner">MIA</span>
+      </div>
       <div class="pay-info">
         <div class="pay-table">Masa ${p.table_number}</div>
-        <div class="pay-time">${timeAgo(p.paid_at)}</div>
+        <div class="pay-meta">via MIA · confirmat · ${timeAgo(p.paid_at)}</div>
       </div>
-      <div>
+      <div class="pay-right">
         <div class="pay-amount">${Math.round(total)} lei</div>
-        ${Number(p.tip_lei) > 0
-          ? `<div class="pay-tip">+${Math.round(p.tip_lei)} bacșiș</div>`
-          : ''}
+        ${hasTip ? `<div class="pay-tip">+${Math.round(p.tip_lei)} bacșiș</div>` : ''}
       </div>
     </div>`;
 }
 
-// ── socket ────────────────────────────────────────────────────────────────────
+// ── Socket ────────────────────────────────────────────────────────────────────
 function connectSocket() {
   socket = io({ transports: ['websocket', 'polling'] });
 
@@ -1287,30 +1226,27 @@ function connectSocket() {
     if (emptyEl) feed.innerHTML = '';
 
     const div = document.createElement('div');
-    div.innerHTML = paymentRowHTML(p, true);
+    div.innerHTML = payRowHTML(p, true);
     feed.prepend(div.firstElementChild);
 
-    // Keep feed to 30 entries
-    const rows = feed.querySelectorAll('.payment-row');
+    const rows = feed.querySelectorAll('.pay-row');
     if (rows.length > 30) rows[rows.length - 1].remove();
 
-    // Refresh stats and charts live
     loadStats();
     loadHourly();
     loadTables();
 
-    toast(`💳 Masa ${p.table_number} — ${Math.round(Number(p.amount_lei) + Number(p.tip_lei))} lei`, 'success');
+    const total = Math.round(Number(p.amount_lei) + Number(p.tip_lei));
+    toast(`Masa ${p.table_number} — ${total} lei`, 'success');
   });
 
-  socket.on('order-update', () => {
-    loadTables();
-  });
+  socket.on('order-update', () => { loadTables(); });
 }
 
-// ── seed ──────────────────────────────────────────────────────────────────────
+// ── Seed ──────────────────────────────────────────────────────────────────────
 document.getElementById('seed-btn').addEventListener('click', async () => {
-  const btn = document.getElementById('seed-btn');
-  btn.disabled = true;
+  const btn       = document.getElementById('seed-btn');
+  btn.disabled    = true;
   btn.textContent = 'Se adaugă...';
   try {
     await fetch('/api/dev/seed-payments', {
@@ -1323,27 +1259,27 @@ document.getElementById('seed-btn').addEventListener('click', async () => {
   } catch {
     toast('Eroare la adăugarea datelor.');
   } finally {
-    btn.disabled = false;
+    btn.disabled    = false;
     btn.textContent = '+ Adaugă date demo';
   }
 });
 
-// ── utils ─────────────────────────────────────────────────────────────────────
+// ── Utilities ─────────────────────────────────────────────────────────────────
 function timeAgo(ts) {
-  const diff = Math.round((Date.now() - new Date(ts)) / 1000);
-  if (diff < 60)    return 'Acum';
-  if (diff < 3600)  return `${Math.floor(diff / 60)} min în urmă`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} ore în urmă`;
+  const d = Math.round((Date.now() - new Date(ts)) / 1000);
+  if (d < 60)    return 'acum';
+  if (d < 3600)  return `${Math.floor(d / 60)} min`;
+  if (d < 86400) return `${Math.floor(d / 3600)} ore`;
   return new Date(ts).toLocaleDateString('ro-RO');
 }
 
 let toastTimer;
 function toast(msg, type = '') {
-  const el = document.getElementById('toast');
+  const el    = document.getElementById('toast');
   el.textContent = msg;
   el.className   = 'show' + (type ? ' ' + type : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.className = '', 3500);
+  toastTimer = setTimeout(() => { el.className = ''; }, 3500);
 }
 </script>
 </body>
