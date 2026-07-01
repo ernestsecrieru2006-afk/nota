@@ -221,6 +221,31 @@
     .fail-icon { font-size: 40px; color: var(--red); margin-bottom: 10px; }
     .fail-ttl  { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--red); margin-bottom: 6px; }
     .fail-reason { font-size: 14px; color: #7f1f1f; line-height: 1.5; }
+
+    /* ══ TOUCH OPTIMIZATIONS ══════════════════════════════ */
+    /* Eliminate 300ms tap delay on all interactive elements */
+    .item-card, .btn-primary, .btn-ghost, .back-btn,
+    .m-tab, .t-card, .p-card, .g-btn { touch-action: manipulation; }
+
+    /* Extend existing transitions to include GPU-only transform (no layout thrash) */
+    .item-card { transition: border-color 0.15s, background 0.15s, transform 100ms ease-out; }
+    .item-card:active:not(.paid):not(.rsv):not(.readonly) { transform: scale(0.97); }
+
+    .btn-primary { transition: background 0.18s, box-shadow 0.18s, transform 100ms ease-out; }
+    .btn-primary:active:not(:disabled) { background: #002028; transform: scale(0.97); }
+
+    .m-tab  { transition: all 0.18s, transform 100ms ease-out; }
+    .m-tab:active { transform: scale(0.95); }
+
+    .t-card { transition: all 0.15s, transform 100ms ease-out; }
+    .t-card:active { transform: scale(0.97); }
+
+    .g-btn:active { transform: scale(0.88); }
+    .btn-ghost:active { opacity: 0.65; }
+    .back-btn:active  { opacity: 0.65; }
+
+    .p-card { transition: all 0.15s, transform 100ms ease-out; }
+    .p-card:active:not(.off) { transform: scale(0.99); }
   </style>
 </head>
 <body>
@@ -485,9 +510,24 @@
     render();
   });
 
+  // Batch rapid items-patch bursts so we do at most one DOM pass per animation frame.
+  // State updates (order.items, mySelected) happen synchronously; only the DOM write is deferred.
+  let _patchBuf = null;
+
+  function schedulePatch(ids) {
+    if (_patchBuf) { ids.forEach(id => _patchBuf.add(id)); return; }
+    _patchBuf = new Set(ids);
+    requestAnimationFrame(() => {
+      const list = [..._patchBuf];
+      _patchBuf = null;
+      patchRender(list);
+    });
+  }
+
   // Diff event: server-sent patches for claim/release — avoids full list rebuild
   socket.on('items-patch', patches => {
     if (!order) return;
+    // Update state synchronously (no rAF — must be current before any render)
     for (const p of patches) {
       const item = order.items.find(i => i.id === p.id);
       if (item) { item.status = p.status; item.claimed_by = p.claimed_by; }
@@ -500,7 +540,7 @@
         }
       }
     }
-    patchRender(patches.map(p => p.id));
+    schedulePatch(patches.map(p => p.id));
   });
 
   // ── payment-confirmed: ONLY signal that advances to success screen ────────────
@@ -614,18 +654,20 @@
     if (it.status === 'claimed' && it.claimed_by !== socket.id) return;
 
     if (mySelected.has(id)) {
-      // Deselect: release all, re-claim remaining (server-authoritative)
+      // Deselect exactly this one item — never touch the others.
+      // Uses release-item (single-item) instead of release-all + re-claim-rest
+      // so there is no intermediate "everything deselected" flash.
       mySelected.delete(id);
-      const remain = [...mySelected];
-      socket.emit('release-claims');
-      if (remain.length > 0) {
-        socket.emit('claim-items', remain, ({ claimed = [] } = {}) => {
-          mySelected = new Set(claimed);
-          render();
-        });
-      } else {
-        render();
-      }
+      patchRender([id]); // instant visual feedback
+
+      socket.emit('release-item', id, ({ released = [], error } = {}) => {
+        if (error || !released.includes(id)) {
+          // Server rejected (e.g. payment now in-flight) — roll back only this item
+          mySelected.add(id);
+          patchRender([id]);
+        }
+        // On success: items-patch from server already updated order state
+      });
     } else {
       // Select: optimistic — reflect tap immediately, roll back if server rejects
       mySelected.add(id);

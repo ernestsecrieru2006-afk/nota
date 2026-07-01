@@ -463,6 +463,27 @@ io.on('connection', socket => {
     }
   });
 
+  // Single-item deselect — only releases the one tapped item, never others.
+  // This fixes the "deselect clears everything" bug caused by release-all + re-claim-rest.
+  socket.on('release-item', async (itemId, ack) => {
+    try {
+      if (socketInflight.has(socket.id)) return ack?.({ released: [] });
+      const { rows } = await pool.query(`
+        UPDATE order_items SET status = 'available', claimed_by = NULL
+        WHERE id = $1 AND claimed_by = $2 AND status = 'claimed'
+        RETURNING id
+      `, [itemId, socket.id]);
+      if (rows.length > 0 && currentTable) {
+        io.to(`table-${currentTable}`).emit('items-patch',
+          [{ id: rows[0].id, status: 'available', claimed_by: null }]
+        );
+      }
+      ack?.({ released: rows.map(r => r.id) });
+    } catch (err) {
+      ack?.({ error: err.message });
+    }
+  });
+
   // ── pay-claimed: item-level payment (splitMode = 'mine') ──────────────────
   socket.on('pay-claimed', async ({ tipLei, tableNumber, orderId }, ack) => {
     try {
