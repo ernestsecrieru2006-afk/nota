@@ -110,9 +110,12 @@ app.get('/api/table/:n', async (req, res) => {
 
 app.get('/api/dev/table-token/:n', async (req, res) => {
   try {
+    const rId    = req.query.restaurantId ? Number(req.query.restaurantId) : null;
+    const filter = rId ? ' AND restaurant_id = $2' : '';
+    const params = rId ? [Number(req.params.n), rId] : [Number(req.params.n)];
     const { rows: [tbl] } = await pool.query(
-      'SELECT number, token FROM tables WHERE number = $1 LIMIT 1',
-      [Number(req.params.n)]
+      `SELECT number, token FROM tables WHERE number = $1${filter} LIMIT 1`,
+      params
     );
     if (!tbl) return res.status(404).json({ error: 'Table not found' });
     res.json({ number: tbl.number, token: tbl.token, url: `${APP_URL}/?t=${tbl.token}` });
