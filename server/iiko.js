@@ -80,11 +80,12 @@ function normalizeIikoOrder(iikoOrder, tableNumber) {
 // ─── public API ───────────────────────────────────────────────────────────────
 
 /**
- * getOpenOrder(tableNumber)
+ * getOpenOrder(tableNumber, restaurantId)
  * Returns the current open order for a table.
+ * Pass restaurantId to scope the lookup to one tenant (required in multi-tenant DB).
  * Falls back to Postgres mock if iiko is not configured.
  */
-export async function getOpenOrder(tableNumber) {
+export async function getOpenOrder(tableNumber, restaurantId = null) {
   if (LIVE) {
     // 1. Fetch tables for the org to find the iiko tableId for this tableNumber
     const tablesData = await iikoPost('/api/1/reserve/available_restaurant_sections', {
@@ -105,7 +106,7 @@ export async function getOpenOrder(tableNumber) {
 
     if (!iikoTableId) {
       console.warn(`[iiko] No table found for number ${tableNumber}, falling back to mock`);
-      return getOpenOrderMock(tableNumber);
+      return getOpenOrderMock(tableNumber, restaurantId);
     }
 
     // 2. Get open orders for that table
@@ -127,7 +128,7 @@ export async function getOpenOrder(tableNumber) {
     return normalizeIikoOrder(openOrder, tableNumber);
   }
 
-  return getOpenOrderMock(tableNumber);
+  return getOpenOrderMock(tableNumber, restaurantId);
 }
 
 /**
@@ -217,14 +218,16 @@ export async function parseIikoWebhook(payload) {
 
 // ─── Postgres mock (used when IIKO_API_LOGIN / IIKO_ORG_ID not set) ───────────
 
-async function getOpenOrderMock(tableNumber) {
+async function getOpenOrderMock(tableNumber, restaurantId = null) {
+  const ridFilter = restaurantId ? ' AND t.restaurant_id = $2' : '';
+  const params    = restaurantId ? [tableNumber, restaurantId] : [tableNumber];
   const { rows: orders } = await pool.query(
     `SELECT o.id, o.table_number, o.status
      FROM orders o
      JOIN tables t ON t.id = o.table_id
-     WHERE t.number = $1 AND o.status = 'open'
+     WHERE t.number = $1 AND o.status = 'open'${ridFilter}
      ORDER BY o.created_at DESC LIMIT 1`,
-    [tableNumber]
+    params
   );
   if (!orders.length) return { id: null, table_number: tableNumber, status: 'open', items: [] };
 

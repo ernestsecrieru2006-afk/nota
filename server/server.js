@@ -91,7 +91,7 @@ app.get('/api/table/by-token/:token', async (req, res) => {
       [req.params.token]
     );
     if (!tbl) return res.status(404).json({ error: 'Masă invalidă' });
-    const order = await getOpenOrder(tbl.number);
+    const order = await getOpenOrder(tbl.number, tbl.restaurant_id);
     res.json({ ...order, table_number: tbl.number });
   } catch (err) {
     console.error('[GET /api/table/by-token]', err);
@@ -310,7 +310,7 @@ app.post('/api/dev/seed-table', async (req, res) => {
       dParams
     );
 
-    const fresh = await getOpenOrder(tableNumber);
+    const fresh = await getOpenOrder(tableNumber, restaurantId);
     io.to(`table-${tableNumber}`).emit('order-update', fresh);
     res.json({ ok: true, orderId: order.id, items: DEMO_DISHES.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -442,25 +442,29 @@ function checkThrottle(socket) {
 
 io.on('connection', socket => {
   let currentTable = null;
+  let currentRestaurantId = null;
 
   socket.on('join-table', async ({ token, tableNumber, restaurantId } = {}) => {
     if (checkThrottle(socket)) return;
     try {
       let resolvedNumber = tableNumber;
+      let resolvedRestaurantId = restaurantId || null;
       if (token) {
         if (typeof token !== 'string' || !/^[0-9a-f]{16}$/.test(token)) {
           return socket.emit('error', { message: 'Masă invalidă' });
         }
         const { rows: [tbl] } = await pool.query(
-          'SELECT number FROM tables WHERE token = $1', [token]
+          'SELECT number, restaurant_id FROM tables WHERE token = $1', [token]
         );
         if (!tbl) return socket.emit('error', { message: 'Masă invalidă' });
         resolvedNumber = tbl.number;
+        resolvedRestaurantId = tbl.restaurant_id;
       }
       if (!resolvedNumber) return socket.emit('error', { message: 'Masă invalidă' });
       currentTable = resolvedNumber;
+      currentRestaurantId = resolvedRestaurantId;
       socket.join(`table-${resolvedNumber}`);
-      const order = await getOpenOrder(resolvedNumber);
+      const order = await getOpenOrder(resolvedNumber, currentRestaurantId);
       socket.emit('order-update', order);
     } catch (err) {
       socket.emit('error', { message: err.message });
@@ -556,7 +560,7 @@ io.on('connection', socket => {
     if (!Number.isFinite(tip) || tip < 0) return ack?.({ error: 'Invalid tip' });
     try {
       const tbl   = currentTable;
-      const order = await getOpenOrder(tbl);
+      const order = await getOpenOrder(tbl, currentRestaurantId);
       const mine  = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
       if (!mine.length) return ack?.({ error: 'No claimed items' });
 
@@ -573,7 +577,7 @@ io.on('connection', socket => {
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
 
-      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei, tipLei: tip, mode: 'claimed', itemIds: mine.map(i => i.id) };
+      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, restaurantId: currentRestaurantId, orderId: order.id, amountLei, tipLei: tip, mode: 'claimed', itemIds: mine.map(i => i.id) };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
@@ -606,7 +610,7 @@ io.on('connection', socket => {
     }
     try {
       const tbl   = currentTable;
-      const order = await getOpenOrder(tbl);
+      const order = await getOpenOrder(tbl, currentRestaurantId);
       if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
 
       const remaining = order.items
@@ -634,7 +638,7 @@ io.on('connection', socket => {
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
 
-      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei: chargeAmount, tipLei: tip, mode: 'flat' };
+      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, restaurantId: currentRestaurantId, orderId: order.id, amountLei: chargeAmount, tipLei: tip, mode: 'flat' };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
@@ -698,7 +702,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
   if (!meta) {
     // Server restart: recover from DB
     const { rows: [pmt] } = await pool.query(
-      `SELECT p.id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id, o.table_number
+      `SELECT p.id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id, o.table_number, o.restaurant_id
        FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
       [miaPaymentId]
@@ -707,7 +711,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
     return;
   }
 
-  const { dbPaymentId, socketId, tableNumber, orderId, amountLei, tipLei, mode, itemIds, timer } = meta;
+  const { dbPaymentId, socketId, tableNumber, restaurantId, orderId, amountLei, tipLei, mode, itemIds, timer } = meta;
   if (timer) clearTimeout(timer);
 
   const client = await pool.connect();
@@ -765,7 +769,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
     const s = io.sockets.sockets.get(socketId);
     if (s) s.emit('payment-confirmed', { amountLei, tipLei, total: Number(amountLei) + Number(tipLei), mode, itemIds: itemIds || [] });
 
-    const order = await getOpenOrder(tableNumber);
+    const order = await getOpenOrder(tableNumber, restaurantId);
     io.to(`table-${tableNumber}`).emit('order-update', order);
     io.to('dashboard').emit('payment-made', {
       table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
@@ -785,7 +789,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
   const meta = paymentMeta.get(miaPaymentId);
   if (!meta) {
     const { rows: [pmt] } = await pool.query(
-      `SELECT p.id, p.socket_id, p.mode, p.order_id, o.table_number
+      `SELECT p.id, p.socket_id, p.mode, p.order_id, o.table_number, o.restaurant_id
        FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
       [miaPaymentId]
@@ -794,7 +798,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     return;
   }
 
-  const { dbPaymentId, socketId, tableNumber, mode, timer } = meta;
+  const { dbPaymentId, socketId, tableNumber, restaurantId, mode, timer } = meta;
   if (timer) clearTimeout(timer);
 
   const newStatus = reason.toLowerCase().includes('expir') ? 'expired' : 'failed';
@@ -827,7 +831,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     const s = io.sockets.sockets.get(socketId);
     if (s) s.emit('payment-failed', { reason });
 
-    const order = await getOpenOrder(tableNumber);
+    const order = await getOpenOrder(tableNumber, restaurantId);
     io.to(`table-${tableNumber}`).emit('order-update', order);
 
     cleanupMeta(miaPaymentId, socketId);
@@ -876,7 +880,7 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
     );
     await client.query('COMMIT');
 
-    const order = await getOpenOrder(pmt.table_number);
+    const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
     io.to(`table-${pmt.table_number}`).emit('order-update', order);
     io.to('dashboard').emit('payment-made', {
       table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
@@ -909,7 +913,7 @@ async function releaseFromDB(pmt, reason = '') {
     }
     await client.query('COMMIT');
 
-    const order = await getOpenOrder(pmt.table_number);
+    const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
     io.to(`table-${pmt.table_number}`).emit('order-update', order);
   } catch (err) {
     await client.query('ROLLBACK');
@@ -931,7 +935,7 @@ async function reconcilePendingPayments() {
   try {
     const { rows: pending } = await pool.query(`
       SELECT p.id, p.mia_payment_id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
-             o.table_number, p.created_at
+             o.table_number, o.restaurant_id, p.created_at
       FROM payments p
       JOIN orders o ON o.id = p.order_id
       WHERE p.status = 'pending'
