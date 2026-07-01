@@ -45,6 +45,7 @@ async function setup() {
         restaurant_id INT         NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
         number        INT         NOT NULL,
         label         TEXT,                          -- e.g. "Terasă 3"
+        token         VARCHAR(20) UNIQUE,            -- unguessable URL slug for guest QR
         UNIQUE (restaurant_id, number)
       )
     `);
@@ -103,6 +104,11 @@ async function setup() {
         ON payments(restaurant_id, paid_at);
     `);
 
+    // ── add token column if upgrading from schema without it ─────────────────
+    try {
+      await client.query(`ALTER TABLE tables ADD COLUMN IF NOT EXISTS token VARCHAR(20) UNIQUE`);
+    } catch { /* already exists */ }
+
     // ── add restaurant_id / table_number to existing tables if upgrading ─────
     // (safe no-ops if columns already exist)
     try {
@@ -120,11 +126,19 @@ async function setup() {
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 
+    // ── backfill tokens for any tables that don't have one yet ───────────────
+    const crypto = await import('crypto');
+    const { rows: noToken } = await client.query('SELECT id FROM tables WHERE token IS NULL');
+    for (const tbl of noToken) {
+      const token = crypto.randomBytes(8).toString('hex'); // 16 URL-safe hex chars
+      await client.query('UPDATE tables SET token = $1 WHERE id = $2', [token, tbl.id]);
+    }
+    if (noToken.length) console.log(`✅ Generated tokens for ${noToken.length} table(s).`);
+
     // ── seed a demo restaurant if none exist ─────────────────────────────────
     const { rows } = await client.query('SELECT COUNT(*) AS n FROM restaurants');
     if (Number(rows[0].n) === 0) {
       console.log('Seeding demo restaurant (Carmelo)...');
-      const crypto = await import('crypto');
       const salt = crypto.randomBytes(16).toString('hex');
       const hash = await new Promise((res, rej) =>
         crypto.pbkdf2('demo1234', salt, 100_000, 32, 'sha256',
@@ -137,9 +151,10 @@ async function setup() {
         [hash]
       );
       for (let i = 1; i <= 8; i++) {
+        const tblToken = crypto.randomBytes(8).toString('hex');
         const { rows: [t] } = await client.query(
-          'INSERT INTO tables (restaurant_id, number) VALUES ($1, $2) RETURNING id',
-          [r.id, i]
+          'INSERT INTO tables (restaurant_id, number, token) VALUES ($1, $2, $3) RETURNING id',
+          [r.id, i, tblToken]
         );
         await client.query(
           `INSERT INTO orders (table_id, table_number, restaurant_id, status)

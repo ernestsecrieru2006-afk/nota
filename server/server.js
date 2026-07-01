@@ -63,13 +63,43 @@ app.get( '/api/auth/me',       requireAuth, me);
 
 // ─── table / order routes ─────────────────────────────────────────────────────
 
-// Get open order for a table (public — guests use this)
+// Get open order by token (guest-facing — token resolves to table server-side)
+app.get('/api/table/by-token/:token', async (req, res) => {
+  try {
+    const { rows: [tbl] } = await pool.query(
+      'SELECT number, restaurant_id FROM tables WHERE token = $1',
+      [req.params.token]
+    );
+    if (!tbl) return res.status(404).json({ error: 'Masă invalidă' });
+    const order = await getOpenOrder(tbl.number);
+    res.json({ ...order, table_number: tbl.number });
+  } catch (err) {
+    console.error('[GET /api/table/by-token]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Get open order for a table by number (internal / dashboard use only)
 app.get('/api/table/:n', async (req, res) => {
   try {
     const order = await getOpenOrder(Number(req.params.n));
     res.json(order);
   } catch (err) {
     console.error('[GET /api/table]', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Return token URL for a table number (dev/testing)
+app.get('/api/dev/table-token/:n', async (req, res) => {
+  try {
+    const { rows: [tbl] } = await pool.query(
+      'SELECT number, token FROM tables WHERE number = $1 LIMIT 1',
+      [Number(req.params.n)]
+    );
+    if (!tbl) return res.status(404).json({ error: 'Table not found' });
+    res.json({ number: tbl.number, token: tbl.token, url: `${APP_URL}/?t=${tbl.token}` });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
@@ -350,16 +380,26 @@ app.post('/api/dev/seed-payments', async (req, res) => {
 app.get('/qrcodes', async (req, res) => {
   const restaurantId = req.query.r || 1;
   const { rows: tables } = await pool.query(
-    'SELECT number FROM tables WHERE restaurant_id = $1 ORDER BY number',
+    'SELECT number, token FROM tables WHERE restaurant_id = $1 ORDER BY number',
     [restaurantId]
   );
-  const tableCount = tables.length || 8;
-  const numbers    = tables.length ? tables.map(t => t.number) : Array.from({ length: tableCount }, (_, i) => i + 1);
+
+  if (!tables.length) {
+    return res.status(404).send('<p>No tables found. Run setup-db.js first.</p>');
+  }
+
+  // Warn if any table is missing a token (shouldn't happen after setup-db.js)
+  const missing = tables.filter(t => !t.token);
+  if (missing.length) {
+    return res.status(500).send(`<p>Tables ${missing.map(t=>t.number).join(', ')} are missing tokens. Re-run setup-db.js.</p>`);
+  }
 
   const qrs = await Promise.all(
-    numbers.map(async n => ({
-      n,
-      svg: await QRCode.toString(`${APP_URL}/?t=${n}&r=${restaurantId}`, { type: 'svg', width: 200 }),
+    tables.map(async t => ({
+      n:     t.number,
+      token: t.token,
+      url:   `${APP_URL}/?t=${t.token}`,
+      svg:   await QRCode.toString(`${APP_URL}/?t=${t.token}`, { type: 'svg', width: 200 }),
     }))
   );
 
@@ -372,22 +412,23 @@ app.get('/qrcodes', async (req, res) => {
   * { box-sizing: border-box; }
   body { font-family: sans-serif; background: #fafafa; padding: 2rem; }
   h1 { margin-bottom: 1.5rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, 200px); gap: 2rem; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, 220px); gap: 2rem; }
   .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem;
           display: flex; flex-direction: column; align-items: center; gap: .5rem; }
   .card h2 { margin: 0; font-size: 1rem; color: #374151; }
   .card svg { width: 160px; height: 160px; }
+  .card small { font-size: 10px; color: #6b7280; word-break: break-all; text-align: center; }
   @media print { body { padding: 0; } h1 { display: none; } }
 </style>
 </head>
 <body>
-<h1>QR Coduri Masă</h1>
+<h1>QR Coduri Masă — nota.</h1>
 <div class="grid">
-${qrs.map(({ n, svg }) => `
+${qrs.map(({ n, url, svg }) => `
   <div class="card">
     <h2>Masa ${n}</h2>
     ${svg}
-    <small>${APP_URL}/?t=${n}&r=${restaurantId}</small>
+    <small>${url}</small>
   </div>`).join('')}
 </div>
 </body>
@@ -413,11 +454,24 @@ const pendingTips     = new Map(); // paymentId → tipLei
 io.on('connection', socket => {
   let currentTable = null;
 
-  socket.on('join-table', async ({ tableNumber, restaurantId }) => {
-    currentTable = tableNumber;
-    socket.join(`table-${tableNumber}`);
+  socket.on('join-table', async ({ token, tableNumber, restaurantId } = {}) => {
     try {
-      const order = await getOpenOrder(tableNumber);
+      let resolvedNumber = tableNumber;
+
+      if (token) {
+        // Resolve unguessable token → actual table number
+        const { rows: [tbl] } = await pool.query(
+          'SELECT number FROM tables WHERE token = $1', [token]
+        );
+        if (!tbl) return socket.emit('error', { message: 'Masă invalidă' });
+        resolvedNumber = tbl.number;
+      }
+
+      if (!resolvedNumber) return socket.emit('error', { message: 'Masă invalidă' });
+
+      currentTable = resolvedNumber;
+      socket.join(`table-${resolvedNumber}`);
+      const order = await getOpenOrder(resolvedNumber);
       socket.emit('order-update', order);
     } catch (err) {
       socket.emit('error', { message: err.message });
@@ -496,6 +550,42 @@ io.on('connection', socket => {
     }
   });
 
+  // Pay a flat amount without item-level claiming (equal-split and pay-rest modes)
+  socket.on('pay-flat', async ({ amountLei, tipLei = 0, mode, tableNumber, orderId }, ack) => {
+    try {
+      const tbl = tableNumber || currentTable;
+      const order = await getOpenOrder(tbl);
+      if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
+
+      // For 'rest' mode recompute to be authoritative
+      let chargeAmount = Number(amountLei);
+      if (mode === 'rest') {
+        chargeAmount = order.items
+          .filter(it => it.status !== 'paid')
+          .reduce((s, it) => s + Number(it.price), 0);
+      }
+      if (chargeAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
+
+      const payment = await requestPayment({
+        amountLei: chargeAmount, tipLei, orderId: order.id, tableNumber: tbl,
+      });
+
+      ack?.({ success: true, chargeAmount, ...payment });
+
+      if (payment._mock) {
+        setTimeout(() => completeFlatPay(tbl, order.id, chargeAmount, tipLei), 2000);
+      } else {
+        // Store for webhook completion
+        pendingPayments.set(payment.paymentId, socket.id);
+        pendingTables.set(payment.paymentId, tbl);
+        pendingTips.set(payment.paymentId, tipLei);
+      }
+    } catch (err) {
+      console.error('[pay-flat]', err);
+      ack?.({ error: err.message });
+    }
+  });
+
   // Release claims on disconnect
   socket.on('disconnect', async () => {
     try {
@@ -538,6 +628,45 @@ async function completePay(socketId, tipLei, tableNumber, miaPaymentId = null) {
   });
 }
 
+// ─── completeFlatPay — marks ALL remaining items paid, records flat payment ───
+
+async function completeFlatPay(tableNumber, orderId, amountLei, tipLei) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Atomically mark every unclaimed/claimed remaining item as paid
+    await client.query(
+      `UPDATE order_items SET status = 'paid', claimed_by = NULL
+       WHERE order_id = $1 AND status IN ('available', 'claimed')`,
+      [orderId]
+    );
+
+    // Record the flat payment (amountLei = what was actually charged, not item total)
+    const { rows: [pmt] } = await client.query(
+      `INSERT INTO payments (order_id, amount_lei, tip_lei, paid_at)
+       VALUES ($1, $2, $3, NOW()) RETURNING *`,
+      [orderId, amountLei, tipLei]
+    );
+
+    await client.query('COMMIT');
+
+    const order = await getOpenOrder(tableNumber);
+    io.to(`table-${tableNumber}`).emit('order-update', order);
+    io.to('dashboard').emit('payment-made', {
+      table_number: tableNumber,
+      amount_lei:   amountLei,
+      tip_lei:      tipLei,
+      paid_at:      pmt.paid_at,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[completeFlatPay]', err);
+  } finally {
+    client.release();
+  }
+}
+
 // ─── poll payment status (fallback if webhook is slow) ───────────────────────
 
 async function pollPaymentStatus(paymentId, socketId, tipLei, tableNumber, attempts = 0) {
@@ -562,13 +691,22 @@ async function pollPaymentStatus(paymentId, socketId, tipLei, tableNumber, attem
 
 // ─── start ────────────────────────────────────────────────────────────────────
 
-httpServer.listen(PORT, () => {
+httpServer.listen(PORT, async () => {
   console.log(`\n🍽  nota. server running on port ${PORT}`);
   console.log(`   App URL:  ${APP_URL}`);
   console.log(`   iiko:     ${process.env.IIKO_API_LOGIN ? '✅ LIVE' : '⚠️  mock'}`);
   console.log(`   MIA:      ${process.env.MIA_MERCHANT_ID ? '✅ LIVE' : '⚠️  mock'}`);
   console.log(`   DB:       ${process.env.DATABASE_URL ? '✅ connected' : '❌ DATABASE_URL missing'}`);
-  console.log(`\n   Guest:     ${APP_URL}/?t=1`);
+
+  try {
+    const { rows: [t1] } = await pool.query(
+      "SELECT token FROM tables WHERE number = 1 ORDER BY restaurant_id LIMIT 1"
+    );
+    const guestUrl = t1?.token ? `${APP_URL}/?t=${t1.token}` : `${APP_URL}/?t=<run-setup-db>`;
+    console.log(`\n   Guest:     ${guestUrl}`);
+  } catch {
+    console.log(`\n   Guest:     ${APP_URL}/?t=<token>`);
+  }
   console.log(`   Dashboard: ${APP_URL}/dashboard`);
   console.log(`   QR codes:  ${APP_URL}/qrcodes\n`);
 });
