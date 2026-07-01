@@ -272,7 +272,7 @@ app.post('/api/dev/seed-table', async (req, res) => {
     if (!tbl) return res.status(404).json({ error: `Table ${tableNumber} not found` });
 
     let { rows: [order] } = await pool.query(
-      `SELECT id FROM orders WHERE table_id = $1 AND status = 'open' LIMIT 1`,
+      `SELECT id FROM orders WHERE table_id = $1 AND status = 'open' ORDER BY created_at DESC LIMIT 1`,
       [tbl.id]
     );
     if (!order) {
