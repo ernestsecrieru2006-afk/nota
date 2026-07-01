@@ -485,6 +485,24 @@
     render();
   });
 
+  // Diff event: server-sent patches for claim/release — avoids full list rebuild
+  socket.on('items-patch', patches => {
+    if (!order) return;
+    for (const p of patches) {
+      const item = order.items.find(i => i.id === p.id);
+      if (item) { item.status = p.status; item.claimed_by = p.claimed_by; }
+    }
+    if (splitMode === 'mine') {
+      for (const p of patches) {
+        if (mySelected.has(p.id) &&
+            (p.status === 'paid' || (p.status === 'claimed' && p.claimed_by !== socket.id))) {
+          mySelected.delete(p.id);
+        }
+      }
+    }
+    patchRender(patches.map(p => p.id));
+  });
+
   // ── payment-confirmed: ONLY signal that advances to success screen ────────────
   // The client NEVER decides payment success on its own.
   socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [] }) => {
@@ -596,11 +614,12 @@
     if (it.status === 'claimed' && it.claimed_by !== socket.id) return;
 
     if (mySelected.has(id)) {
+      // Deselect: release all, re-claim remaining (server-authoritative)
       mySelected.delete(id);
       const remain = [...mySelected];
       socket.emit('release-claims');
       if (remain.length > 0) {
-        socket.emit('claim-items', remain, ({ claimed = [] }) => {
+        socket.emit('claim-items', remain, ({ claimed = [] } = {}) => {
           mySelected = new Set(claimed);
           render();
         });
@@ -608,10 +627,15 @@
         render();
       }
     } else {
+      // Select: optimistic — reflect tap immediately, roll back if server rejects
       mySelected.add(id);
-      socket.emit('claim-items', [id], ({ claimed = [] }) => {
-        if (!claimed.includes(id)) mySelected.delete(id);
-        render();
+      patchRender([id]);
+      socket.emit('claim-items', [id], ({ claimed = [], error } = {}) => {
+        if (error || !claimed.includes(id)) {
+          mySelected.delete(id);
+          patchRender([id]); // rollback: show as not selected / reserved by other
+        }
+        // Confirmed → items-patch from server already updated order state
       });
     }
   }
@@ -657,13 +681,58 @@
                   : isPaid  ? '<div class="item-meta" style="color:var(--green)">achitat</div>' : '';
       const click = (!isPaid && !isOther && !isReadonly) ? `onclick="toggleItem(${it.id})"` : '';
 
-      return `<div class="${cls}" ${click}>
+      return `<div class="${cls}" data-item-id="${it.id}" ${click}>
         <div class="item-info"><div class="${nCls}">${esc(it.name)}</div>${meta}</div>
         <div class="${pCls}">${fmt0(it.price)} MDL</div>
         <div class="i-cb">${chk}</div>
       </div>`;
     }).join('');
 
+    updateProgress();
+  }
+
+  // ── Incremental patch: update only changed item cards ─────────────────────────
+  function patchRender(changedIds) {
+    const list = document.getElementById('items-list');
+    if (!order || !list || !list.children.length) { render(); return; }
+
+    const items = order.items || [];
+    const isReadonly = splitMode !== 'mine';
+
+    for (const id of changedIds) {
+      const it = order.items.find(i => i.id === id);
+      const el = list.querySelector(`[data-item-id="${id}"]`);
+      if (!it || !el) continue;
+
+      const isMine  = !isReadonly && mySelected.has(it.id) && it.status === 'claimed' && it.claimed_by === socket.id;
+      const isOther = it.status === 'claimed' && it.claimed_by !== socket.id;
+      const isPaid  = it.status === 'paid';
+
+      el.className = 'item-card' +
+        (isPaid ? ' paid' : isMine ? ' sel' : isOther ? ' rsv' : isReadonly ? ' readonly' : '');
+
+      if (!isPaid && !isOther && !isReadonly) {
+        el.setAttribute('onclick', `toggleItem(${it.id})`);
+      } else {
+        el.removeAttribute('onclick');
+      }
+
+      const nCls = isPaid ? 'item-name g' : 'item-name';
+      const pCls = isPaid ? 'item-price g' : 'item-price';
+      const chk  = (isMine || isPaid) ? '&#10003;' : '';
+      const meta = isOther ? '<div class="item-meta">rezervat de altcineva</div>'
+                 : isPaid  ? '<div class="item-meta" style="color:var(--green)">achitat</div>' : '';
+
+      const infoEl  = el.querySelector('.item-info');
+      const priceEl = el.querySelector('.item-price');
+      const cbEl    = el.querySelector('.i-cb');
+      if (infoEl)  infoEl.innerHTML = `<div class="${nCls}">${esc(it.name)}</div>${meta}`;
+      if (priceEl) priceEl.className = pCls;
+      if (cbEl)    cbEl.innerHTML = chk;
+    }
+
+    const allPaid = items.every(i => i.status === 'paid');
+    document.getElementById('settled').style.display = allPaid ? 'block' : 'none';
     updateProgress();
   }
 

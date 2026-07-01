@@ -16,34 +16,41 @@
  */
 
 import 'dotenv/config';
-import express       from 'express';
+import express          from 'express';
 import { createServer } from 'http';
-import { Server }    from 'socket.io';
+import { Server }       from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import pg            from 'pg';
-import QRCode        from 'qrcode';
+import compression      from 'compression';
+import QRCode           from 'qrcode';
 
+import { pool } from './db.js';
 import { getOpenOrder, addItem, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, verifyWebhookSignature, parseWebhookPayload, setMockFailNext } from './mia.js';
 import { register, login, me, requireAuth } from './auth.js';
 
-const { Pool } = pg;
-const pool     = new Pool({ connectionString: process.env.DATABASE_URL });
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app       = express();
 const httpServer= createServer(app);
-const io        = new Server(httpServer, { cors: { origin: '*' } });
+const io        = new Server(httpServer, { cors: { origin: '*' }, perMessageDeflate: true });
 const PORT      = process.env.PORT || 3000;
 const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
 // ─── middleware ───────────────────────────────────────────────────────────────
 
+app.use(compression());
 app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
 app.use(express.json());
-app.use(express.static(join(__dirname, '../public'), { extensions: ['html'] }));
+app.use(express.static(join(__dirname, '../public'), {
+  extensions: ['html'],
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('.html')) {
+      // Revalidate HTML on every request so deploys go live immediately
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  },
+}));
 
 // ─── auth routes ─────────────────────────────────────────────────────────────
 
@@ -267,12 +274,17 @@ app.post('/api/dev/seed-table', async (req, res) => {
       ['Tiramisù',             95],
       ['Vino Rosso (pahar)',   75],
     ];
-    for (const [name, price] of DEMO_DISHES) {
-      await pool.query(
-        `INSERT INTO order_items (order_id, name, price, status) VALUES ($1, $2, $3, 'available')`,
-        [order.id, name, price]
-      );
-    }
+    // Single multi-row INSERT instead of 5 sequential round-trips
+    const dParams = [order.id];
+    const dPlaceholders = DEMO_DISHES.map(([name, price]) => {
+      dParams.push(name, price);
+      const n = dParams.length;
+      return `($1, $${n - 1}, $${n}, 'available')`;
+    }).join(', ');
+    await pool.query(
+      `INSERT INTO order_items (order_id, name, price, status) VALUES ${dPlaceholders}`,
+      dParams
+    );
 
     const fresh = await getOpenOrder(tableNumber);
     io.to(`table-${tableNumber}`).emit('order-update', fresh);
@@ -281,39 +293,46 @@ app.post('/api/dev/seed-table', async (req, res) => {
 });
 
 app.post('/api/dev/seed-payments', async (req, res) => {
+  const rId = req.body.restaurantId || 1;
+  const DISHES = [
+    ['Spaghetti Carbonara', 185], ['Risotto ai Funghi', 210], ['Branzino al Forno', 290],
+    ['Tiramisù', 95], ['Vino Rosso (pahar)', 75], ['Acqua Minerale', 35],
+    ['Pizza Margherita', 165], ['Bruschetta', 85], ['Panna Cotta', 90],
+  ];
+  const client = await pool.connect();
   try {
-    const rId = req.body.restaurantId || 1;
-    const DISHES = [
-      ['Spaghetti Carbonara', 185], ['Risotto ai Funghi', 210], ['Branzino al Forno', 290],
-      ['Tiramisù', 95], ['Vino Rosso (pahar)', 75], ['Acqua Minerale', 35],
-      ['Pizza Margherita', 165], ['Bruschetta', 85], ['Panna Cotta', 90],
-    ];
+    await client.query('BEGIN');
     for (let i = 0; i < 20; i++) {
       const tableNum = (i % 8) + 1;
-      const { rows: [t] } = await pool.query(
+      const { rows: [t] } = await client.query(
         'SELECT id FROM tables WHERE restaurant_id = $1 AND number = $2', [rId, tableNum]
       );
       if (!t) continue;
-      const { rows: [o] } = await pool.query(
+      const { rows: [o] } = await client.query(
         `INSERT INTO orders (table_id, table_number, restaurant_id, status)
          VALUES ($1, $2, $3, 'open') RETURNING id`,
         [t.id, tableNum, rId]
       );
       const dish = DISHES[i % DISHES.length];
-      await pool.query(
-        `INSERT INTO order_items (order_id, name, price, status)
-         VALUES ($1, $2, $3, 'paid')`,
+      await client.query(
+        `INSERT INTO order_items (order_id, name, price, status) VALUES ($1, $2, $3, 'paid')`,
         [o.id, dish[0], dish[1]]
       );
       const hoursAgo = Math.floor(Math.random() * 8);
-      await pool.query(
+      await client.query(
         `INSERT INTO payments (order_id, restaurant_id, amount_lei, tip_lei, status, paid_at)
          VALUES ($1, $2, $3, $4, 'paid', NOW() - INTERVAL '${hoursAgo} hours')`,
         [o.id, rId, dish[1], Math.round(dish[1] * 0.1)]
       );
     }
+    await client.query('COMMIT');
     res.json({ ok: true, seeded: 20 });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
 });
 
 // Trigger mock payment failure for the NEXT payment initiated
@@ -414,9 +433,12 @@ io.on('connection', socket => {
       `, [socket.id, itemIds]);
 
       const contestedIds = itemIds.filter(id => !claimed.find(r => r.id === id));
-      const order = await getOpenOrder(currentTable);
-      io.to(`table-${currentTable}`).emit('order-update', order);
-      ack?.({ claimed: claimed.map(r => r.id), contested: contestedIds, order });
+      if (claimed.length > 0) {
+        io.to(`table-${currentTable}`).emit('items-patch',
+          claimed.map(r => ({ id: r.id, status: 'claimed', claimed_by: socket.id }))
+        );
+      }
+      ack?.({ claimed: claimed.map(r => r.id), contested: contestedIds });
     } catch (err) {
       ack?.({ error: err.message });
     }
@@ -426,13 +448,15 @@ io.on('connection', socket => {
     try {
       // Never release while payment is in-flight — that's the server's job
       if (socketInflight.has(socket.id)) return;
-      await pool.query(`
+      const { rows: released } = await pool.query(`
         UPDATE order_items SET status = 'available', claimed_by = NULL
         WHERE claimed_by = $1 AND status = 'claimed'
+        RETURNING id
       `, [socket.id]);
-      if (currentTable) {
-        const order = await getOpenOrder(currentTable);
-        io.to(`table-${currentTable}`).emit('order-update', order);
+      if (currentTable && released.length > 0) {
+        io.to(`table-${currentTable}`).emit('items-patch',
+          released.map(r => ({ id: r.id, status: 'available', claimed_by: null }))
+        );
       }
     } catch (err) {
       console.error('[release-claims]', err);
@@ -535,13 +559,15 @@ io.on('connection', socket => {
         console.log(`[disconnect] socket ${socket.id} has in-flight payment — keeping items claimed`);
         return;
       }
-      await pool.query(`
+      const { rows: released } = await pool.query(`
         UPDATE order_items SET status = 'available', claimed_by = NULL
         WHERE claimed_by = $1 AND status = 'claimed'
+        RETURNING id
       `, [socket.id]);
-      if (currentTable) {
-        const order = await getOpenOrder(currentTable);
-        io.to(`table-${currentTable}`).emit('order-update', order);
+      if (currentTable && released.length > 0) {
+        io.to(`table-${currentTable}`).emit('items-patch',
+          released.map(r => ({ id: r.id, status: 'available', claimed_by: null }))
+        );
       }
     } catch (err) {
       console.error('[disconnect cleanup]', err);

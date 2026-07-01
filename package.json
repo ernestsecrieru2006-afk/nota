@@ -8,6 +8,7 @@
     "dev": "node server/setup-db.js && node --watch server/server.js"
   },
   "dependencies": {
+    "compression": "^1.8.1",
     "dotenv": "^17.4.2",
     "express": "^4.19.2",
     "pg": "^8.12.0",

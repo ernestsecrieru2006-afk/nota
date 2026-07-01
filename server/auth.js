@@ -13,11 +13,9 @@
  *   GET  /api/auth/me         (requires Authorization: Bearer <token>)
  */
 
-import crypto   from 'crypto';
-import pg       from 'pg';
-const { Pool } = pg;
+import crypto from 'crypto';
+import { pool } from './db.js';
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 const JWT_SECRET = process.env.JWT_SECRET || 'nota-dev-secret-change-in-production';
 
 // ─── simple JWT (no external library needed) ──────────────────────────────────
@@ -119,13 +117,13 @@ export async function register(req, res) {
       [name, email.toLowerCase(), passwordHash, tableCount]
     );
 
-    // Create tables
-    for (let i = 1; i <= tableCount; i++) {
-      await client.query(
-        'INSERT INTO tables (restaurant_id, number) VALUES ($1, $2)',
-        [restaurant.id, i]
-      );
-    }
+    // Create tables — single multi-row INSERT
+    const tParams = [restaurant.id];
+    const tPlaceholders = Array.from({ length: tableCount }, (_, i) => {
+      tParams.push(i + 1);
+      return `($1, $${tParams.length})`;
+    }).join(', ');
+    await client.query(`INSERT INTO tables (restaurant_id, number) VALUES ${tPlaceholders}`, tParams);
 
     await client.query('COMMIT');
 

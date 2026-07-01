@@ -9,10 +9,7 @@
  * Without those vars the module falls back to the local Postgres mock automatically.
  */
 
-import pg from 'pg';
-const { Pool } = pg;
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+import { pool } from './db.js';
 
 // ─── iiko token cache (tokens live ~60 min) ───────────────────────────────────
 let _token = null;
