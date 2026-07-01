@@ -3,521 +3,665 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>nota. — plata la masă</title>
+  <title>nota. — Carmelo Ristorante</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Manrope:wght@400;500;600;700&family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20,400,0,0&display=swap" rel="stylesheet">
   <style>
+    /* ── Reset & tokens ─────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:        #F7F5F0;
-      --surface:   #FFFFFF;
-      --border:    #E8E3D9;
-      --text:      #1A1A18;
-      --muted:     #7A7567;
-      --gold:      #C8922A;
-      --gold-soft: #F5EDD8;
-      --green:     #2D6A4F;
-      --green-bg:  #EAF4EE;
-      --blue:      #2953A6;
-      --blue-dark: #1E3F80;
-      --blue-bg:   #EAF0FB;
-      --radius:    12px;
-      --safe-b:    env(safe-area-inset-bottom, 0px);
+      --primary:       #00333c;
+      --on-primary:    #ffffff;
+      --secondary:     #775a19;
+      --sec-cont:      #fed488;
+      --bg:            #f8f9fa;
+      --surface:       rgba(255,255,255,0.88);
+      --on-surface:    #191c1d;
+      --on-sv:         #40484a;
+      --outline:       #70787b;
+      --brass:         #C5A059;
+      --green:         #2e7d32;
+      --green-l:       #43a047;
+      --green-bg:      #e8f5e9;
+      --green-bd:      #a5d6a7;
+      --radius:        0.75rem;
+      --safe-b:        env(safe-area-inset-bottom, 0px);
+      --safe-t:        env(safe-area-inset-top, 0px);
+      --glass-bd:      rgba(197,160,89,0.18);
     }
 
     html, body {
       height: 100%;
-      font-family: -apple-system, 'Segoe UI', Roboto, sans-serif;
-      background: var(--bg);
-      color: var(--text);
+      font-family: 'Manrope', system-ui, sans-serif;
+      background-color: var(--bg);
+      /* two soft radial gradients — no images, no lag */
+      background-image:
+        radial-gradient(ellipse at 18% 18%, rgba(0,51,60,0.07) 0%, transparent 52%),
+        radial-gradient(ellipse at 82% 82%, rgba(197,160,89,0.09) 0%, transparent 52%);
+      color: var(--on-surface);
       -webkit-font-smoothing: antialiased;
-      overscroll-behavior: none;
     }
 
-    /* ── header ──────────────────────────────────────────── */
-    #header {
-      background: var(--text);
-      color: #fff;
-      padding: 14px 20px;
-      padding-top: calc(14px + env(safe-area-inset-top, 0px));
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      flex-shrink: 0;
+    .msym {
+      font-family: 'Material Symbols Outlined';
+      font-style: normal; font-size: inherit; line-height: 1;
+      letter-spacing: normal; text-transform: none;
+      white-space: nowrap; direction: ltr;
+      font-feature-settings: 'liga'; -webkit-font-feature-settings: 'liga';
+      display: inline-block; vertical-align: middle;
     }
-    .brand { font-size: 22px; font-weight: 700; color: var(--gold); letter-spacing: -0.5px; }
-    .hdr-right { display: flex; align-items: center; gap: 8px; }
-    .table-lbl { font-size: 13px; color: rgba(255,255,255,0.65); font-weight: 500; }
-    #live-dot {
-      width: 8px; height: 8px; border-radius: 50%;
-      background: #555; transition: background 0.3s;
+
+    /* ── Header ─────────────────────────────────────────── */
+    #hdr {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(248,249,250,0.92);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid rgba(197,160,89,0.22);
+      padding: calc(10px + var(--safe-t)) 16px 10px;
     }
-    #live-dot.on { background: #4ade80; }
-
-    /* ── screens ─────────────────────────────────────────── */
-    #app { display: flex; flex-direction: column; min-height: 100dvh; }
-    .screen { display: none; flex-direction: column; flex: 1; overflow: hidden; }
-    .screen.active { display: flex; }
-
-    /* ── skeleton ────────────────────────────────────────── */
-    #loading { padding: 20px 16px; }
-    .sk {
-      height: 58px; border-radius: 10px; margin-bottom: 8px;
-      background: linear-gradient(90deg,var(--border) 25%,#e4dfd8 50%,var(--border) 75%);
-      background-size: 200% 100%;
-      animation: shimmer 1.4s infinite;
+    .hdr-inner {
+      max-width: 520px; margin: 0 auto;
+      display: flex; align-items: center; gap: 10px;
     }
-    .sk:nth-child(2) { height: 50px; opacity: .7; }
-    .sk:nth-child(3) { height: 50px; opacity: .5; }
-    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+    .hdr-icon { font-size: 26px; color: var(--brass); }
+    .hdr-brand {
+      font-family: 'Playfair Display', serif;
+      font-size: 12.5px; font-weight: 600;
+      color: var(--secondary);
+      letter-spacing: 0.14em; text-transform: uppercase;
+      line-height: 1.1;
+    }
+    .hdr-live { display: flex; align-items: center; gap: 5px; margin-top: 3px; }
+    .live-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      background: var(--brass);
+      animation: pulse-dot 2.2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.25} }
+    .live-txt { font-size: 11px; font-weight: 500; color: var(--secondary); }
 
-    /* ── BILL SCREEN ─────────────────────────────────────── */
+    /* ── Screens ─────────────────────────────────────────── */
+    /* Content column — natural height, centered, not stretched */
+    .screen { display: none; }
+    .screen.active { display: block; }
+    .col {
+      max-width: 520px; margin: 0 auto;
+      padding: 20px 16px calc(110px + var(--safe-b));
+    }
 
-    .split-tabs {
-      display: flex; gap: 6px;
-      padding: 12px 14px 10px;
+    /* Fixed action bar — per screen, hidden with screen */
+    .act-bar {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      padding: 10px 16px calc(16px + var(--safe-b));
+      background: linear-gradient(to top, var(--bg) 52%, rgba(248,249,250,0));
+      z-index: 50;
+    }
+    .act-inner { max-width: 520px; margin: 0 auto; }
+
+    /* ── Primitives ──────────────────────────────────────── */
+    .card {
       background: var(--surface);
-      border-bottom: 1px solid var(--border);
-      flex-shrink: 0;
-    }
-    .s-tab {
-      flex: 1; padding: 8px 4px;
-      border: 1.5px solid var(--border);
-      border-radius: 10px;
-      background: var(--bg);
-      cursor: pointer;
-      text-align: center;
-      font-size: 11.5px;
-      font-weight: 500;
-      color: var(--muted);
-      line-height: 1.35;
-      transition: all 0.15s;
-    }
-    .s-tab.active {
-      border-color: var(--gold);
-      background: var(--gold-soft);
-      color: var(--gold);
-      font-weight: 700;
-    }
-    .eq-row {
-      display: none; align-items: center; justify-content: center;
-      gap: 8px; margin-top: 5px;
-    }
-    .eq-row.vis { display: flex; }
-    .g-btn {
-      width: 22px; height: 22px; border-radius: 50%;
-      border: 1.5px solid var(--gold);
-      background: none; color: var(--gold);
-      font-size: 16px; font-weight: 700;
-      cursor: pointer; display: flex; align-items: center; justify-content: center;
-    }
-    .g-cnt { font-size: 15px; font-weight: 700; color: var(--text); min-width: 18px; text-align: center; }
-
-    #items-scroll { flex: 1; overflow-y: auto; padding: 12px 14px 4px; }
-
-    .row {
-      display: flex; align-items: center; gap: 11px;
-      padding: 12px 13px;
-      margin-bottom: 8px;
-      background: var(--surface);
-      border: 1.5px solid var(--border);
+      border: 1px solid var(--glass-bd);
       border-radius: var(--radius);
-      cursor: pointer;
+    }
+    .btn-primary {
+      width: 100%; padding: 14px 20px;
+      background: var(--primary); color: var(--on-primary);
+      border: none; border-radius: var(--radius);
+      font-family: 'Manrope', sans-serif;
+      font-size: 15px; font-weight: 700; letter-spacing: 0.02em;
+      cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 5px;
+      transition: background 0.18s, box-shadow 0.18s;
+    }
+    .btn-primary:hover:not(:disabled) { background: #004d59; box-shadow: 0 0 0 3px rgba(197,160,89,0.3); }
+    .btn-primary:active:not(:disabled) { background: #002028; }
+    .btn-primary:disabled { opacity: 0.38; cursor: not-allowed; }
+
+    .btn-ghost {
+      width: 100%; padding: 10px;
+      background: none; border: none;
+      font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 500;
+      color: var(--on-sv); cursor: pointer; text-decoration: underline; text-underline-offset: 3px;
+    }
+
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: none; border: none; padding: 6px 0; margin-bottom: 14px;
+      font-family: 'Manrope', sans-serif; font-size: 14px; font-weight: 500;
+      color: var(--on-sv); cursor: pointer;
+    }
+
+    .sec-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 24px; font-weight: 700; color: var(--primary); margin-bottom: 3px;
+    }
+    .sec-sub { font-size: 13px; color: var(--on-sv); margin-bottom: 20px; }
+
+    /* ══════════════════════════════════════════════════════
+       SCREEN 1 — BILL REVIEW
+    ══════════════════════════════════════════════════════ */
+
+    /* Progress */
+    .prog-section { margin-bottom: 20px; }
+    .prog-lbl {
+      font-size: 11px; font-weight: 700; color: var(--secondary);
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px;
+    }
+    .prog-text { font-size: 13px; color: var(--on-sv); margin-bottom: 7px; }
+    .prog-track { height: 6px; background: rgba(197,160,89,0.18); border-radius: 3px; overflow: hidden; }
+    .prog-fill {
+      height: 100%; width: 0%;
+      background: linear-gradient(to right, var(--secondary), var(--brass));
+      border-radius: 3px;
+      box-shadow: 0 0 8px rgba(197,160,89,0.45);
+      transition: width 0.5s ease;
+    }
+
+    /* Settled banner */
+    .settled-banner {
+      display: none;
+      background: var(--green-bg); border: 1px solid var(--green-bd);
+      border-radius: var(--radius); padding: 13px 15px;
+      color: var(--green); font-size: 14px; font-weight: 600;
+      margin-bottom: 16px; text-align: center;
+    }
+
+    /* Mode pill tabs */
+    .mode-pill {
+      display: flex; gap: 3px; padding: 3px;
+      background: rgba(255,255,255,0.75);
+      border: 1px solid rgba(197,160,89,0.2);
+      border-radius: 999px; margin-bottom: 14px;
+    }
+    .m-tab {
+      flex: 1; padding: 8px 5px;
+      border: none; border-radius: 999px; background: none;
+      font-family: 'Manrope', sans-serif; font-size: 11.5px; font-weight: 600;
+      color: var(--on-sv); cursor: pointer; transition: all 0.18s;
+      white-space: nowrap; text-align: center;
+    }
+    .m-tab.active { background: var(--primary); color: var(--on-primary); }
+
+    /* Guest counter */
+    .guest-box {
+      display: none; align-items: center; justify-content: space-between;
+      background: var(--surface); border: 1px solid rgba(197,160,89,0.2);
+      border-radius: var(--radius); padding: 12px 15px; margin-bottom: 14px;
+    }
+    .guest-box.show { display: flex; }
+    .guest-lbl { font-size: 14px; font-weight: 500; }
+    .g-ctrl { display: flex; align-items: center; gap: 14px; }
+    .g-btn {
+      width: 30px; height: 30px; border-radius: 50%;
+      border: 1.5px solid var(--secondary); background: none; color: var(--secondary);
+      font-size: 18px; font-weight: 700; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; line-height: 1;
+    }
+    .g-num { font-size: 17px; font-weight: 700; color: var(--primary); min-width: 20px; text-align: center; }
+
+    /* Items */
+    .items-hdr {
+      font-family: 'Playfair Display', serif;
+      font-size: 15px; font-weight: 600; color: var(--primary); margin-bottom: 10px;
+    }
+    .item-card {
+      display: flex; align-items: center; gap: 12px;
+      background: rgba(255,255,255,0.86);
+      border: 1.5px solid rgba(197,160,89,0.15);
+      border-radius: var(--radius); padding: 13px 14px;
+      margin-bottom: 8px; cursor: pointer;
       transition: border-color 0.15s, background 0.15s;
-      user-select: none;
+      -webkit-tap-highlight-color: transparent; user-select: none;
+    }
+    .item-card.sel   { border-color: var(--brass); background: rgba(197,160,89,0.08); }
+    .item-card.rsv   { opacity: 0.45; cursor: default; }
+    .item-card.paid  { border-color: var(--green-bd); background: var(--green-bg); opacity: 0.75; cursor: default; }
+
+    .item-info { flex: 1; min-width: 0; }
+    .item-name {
+      font-family: 'Playfair Display', serif;
+      font-size: 14px; font-weight: 600; color: var(--secondary);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .item-name.g  { color: var(--green); }
+    .item-meta    { font-size: 11.5px; color: var(--on-sv); margin-top: 2px; }
+    .item-price   { font-size: 15px; font-weight: 700; color: var(--primary); white-space: nowrap; margin-right: 10px; }
+    .item-price.g { color: var(--green); }
+
+    .i-cb {
+      width: 22px; height: 22px; border-radius: 6px;
+      border: 2px solid rgba(197,160,89,0.35);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; font-size: 14px; color: #fff; transition: all 0.15s;
+    }
+    .item-card.sel  .i-cb { background: var(--brass);  border-color: var(--brass);  }
+    .item-card.paid .i-cb { background: var(--green);  border-color: var(--green);  }
+
+    /* Skeleton */
+    #bill-skel { padding: 2px 0; }
+    .sk {
+      height: 64px; border-radius: var(--radius); margin-bottom: 8px;
+      background: linear-gradient(90deg,rgba(197,160,89,.09) 25%,rgba(197,160,89,.17) 50%,rgba(197,160,89,.09) 75%);
+      background-size: 200% 100%; animation: shimmer 1.4s infinite;
+    }
+    .sk:nth-child(2){height:56px;opacity:.7}.sk:nth-child(3){height:56px;opacity:.5}
+    @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+    /* Bill action bar */
+    .bill-tot-row { display: flex; justify-content: space-between; align-items: baseline; padding: 0 3px; margin-bottom: 4px; }
+    .bill-tot-lbl { font-family: 'Playfair Display', serif; font-size: 14px; font-weight: 600; color: var(--primary); }
+    .bill-tot-amt { font-size: 20px; font-weight: 700; color: var(--primary); }
+    .bill-note { font-size: 11px; color: var(--on-sv); text-align: center; margin-bottom: 8px; }
+
+    /* ══════════════════════════════════════════════════════
+       SCREEN 2 — TIP
+    ══════════════════════════════════════════════════════ */
+
+    /* Summary card */
+    .sum-card { border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; border: 1px solid var(--glass-bd); }
+    .sum-row { display: flex; justify-content: space-between; align-items: center; padding: 11px 15px; font-size: 14px; background: var(--surface); }
+    .sum-row + .sum-row { border-top: 1px solid rgba(197,160,89,0.1); }
+    .sum-row .lbl { color: var(--on-sv); }
+    .sum-row .val { font-weight: 600; }
+    .sum-total {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 13px 15px; border-top: 1px solid rgba(197,160,89,0.18);
+      background: rgba(254,212,136,0.12);
+    }
+    .sum-total .lbl { font-size: 15px; font-weight: 700; color: var(--primary); }
+    .sum-total .val { font-size: 17px; font-weight: 700; color: var(--primary); }
+
+    /* Tip grid */
+    .tip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+    .t-card {
+      background: rgba(255,255,255,0.86); border: 2px solid rgba(197,160,89,0.15);
+      border-radius: var(--radius); padding: 14px 10px; text-align: center;
+      cursor: pointer; transition: all 0.15s;
+    }
+    .t-card.active {
+      border-color: var(--brass); background: rgba(254,212,136,0.14);
+      box-shadow: 0 0 0 1px var(--brass);
+    }
+    .t-pct {
+      font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--primary);
+    }
+    .t-lbl { font-size: 11px; font-weight: 600; color: var(--on-sv); text-transform: uppercase; letter-spacing: 0.07em; margin-top: 2px; }
+    .t-card.active .t-pct { color: var(--secondary); }
+    .t-card.active .t-lbl { color: var(--secondary); }
+
+    /* Green security box */
+    .sec-box {
+      display: flex; align-items: flex-start; gap: 10px;
+      background: var(--green-bg); border: 1px solid var(--green-bd);
+      border-radius: var(--radius); padding: 12px 14px; margin-bottom: 16px;
+    }
+    .sec-box .ico { color: var(--green); font-size: 20px; flex-shrink: 0; margin-top: 1px; }
+    .sec-ttl { font-size: 13px; font-weight: 700; color: var(--green); margin-bottom: 2px; }
+    .sec-txt { font-size: 12px; color: var(--green-l); line-height: 1.4; }
+
+    /* ══════════════════════════════════════════════════════
+       SCREEN 3 — PAYMENT METHOD
+    ══════════════════════════════════════════════════════ */
+
+    .total-hero {
+      background: var(--primary); border-radius: var(--radius);
+      padding: 22px 20px; text-align: center; margin-bottom: 20px;
+    }
+    .th-lbl { font-size: 11px; color: rgba(255,255,255,0.65); text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 6px; }
+    .th-amt { font-family: 'Playfair Display', serif; font-size: 38px; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .th-note { font-size: 12px; color: rgba(255,255,255,0.6); }
+
+    .pay-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    .p-card {
+      display: flex; align-items: center; gap: 13px;
+      background: rgba(255,255,255,0.86); border: 2px solid rgba(197,160,89,0.15);
+      border-radius: var(--radius); padding: 14px; cursor: pointer; transition: all 0.15s;
       -webkit-tap-highlight-color: transparent;
     }
-    .row.sel  { border-color: var(--gold); background: var(--gold-soft); }
-    .row.rsv  { opacity: 0.45; cursor: default; }
-    .row.paid { border-color: var(--green); background: var(--green-bg); opacity: 0.75; cursor: default; }
+    .p-card.sel { border-color: var(--brass); background: rgba(197,160,89,0.06); }
+    .p-card.off { opacity: 0.5; cursor: not-allowed; }
 
-    .chk {
-      width: 22px; height: 22px; border-radius: 50%;
-      border: 2px solid var(--border);
-      flex-shrink: 0;
+    .p-ico {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      font-size: 12px; font-weight: 700; color: #fff;
-      transition: all 0.15s;
+      font-size: 18px; font-weight: 800;
     }
-    .row.sel  .chk { border-color: var(--gold);  background: var(--gold);  }
-    .row.paid .chk { border-color: var(--green); background: var(--green); }
+    .p-ico.mia { background: var(--primary); color: #fff; }
+    .p-ico.ap  { background: #1c1c1e; color: #fff; font-size: 15px; }
 
-    .row-info { flex: 1; min-width: 0; }
-    .row-name { font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .bdg {
-      display: inline-block; font-size: 9.5px; font-weight: 700;
-      padding: 2px 6px; border-radius: 4px; margin-top: 3px;
-      text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .bdg.rsv  { background: #EDEBE8; color: var(--muted); }
-    .bdg.paid { background: var(--green-bg); color: var(--green); }
+    .p-text { flex: 1; }
+    .p-name { font-size: 15px; font-weight: 700; }
+    .p-sub  { font-size: 12px; color: var(--on-sv); margin-top: 2px; }
 
-    .row-price { font-size: 15px; font-weight: 600; white-space: nowrap; }
-    .row.sel  .row-price { color: var(--gold); }
-    .row.paid .row-price { color: var(--green); }
-
-    #empty { display: none; padding: 50px 20px; text-align: center; color: var(--muted); font-size: 15px; }
-    #settled {
-      display: none; margin: 20px 14px;
-      padding: 16px; border-radius: var(--radius);
-      background: var(--green-bg); border: 1px solid var(--green);
-      text-align: center; color: var(--green); font-weight: 600; font-size: 15px;
-    }
-
-    #bill-progress {
-      background: var(--surface);
-      border-top: 1px solid var(--border);
-      padding: 13px 16px 10px;
-      flex-shrink: 0;
-    }
-    .prog-row {
-      display: flex; justify-content: space-between;
-      font-size: 12.5px; color: var(--muted); margin-bottom: 3px;
-    }
-    .prog-row .v { font-weight: 600; color: var(--text); }
-    .prog-bar { height: 4px; background: var(--border); border-radius: 2px; margin: 7px 0; overflow: hidden; }
-    .prog-fill { height: 100%; background: var(--green); border-radius: 2px; transition: width 0.4s ease; width: 0%; }
-    .share-box {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 12px;
-      background: var(--gold-soft); border: 1px solid #e5c06e;
-      border-radius: 9px; margin-top: 8px;
-    }
-    .share-lbl { font-size: 12px; font-weight: 600; color: var(--gold); }
-    .share-val { font-size: 19px; font-weight: 700; color: var(--gold); }
-
-    .btn-main {
-      margin: 10px 14px;
-      margin-bottom: calc(10px + var(--safe-b));
-      padding: 15px; width: calc(100% - 28px);
-      background: var(--text); color: #fff;
-      border: none; border-radius: var(--radius);
-      font-size: 16px; font-weight: 600; cursor: pointer;
-      transition: opacity 0.15s; flex-shrink: 0;
-    }
-    .btn-main:disabled { opacity: 0.3; cursor: not-allowed; }
-    .btn-main:not(:disabled):active { opacity: 0.82; }
-
-    /* ── TIP SCREEN ──────────────────────────────────────── */
-    .back-bar { padding: 10px 14px; flex-shrink: 0; }
-    .back-btn {
-      background: none; border: none; color: var(--muted);
-      font-size: 14px; cursor: pointer; padding: 4px 0; display: flex; align-items: center; gap: 5px;
-    }
-
-    .tip-hero {
-      text-align: center; padding: 18px 20px 0; flex-shrink: 0;
-    }
-    .tip-hero-lbl {
-      font-size: 11px; color: var(--muted); font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.8px;
-    }
-    .tip-hero-amt { font-size: 38px; font-weight: 700; color: var(--text); margin-top: 4px; }
-
-    .tip-chips {
-      display: flex; gap: 8px; padding: 20px 14px 14px; flex-shrink: 0;
-    }
-    .t-chip {
-      flex: 1; padding: 12px 4px;
-      border: 1.5px solid var(--border); border-radius: 10px;
-      background: var(--surface); cursor: pointer;
-      text-align: center; font-size: 14px; font-weight: 600; color: var(--muted);
-      transition: all 0.15s;
-    }
-    .t-chip.active { border-color: var(--gold); background: var(--gold-soft); color: var(--gold); }
-
-    .breakdown {
-      margin: 0 14px; border-radius: var(--radius);
-      background: var(--surface); border: 1px solid var(--border);
-      overflow: hidden; flex-shrink: 0;
-    }
-    .bd-row {
-      display: flex; justify-content: space-between;
-      padding: 12px 15px; font-size: 14px;
-    }
-    .bd-row + .bd-row { border-top: 1px solid var(--border); }
-    .bd-row .lbl { color: var(--muted); }
-    .bd-row .amt { font-weight: 600; }
-    .bd-total {
-      display: flex; justify-content: space-between;
-      padding: 14px 15px; border-top: 2px solid var(--border);
-      font-size: 16px; font-weight: 700;
-    }
-
-    /* ── PAYMENT SCREEN ──────────────────────────────────── */
-    .pay-hero {
-      text-align: center; padding: 44px 20px 30px;
-    }
-    .pay-hero-lbl {
-      font-size: 11px; color: var(--muted); font-weight: 600;
-      text-transform: uppercase; letter-spacing: 0.8px;
-    }
-    .pay-hero-amt { font-size: 44px; font-weight: 700; color: var(--text); margin-top: 6px; }
-
-    .pay-methods { padding: 0 14px; }
-    .btn-mia {
-      width: 100%; padding: 16px;
-      background: var(--blue); color: #fff;
-      border: none; border-radius: var(--radius);
-      font-size: 16px; font-weight: 600; cursor: pointer;
-      display: flex; align-items: center; justify-content: center; gap: 10px;
-      margin-bottom: 10px; transition: background 0.15s;
-    }
-    .btn-mia:active { background: var(--blue-dark); }
-    .mia-icon {
-      width: 26px; height: 26px; border-radius: 6px;
-      background: rgba(255,255,255,0.25);
+    .p-badge {
+      width: 24px; height: 24px; border-radius: 50%;
+      border: 2px solid rgba(197,160,89,0.3);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 14px;
+      flex-shrink: 0; font-size: 14px; color: #fff; transition: all 0.15s;
     }
-    .btn-ap {
-      width: 100%; padding: 14px;
-      background: var(--surface); color: var(--muted);
-      border: 1.5px solid var(--border); border-radius: var(--radius);
-      font-size: 14px; font-weight: 500; cursor: not-allowed; opacity: 0.55;
-      display: flex; align-items: center; justify-content: center; gap: 8px;
-    }
-    .soon {
-      font-size: 9px; font-weight: 700; background: var(--border); color: var(--muted);
-      padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px;
-    }
+    .p-card.sel .p-badge { background: var(--brass); border-color: var(--brass); }
 
-    /* ── MIA OVERLAY ─────────────────────────────────────── */
-    #ov-mia {
-      display: none; position: fixed; inset: 0; z-index: 300;
+    /* ══════════════════════════════════════════════════════
+       OVERLAYS
+    ══════════════════════════════════════════════════════ */
+    .overlay {
+      display: none; position: fixed; inset: 0; z-index: 200;
       background: rgba(0,0,0,0.55); align-items: flex-end;
     }
-    #ov-mia.show { display: flex; }
+    .overlay.show { display: flex; }
+
+    /* MIA sheet */
     .mia-sheet {
-      width: 100%; background: var(--surface);
+      width: 100%; background: var(--bg);
       border-radius: 20px 20px 0 0;
-      padding: 28px 20px calc(36px + var(--safe-b));
+      padding: 0 20px calc(36px + var(--safe-b));
       text-align: center;
     }
-    .mia-logo {
-      width: 58px; height: 58px; border-radius: 16px;
-      background: var(--blue-bg); margin: 0 auto 16px;
+    .sh-handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(0,0,0,0.14); margin: 12px auto 22px; }
+    .mia-ico {
+      width: 60px; height: 60px; border-radius: 16px;
+      background: var(--primary); margin: 0 auto 14px;
       display: flex; align-items: center; justify-content: center;
-      font-size: 22px; font-weight: 800; color: var(--blue);
+      font-size: 24px; font-weight: 800; color: #fff;
     }
-    .mia-ttl { font-size: 18px; font-weight: 700; margin-bottom: 5px; }
-    .mia-sub { font-size: 14px; color: var(--muted); margin-bottom: 24px; }
+    .mia-ttl { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
+    .mia-sub { font-size: 14px; color: var(--on-sv); margin-bottom: 22px; }
     .spinner {
-      width: 36px; height: 36px; border-radius: 50%;
-      border: 3px solid var(--border); border-top-color: var(--blue);
-      animation: spin 0.75s linear infinite; margin: 0 auto;
+      width: 36px; height: 36px; margin: 0 auto;
+      border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 0.8s linear infinite;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
 
-    /* ── SUCCESS SCREEN ──────────────────────────────────── */
-    #screen-success { background: var(--green-bg); overflow-y: auto; }
-    .suc-top {
-      background: var(--green); color: #fff;
-      padding: calc(44px + env(safe-area-inset-top,0px)) 20px 28px;
-      text-align: center; flex-shrink: 0;
+    /* Success overlay */
+    #ov-suc { align-items: flex-start; }
+    .suc-sheet {
+      width: 100%; min-height: 100dvh; overflow-y: auto;
+      background: var(--bg);
+      padding: calc(24px + var(--safe-t)) 16px calc(40px + var(--safe-b));
     }
-    .suc-icon {
-      width: 64px; height: 64px; border-radius: 50%;
-      background: rgba(255,255,255,0.2);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 30px; margin: 0 auto 14px;
+    .suc-inner { max-width: 520px; margin: 0 auto; }
+    .suc-hero {
+      background: var(--green); border-radius: var(--radius);
+      padding: 28px 20px 24px; text-align: center; color: #fff; margin-bottom: 20px;
     }
-    .suc-ttl { font-size: 22px; font-weight: 700; }
-    .suc-amt { font-size: 38px; font-weight: 700; margin-top: 5px; }
+    .suc-icon { font-size: 38px; margin-bottom: 8px; }
+    .suc-ttl { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; margin-bottom: 4px; }
+    .suc-amt { font-size: 32px; font-weight: 700; }
 
-    .receipt {
-      margin: 18px 14px; border-radius: var(--radius);
-      background: var(--surface); border: 1px solid var(--border); overflow: hidden;
-    }
+    .receipt { background: rgba(255,255,255,0.92); border: 1px solid var(--glass-bd); border-radius: var(--radius); overflow: hidden; margin-bottom: 14px; }
     .rcpt-hdr {
-      background: var(--text); color: var(--gold);
-      text-align: center; padding: 11px;
-      font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase;
+      background: var(--primary); color: var(--sec-cont);
+      text-align: center; padding: 10px;
+      font-size: 10px; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase;
     }
     .rcpt-body { padding: 13px 15px; }
-    .rcpt-meta { font-size: 12px; color: var(--muted); margin-bottom: 10px; }
+    .rcpt-meta { font-size: 12px; color: var(--on-sv); margin-bottom: 10px; line-height: 1.55; }
     .rcpt-line { display: flex; justify-content: space-between; font-size: 13px; padding: 3px 0; }
-    .rcpt-line.tot {
-      font-weight: 700; font-size: 15px; color: var(--text);
-      border-top: 1px dashed var(--border); margin-top: 9px; padding-top: 10px;
+    .rcpt-tot  { font-weight: 700; font-size: 15px; color: var(--primary); border-top: 1px dashed rgba(197,160,89,.3); margin-top: 8px; padding-top: 9px; }
+    .rcpt-tva  { font-size: 11px; color: var(--on-sv); margin-top: 6px; }
+
+    .iiko-tag {
+      text-align: center; font-size: 11.5px; color: var(--on-sv); padding: 6px;
+      display: flex; align-items: center; justify-content: center; gap: 5px;
     }
-    .suc-footer {
-      text-align: center; padding: 12px 20px calc(24px + var(--safe-b));
-      font-size: 22px;
-    }
+
+    /* Empty state */
+    .empty-msg { text-align: center; padding: 40px 20px; color: var(--on-sv); font-size: 14px; display: none; }
   </style>
 </head>
 <body>
-<div id="app">
 
-  <header id="header">
-    <span class="brand">nota.</span>
-    <div class="hdr-right">
-      <span class="table-lbl" id="table-lbl">Masa —</span>
-      <div id="live-dot"></div>
-    </div>
-  </header>
-
-  <!-- ═══ BILL SCREEN ══════════════════════════════════════ -->
-  <section id="screen-bill" class="screen active">
-
-    <div class="split-tabs">
-      <button class="s-tab active" id="tab-mine" onclick="setSplit('mine')">Pozițiile<br>mele</button>
-      <button class="s-tab" id="tab-equal" onclick="setSplit('equal')">
-        Împărțim egal
-        <div class="eq-row" id="eq-row">
-          <button class="g-btn" onclick="chgGuests(-1,event)">−</button>
-          <span class="g-cnt" id="g-cnt">2</span>
-          <button class="g-btn" onclick="chgGuests(+1,event)">+</button>
-        </div>
-      </button>
-      <button class="s-tab" id="tab-rest" onclick="setSplit('rest')">Plătesc<br>restul</button>
-    </div>
-
-    <div id="items-scroll">
-      <div id="loading">
-        <div class="sk"></div><div class="sk"></div><div class="sk"></div>
+<!-- ── Header ──────────────────────────────────────────────── -->
+<header id="hdr">
+  <div class="hdr-inner">
+    <span class="msym hdr-icon">table_restaurant</span>
+    <div>
+      <div class="hdr-brand">Carmelo Ristorante</div>
+      <div class="hdr-live">
+        <div class="live-dot"></div>
+        <span class="live-txt" id="live-lbl">Live • Masa —</span>
       </div>
-      <div id="empty">Nu sunt preparate la această masă.</div>
-      <div id="settled">✓ Nota a fost achitată integral.</div>
-      <div id="items-list"></div>
+    </div>
+  </div>
+</header>
+
+<!-- ══ SCREEN 1 — BILL REVIEW ══════════════════════════════ -->
+<div class="screen active" id="screen-bill">
+  <div class="col">
+
+    <!-- Progress -->
+    <div class="prog-section">
+      <div class="prog-lbl">Status Plată</div>
+      <div class="prog-text" id="prog-text">Masa a achitat: 0 MDL din — MDL</div>
+      <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
     </div>
 
-    <div id="bill-progress">
-      <div class="prog-row">
-        <span>Total masă</span><span class="v" id="v-total">— lei</span>
-      </div>
-      <div class="prog-row">
-        <span>Achitat</span><span class="v" id="v-paid" style="color:var(--green)">0 lei</span>
-        <span style="color:var(--border);margin:0 4px">|</span>
-        <span>Rămas</span><span class="v" id="v-rem">— lei</span>
-      </div>
-      <div class="prog-bar"><div class="prog-fill" id="prog-fill"></div></div>
-      <div class="share-box">
-        <span class="share-lbl" id="share-lbl">Partea ta</span>
-        <span class="share-val" id="share-val">0 lei</span>
+    <!-- Settled banner -->
+    <div class="settled-banner" id="settled">✓ Nota a fost achitată integral!</div>
+
+    <!-- Mode tabs -->
+    <div class="mode-pill">
+      <button class="m-tab active" id="tab-mine"  onclick="setSplit('mine')">Pozițiile mele</button>
+      <button class="m-tab"        id="tab-equal" onclick="setSplit('equal')">Împărțim egal</button>
+      <button class="m-tab"        id="tab-rest"  onclick="setSplit('rest')">Plătesc restul</button>
+    </div>
+
+    <!-- Guest counter -->
+    <div class="guest-box" id="guest-box">
+      <span class="guest-lbl">Câți suntem la masă?</span>
+      <div class="g-ctrl">
+        <button class="g-btn" onclick="chgGuests(-1)">−</button>
+        <span class="g-num" id="g-num">2</span>
+        <button class="g-btn" onclick="chgGuests(+1)">+</button>
       </div>
     </div>
 
-    <button class="btn-main" id="btn-cont" onclick="goToTip()" disabled>Continuă →</button>
+    <!-- Items -->
+    <div class="items-hdr">Comanda Ta</div>
+    <div id="bill-skel"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
+    <div class="empty-msg" id="empty-msg">Nu sunt preparate la această masă.</div>
+    <div id="items-list"></div>
 
-  </section>
+  </div>
 
-  <!-- ═══ TIP SCREEN ═══════════════════════════════════════ -->
-  <section id="screen-tip" class="screen">
-    <div class="back-bar">
-      <button class="back-btn" onclick="goToScreen('bill')">← Înapoi</button>
-    </div>
-
-    <div class="tip-hero">
-      <div class="tip-hero-lbl">De plătit</div>
-      <div class="tip-hero-amt" id="tip-base-disp">0 lei</div>
-    </div>
-
-    <div class="tip-chips">
-      <button class="t-chip active" onclick="setTip(0,this)">Fără</button>
-      <button class="t-chip" onclick="setTip(10,this)">10%</button>
-      <button class="t-chip" onclick="setTip(15,this)">15%</button>
-      <button class="t-chip" onclick="setTip(20,this)">20%</button>
-    </div>
-
-    <div class="breakdown">
-      <div class="bd-row"><span class="lbl">Partea ta</span><span class="amt" id="bd-base">0.00 lei</span></div>
-      <div class="bd-row"><span class="lbl">Bacșiș</span><span class="amt" id="bd-tip">0.00 lei</span></div>
-      <div class="bd-total"><span>Total de plătit</span><span id="bd-tot">0.00 lei</span></div>
-    </div>
-
-    <div style="flex:1"></div>
-    <button class="btn-main" onclick="goToPayment()">Continuă →</button>
-  </section>
-
-  <!-- ═══ PAYMENT SCREEN ═══════════════════════════════════ -->
-  <section id="screen-payment" class="screen">
-    <div class="back-bar">
-      <button class="back-btn" onclick="goToScreen('tip')">← Înapoi</button>
-    </div>
-
-    <div class="pay-hero">
-      <div class="pay-hero-lbl">Total de plătit</div>
-      <div class="pay-hero-amt" id="pay-amt">0 lei</div>
-    </div>
-
-    <div class="pay-methods">
-      <button class="btn-mia" id="btn-mia" onclick="startMia()">
-        <span class="mia-icon">M</span>
-        Plătește cu MIA
-      </button>
-      <button class="btn-ap" disabled>
-         Apple Pay <span class="soon">în curând</span>
+  <!-- Action bar -->
+  <div class="act-bar">
+    <div class="act-inner">
+      <div class="bill-tot-row">
+        <span class="bill-tot-lbl" id="tot-lbl">Total selectat</span>
+        <span class="bill-tot-amt" id="tot-amt">0 MDL</span>
+      </div>
+      <div class="bill-note">Serviciu și TVA incluse</div>
+      <button class="btn-primary" id="btn-cont" onclick="goToTip()" disabled>
+        Continuă <span class="msym" style="font-size:18px">chevron_right</span>
       </button>
     </div>
-  </section>
-
-  <!-- ═══ SUCCESS SCREEN ═══════════════════════════════════ -->
-  <section id="screen-success" class="screen">
-    <div class="suc-top">
-      <div class="suc-icon">✓</div>
-      <div class="suc-ttl">Plată confirmată!</div>
-      <div class="suc-amt" id="suc-amt">0 lei</div>
-    </div>
-    <div class="receipt">
-      <div class="rcpt-hdr">Bon Fiscal Electronic</div>
-      <div class="rcpt-body" id="rcpt-body"></div>
-    </div>
-    <div class="suc-footer">Mulțumim!</div>
-  </section>
-
+  </div>
 </div>
 
-<!-- MIA processing overlay -->
-<div id="ov-mia">
+<!-- ══ SCREEN 2 — TIP ══════════════════════════════════════ -->
+<div class="screen" id="screen-tip">
+  <div class="col">
+
+    <button class="back-btn" onclick="goToScreen('bill')">
+      <span class="msym" style="font-size:18px">arrow_back</span> Înapoi
+    </button>
+
+    <div class="sec-title">Aproape gata</div>
+    <div class="sec-sub">Adaugă un bacșiș dacă ai fost mulțumit de serviciu.</div>
+
+    <!-- Bill summary -->
+    <div class="sum-card">
+      <div class="sum-row"><span class="lbl">Subtotal</span><span class="val" id="t-base">0.00 MDL</span></div>
+      <div class="sum-row">
+        <span class="lbl">Bacșiș (<span id="t-pct-lbl">10</span>%)</span>
+        <span class="val" id="t-tip">0.00 MDL</span>
+      </div>
+      <div class="sum-total">
+        <span class="lbl">Total spre plată</span>
+        <span class="val" id="t-tot">0.00 MDL</span>
+      </div>
+    </div>
+
+    <!-- Tip grid — default 10% -->
+    <div class="tip-grid">
+      <button class="t-card" onclick="setTip(0,this)">
+        <div class="t-pct">0%</div><div class="t-lbl">Fără</div>
+      </button>
+      <button class="t-card active" id="tip-10" onclick="setTip(10,this)">
+        <div class="t-pct">10%</div><div class="t-lbl">Standard</div>
+      </button>
+      <button class="t-card" onclick="setTip(15,this)">
+        <div class="t-pct">15%</div><div class="t-lbl">Grozav</div>
+      </button>
+      <button class="t-card" onclick="setTip(20,this)">
+        <div class="t-pct">20%</div><div class="t-lbl">Excepțional</div>
+      </button>
+    </div>
+
+    <!-- Green security info -->
+    <div class="sec-box">
+      <span class="msym ico">verified_user</span>
+      <div>
+        <div class="sec-ttl">Securizat prin MIA</div>
+        <div class="sec-txt">Plata este procesată prin sistemul național de plăți instantanee MIA, aprobat de Banca Națională a Moldovei.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="act-bar">
+    <div class="act-inner">
+      <button class="btn-primary" onclick="goToPayment()">
+        Alege plata <span class="msym" style="font-size:18px">chevron_right</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SCREEN 3 — PAYMENT METHOD ═══════════════════════════ -->
+<div class="screen" id="screen-payment">
+  <div class="col">
+
+    <button class="back-btn" onclick="goToScreen('tip')">
+      <span class="msym" style="font-size:18px">arrow_back</span> Înapoi
+    </button>
+
+    <div class="sec-title">Alege metoda de plată</div>
+    <div class="sec-sub">Selectează cum dorești să achitezi nota.</div>
+
+    <!-- Total hero -->
+    <div class="total-hero">
+      <div class="th-lbl">Total Final</div>
+      <div class="th-amt" id="pay-amt">0.00 MDL</div>
+      <div class="th-note">Include TVA (20%)</div>
+    </div>
+
+    <!-- Payment cards -->
+    <div class="pay-cards">
+      <div class="p-card sel" id="pc-mia" onclick="selectMethod('mia')">
+        <div class="p-ico mia">M</div>
+        <div class="p-text">
+          <div class="p-name">MIA Transfer</div>
+          <div class="p-sub">Sistem de Plăți Instant</div>
+        </div>
+        <div class="p-badge"><span class="msym" style="font-size:14px">check</span></div>
+      </div>
+      <div class="p-card off" id="pc-ap">
+        <div class="p-ico ap"><span class="msym" style="font-size:20px;color:#fff">phone_iphone</span></div>
+        <div class="p-text">
+          <div class="p-name">Apple Pay</div>
+          <div class="p-sub">în curând disponibil</div>
+        </div>
+        <div class="p-badge"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="act-bar">
+    <div class="act-inner">
+      <button class="btn-primary" id="btn-confirm" onclick="confirmPayment()">
+        Confirmă Plata <span class="msym" style="font-size:18px">lock</span>
+      </button>
+      <button class="btn-ghost" onclick="goToScreen('bill')">Înapoi la comandă</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MIA OVERLAY ════════════════════════════════════════════ -->
+<div class="overlay" id="ov-mia">
   <div class="mia-sheet">
-    <div class="mia-logo">M</div>
+    <div class="sh-handle"></div>
+    <div class="mia-ico">M</div>
     <div class="mia-ttl">Se procesează plata</div>
-    <div class="mia-sub" id="mia-sub">Vă rugăm așteptați...</div>
+    <div class="mia-sub" id="mia-sub">Conectăm cu aplicația bancară...</div>
     <div class="spinner"></div>
+  </div>
+</div>
+
+<!-- ══ SUCCESS OVERLAY ═══════════════════════════════════════ -->
+<div class="overlay" id="ov-suc">
+  <div class="suc-sheet">
+    <div class="suc-inner">
+      <div class="suc-hero">
+        <div class="suc-icon">✓</div>
+        <div class="suc-ttl">Plată confirmată!</div>
+        <div class="suc-amt" id="suc-amt">0 MDL</div>
+      </div>
+      <div class="receipt">
+        <div class="rcpt-hdr">Bon Fiscal Electronic</div>
+        <div class="rcpt-body" id="rcpt-body"></div>
+      </div>
+      <div class="iiko-tag">
+        <span class="msym" style="font-size:16px">receipt_long</span>
+        BON FISCAL ELECTRONIC emis prin iiko
+      </div>
+    </div>
   </div>
 </div>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
+  // ── URL params ──────────────────────────────────────────
   const params       = new URLSearchParams(location.search);
   const tableNumber  = parseInt(params.get('t') || '1', 10);
   const restaurantId = params.get('r') || '1';
 
-  document.getElementById('table-lbl').textContent = `Masa ${tableNumber}`;
+  document.getElementById('live-lbl').textContent = `Live • Masa ${tableNumber}`;
 
-  // ── State ────────────────────────────────────────────────
-  let order         = null;
-  let mySelected    = new Set();
-  let splitMode     = 'mine';
-  let guestCount    = 2;
-  let tipPercent    = 0;
-  let payBase       = 0;
-  let payTipLei     = 0;
-  let payTotal      = 0;
-  let inFlight      = false;
-  let myPayingIds   = new Set();
+  // ── State ───────────────────────────────────────────────
+  let order       = null;
+  let mySelected  = new Set();
+  let splitMode   = 'mine';
+  let guestCount  = 2;
+  let tipPercent  = 10;       // default 10%
+  let payBase     = 0;
+  let payTipLei   = 0;
+  let payTotal    = 0;
+  let inFlight    = false;
+  let myPayingIds = new Set();
+  let payMethod   = 'mia';
 
-  // ── Socket ───────────────────────────────────────────────
+  // ── Socket ──────────────────────────────────────────────
   const socket = io({ transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
-    document.getElementById('live-dot').className = 'on';
     socket.emit('join-table', { tableNumber, restaurantId });
-  });
-  socket.on('disconnect', () => {
-    document.getElementById('live-dot').className = '';
   });
 
   socket.on('order-update', incoming => {
     order = incoming;
+    // Drop stale selections
     if (order?.items) {
       for (const it of order.items) {
         if (mySelected.has(it.id)) {
-          if (it.status === 'paid' || (it.status === 'claimed' && it.claimed_by !== socket.id)) {
+          if (it.status === 'paid' ||
+              (it.status === 'claimed' && it.claimed_by !== socket.id)) {
             mySelected.delete(it.id);
           }
         }
@@ -527,17 +671,16 @@
     maybeShowSuccess();
   });
 
-  // ── Screen navigation ─────────────────────────────────────
+  // ── Navigation ──────────────────────────────────────────
   function goToScreen(name) {
     document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
     document.getElementById('screen-' + name).classList.add('active');
+    window.scrollTo(0, 0);
   }
 
   function goToTip() {
     payBase = calcShare();
     if (payBase <= 0) return;
-    tipPercent = 0;
-    document.querySelectorAll('.t-chip').forEach((c, i) => c.classList.toggle('active', i === 0));
     refreshTip();
     goToScreen('tip');
   }
@@ -545,25 +688,28 @@
   function goToPayment() {
     payTipLei = roundLei(payBase * tipPercent / 100);
     payTotal  = payBase + payTipLei;
-    document.getElementById('pay-amt').textContent = fmtLei(payTotal) + ' lei';
+    document.getElementById('pay-amt').textContent = fmtMDL(payTotal);
     goToScreen('payment');
   }
 
-  // ── Split mode ───────────────────────────────────────────
+  // ── Split mode ──────────────────────────────────────────
   function setSplit(mode) {
     splitMode = mode;
-    document.querySelectorAll('.s-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active'));
     document.getElementById('tab-' + mode).classList.add('active');
-    document.getElementById('eq-row').classList.toggle('vis', mode === 'equal');
+    document.getElementById('guest-box').classList.toggle('show', mode === 'equal');
 
+    // Release all current claims
     socket.emit('release-claims');
     mySelected = new Set();
 
     if (mode === 'rest' || mode === 'equal') {
+      // Auto-claim all available items
       const ids = (order?.items || [])
         .filter(it => it.status === 'available')
         .map(it => it.id);
       if (ids.length > 0) {
+        // Server processes release-claims first (ordered per socket), then this
         socket.emit('claim-items', ids, ({ claimed = [] }) => {
           mySelected = new Set(claimed);
           render();
@@ -576,14 +722,13 @@
     }
   }
 
-  function chgGuests(delta, e) {
-    e.stopPropagation();
+  function chgGuests(delta) {
     guestCount = Math.max(2, Math.min(10, guestCount + delta));
-    document.getElementById('g-cnt').textContent = guestCount;
+    document.getElementById('g-num').textContent = guestCount;
     updateProgress();
   }
 
-  // ── Item selection (mine mode only) ───────────────────────
+  // ── Item toggle (mine mode) ─────────────────────────────
   function toggleItem(id) {
     if (splitMode !== 'mine') return;
     const it = order?.items?.find(i => i.id === id);
@@ -591,10 +736,10 @@
     if (it.status === 'claimed' && it.claimed_by !== socket.id) return;
 
     if (mySelected.has(id)) {
+      // Deselect: release all, re-claim remaining
       mySelected.delete(id);
       const remain = [...mySelected];
-      // release-claims then re-claim remaining (server processes in order)
-      socket.emit('release-claims');
+      socket.emit('release-claims');            // server processes first
       if (remain.length > 0) {
         socket.emit('claim-items', remain, ({ claimed = [] }) => {
           mySelected = new Set(claimed);
@@ -604,64 +749,66 @@
         render();
       }
     } else {
+      // Select: claim this item
       mySelected.add(id);
       socket.emit('claim-items', [id], ({ claimed = [] }) => {
-        if (!claimed.includes(id)) {
-          mySelected.delete(id);
-        }
+        if (!claimed.includes(id)) mySelected.delete(id); // contested
         render();
       });
     }
   }
 
-  // ── Render items ─────────────────────────────────────────
+  // ── Render items ────────────────────────────────────────
   function render() {
-    const loading = document.getElementById('loading');
-    const empty   = document.getElementById('empty');
+    const skel    = document.getElementById('bill-skel');
+    const emptyEl = document.getElementById('empty-msg');
     const settled = document.getElementById('settled');
     const list    = document.getElementById('items-list');
 
     if (!order) return;
-    loading.style.display = 'none';
+    skel.style.display = 'none';
 
     const items = order.items || [];
     if (items.length === 0) {
-      empty.style.display   = 'block';
-      settled.style.display = 'none';
+      emptyEl.style.display  = 'block';
+      settled.style.display  = 'none';
       list.innerHTML = '';
       updateProgress();
       return;
     }
 
     const allPaid = items.every(it => it.status === 'paid');
-    empty.style.display   = 'none';
-    settled.style.display = allPaid ? 'block' : 'none';
+    emptyEl.style.display  = 'none';
+    settled.style.display  = allPaid ? 'block' : 'none';
 
     list.innerHTML = items.map(it => {
       const isMine  = mySelected.has(it.id) && it.status === 'claimed' && it.claimed_by === socket.id;
       const isOther = it.status === 'claimed' && it.claimed_by !== socket.id;
       const isPaid  = it.status === 'paid';
-      const cls     = isPaid ? 'paid' : isMine ? 'sel' : isOther ? 'rsv' : '';
-      const chk     = (isPaid || isMine) ? '&#10003;' : '';
-      const badge   = isOther ? `<span class="bdg rsv">rezervat</span>`
-                    : isPaid  ? `<span class="bdg paid">achitat</span>`
-                    : '';
-      const click   = (!isPaid && !isOther) ? `onclick="toggleItem(${it.id})"` : '';
-      return `
-        <div class="row ${cls}" ${click}>
-          <div class="chk">${chk}</div>
-          <div class="row-info">
-            <div class="row-name">${esc(it.name)}</div>
-            ${badge}
-          </div>
-          <div class="row-price">${fmt0(it.price)} lei</div>
-        </div>`;
+
+      const cls   = isPaid ? 'item-card paid' : isMine ? 'item-card sel' : isOther ? 'item-card rsv' : 'item-card';
+      const nCls  = isPaid ? 'item-name g' : 'item-name';
+      const pCls  = isPaid ? 'item-price g' : 'item-price';
+      const chk   = (isMine || isPaid) ? '&#10003;' : '';
+      const meta  = isOther ? '<div class="item-meta">rezervat de altcineva</div>'
+                  : isPaid  ? '<div class="item-meta" style="color:var(--green)">achitat</div>'
+                  : '';
+      const click = (!isPaid && !isOther) ? `onclick="toggleItem(${it.id})"` : '';
+
+      return `<div class="${cls}" ${click}>
+        <div class="item-info">
+          <div class="${nCls}">${esc(it.name)}</div>
+          ${meta}
+        </div>
+        <div class="${pCls}">${fmt0(it.price)} MDL</div>
+        <div class="i-cb">${chk}</div>
+      </div>`;
     }).join('');
 
     updateProgress();
   }
 
-  // ── Bill progress ─────────────────────────────────────────
+  // ── Progress & share ────────────────────────────────────
   function calcShare() {
     const items = order?.items || [];
     if (splitMode === 'mine') {
@@ -670,40 +817,36 @@
         .reduce((s, it) => s + +it.price, 0);
     }
     if (splitMode === 'rest') {
-      return items
-        .filter(it => it.status !== 'paid')
-        .reduce((s, it) => s + +it.price, 0);
+      return items.filter(it => it.status !== 'paid').reduce((s, it) => s + +it.price, 0);
     }
-    if (splitMode === 'equal') {
-      const rem = items.filter(it => it.status !== 'paid').reduce((s, it) => s + +it.price, 0);
-      return rem / guestCount;
-    }
-    return 0;
+    // equal
+    const rem = items.filter(it => it.status !== 'paid').reduce((s, it) => s + +it.price, 0);
+    return guestCount > 1 ? rem / guestCount : rem;
   }
 
   function updateProgress() {
-    const items   = order?.items || [];
-    const total   = items.reduce((s, it) => s + +it.price, 0);
-    const paid    = items.filter(it => it.status === 'paid').reduce((s, it) => s + +it.price, 0);
-    const rem     = total - paid;
-    const pct     = total > 0 ? (paid / total * 100) : 0;
+    const items = order?.items || [];
+    const total = items.reduce((s, it) => s + +it.price, 0);
+    const paid  = items.filter(it => it.status === 'paid').reduce((s, it) => s + +it.price, 0);
+    const pct   = total > 0 ? (paid / total * 100) : 0;
 
-    document.getElementById('v-total').textContent = fmt0(total) + ' lei';
-    document.getElementById('v-paid').textContent  = fmt0(paid)  + ' lei';
-    document.getElementById('v-rem').textContent   = fmt0(rem)   + ' lei';
+    document.getElementById('prog-text').textContent =
+      `Masa a achitat: ${fmt0(paid)} MDL din ${fmt0(total)} MDL`;
     document.getElementById('prog-fill').style.width = pct.toFixed(1) + '%';
 
     const share = calcShare();
-    document.getElementById('share-lbl').textContent = splitMode === 'equal' ? 'Estimat per persoană' : 'Partea ta';
-    document.getElementById('share-val').textContent = fmtLei(share) + ' lei';
+    const lbl   = splitMode === 'equal' ? 'Estimat per persoană' : 'Total selectat';
+    document.getElementById('tot-lbl').textContent = lbl;
+    document.getElementById('tot-amt').textContent = fmtMDL(share);
     document.getElementById('btn-cont').disabled = share <= 0;
   }
 
-  // ── Tip screen ────────────────────────────────────────────
+  // ── Tip ─────────────────────────────────────────────────
   function setTip(pct, el) {
     tipPercent = pct;
-    document.querySelectorAll('.t-chip').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.t-card').forEach(c => c.classList.remove('active'));
     el.classList.add('active');
+    document.getElementById('t-pct-lbl').textContent = pct;
     refreshTip();
   }
 
@@ -711,15 +854,22 @@
     const base = calcShare();
     const tip  = roundLei(base * tipPercent / 100);
     const tot  = base + tip;
-    document.getElementById('tip-base-disp').textContent = fmtLei(base) + ' lei';
-    document.getElementById('bd-base').textContent = fmtLei(base) + ' lei';
-    document.getElementById('bd-tip').textContent  = fmtLei(tip)  + ' lei';
-    document.getElementById('bd-tot').textContent  = fmtLei(tot)  + ' lei';
+    document.getElementById('t-base').textContent    = fmtMDL(base);
+    document.getElementById('t-tip').textContent     = fmtMDL(tip);
+    document.getElementById('t-tot').textContent     = fmtMDL(tot);
+    document.getElementById('t-pct-lbl').textContent = tipPercent;
   }
 
-  // ── MIA payment ──────────────────────────────────────────
-  function startMia() {
-    if (inFlight) return;
+  // ── Payment method ───────────────────────────────────────
+  function selectMethod(method) {
+    if (method === 'apple') return;
+    payMethod = method;
+    document.getElementById('pc-mia').classList.toggle('sel', method === 'mia');
+  }
+
+  // ── Confirm & MIA ────────────────────────────────────────
+  function confirmPayment() {
+    if (inFlight || payMethod !== 'mia') return;
     inFlight = true;
 
     myPayingIds = new Set(
@@ -749,11 +899,11 @@
 
   function maybeShowSuccess() {
     if (!inFlight || myPayingIds.size === 0) return;
-    const allPaid = [...myPayingIds].every(id => {
+    const done = [...myPayingIds].every(id => {
       const it = order?.items?.find(i => i.id === id);
       return it?.status === 'paid';
     });
-    if (allPaid) showSuccess();
+    if (done) showSuccess();
   }
 
   function showSuccess() {
@@ -764,27 +914,34 @@
       .map(id => order?.items?.find(i => i.id === id))
       .filter(Boolean);
 
-    document.getElementById('suc-amt').textContent = fmtLei(payTotal) + ' lei';
+    const tva = payTotal * 20 / 120;
+    const now = new Date().toLocaleDateString('ro-MD', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
 
-    const now = new Date().toLocaleDateString('ro-MD', { day:'2-digit', month:'2-digit', year:'numeric' });
+    document.getElementById('suc-amt').textContent = fmtMDL(payTotal);
     document.getElementById('rcpt-body').innerHTML = `
-      <div class="rcpt-meta">Carmelo Ristorante &nbsp;&middot;&nbsp; Masa ${tableNumber} &nbsp;&middot;&nbsp; ${now}</div>
+      <div class="rcpt-meta">Carmelo Ristorante<br>Masa ${tableNumber} &middot; ${now}</div>
       ${paidItems.map(it => `
-        <div class="rcpt-line"><span>${esc(it.name)}</span><span>${fmt0(it.price)} lei</span></div>
+        <div class="rcpt-line"><span>${esc(it.name)}</span><span>${fmt0(it.price)} MDL</span></div>
       `).join('')}
-      ${payTipLei > 0 ? `<div class="rcpt-line"><span>Bacșiș</span><span>${fmtLei(payTipLei)} lei</span></div>` : ''}
-      <div class="rcpt-line tot"><span>TOTAL</span><span>${fmtLei(payTotal)} lei</span></div>
+      ${payTipLei > 0 ? `
+        <div class="rcpt-line"><span>Bacșiș (${tipPercent}%)</span><span>${fmtMDL(payTipLei)}</span></div>
+      ` : ''}
+      <div class="rcpt-line rcpt-tot"><span>TOTAL</span><span>${fmtMDL(payTotal)}</span></div>
+      <div class="rcpt-tva">incl. TVA 20% &mdash; ${fmtMDL(tva)}</div>
     `;
 
     mySelected  = new Set();
     myPayingIds = new Set();
-    goToScreen('success');
+    document.getElementById('ov-suc').classList.add('show');
   }
 
-  // ── Utilities ────────────────────────────────────────────
-  function fmt0(n)    { return Number(n).toFixed(0); }
-  function fmtLei(n)  { return Number(n).toFixed(2); }
-  function roundLei(n){ return Math.round(n * 100) / 100; }
+  // ── Utils ────────────────────────────────────────────────
+  function fmt0(n)     { return Number(n).toFixed(0); }
+  function fmtMDL(n)   { return Number(n).toFixed(2) + ' MDL'; }
+  function roundLei(n) { return Math.round(n * 100) / 100; }
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
