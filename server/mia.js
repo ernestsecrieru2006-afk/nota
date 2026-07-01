@@ -24,6 +24,10 @@ const SECRET      = process.env.MIA_SECRET        || null;
 const WH_SECRET   = process.env.MIA_WEBHOOK_SECRET|| null;
 const LIVE        = !!(MIA_BASE && MERCHANT_ID && SECRET);
 
+// One-shot flag: set via /api/dev/mock-fail-next to make next mock payment fail
+let _mockFailNext = false;
+export function setMockFailNext() { _mockFailNext = true; }
+
 // ─── public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -75,13 +79,17 @@ export async function requestPayment({ amountLei, tipLei = 0, orderId, tableNumb
   }
 
   // ── Mock ──────────────────────────────────────────────────────────────────
-  const paymentId = `mock-pay-${Date.now()}`;
+  const shouldFail  = _mockFailNext;
+  _mockFailNext     = false;   // one-shot: consume the flag
+  const prefix      = shouldFail ? 'mock-fail' : 'mock-pay';
+  const paymentId   = `${prefix}-${Date.now()}`;
   return {
     paymentId,
-    deepLinkUrl: `https://mock-mia.nota.md/pay/${paymentId}`,
-    expiresAt:   new Date(Date.now() + 180_000).toISOString(),
-    referenceId: `nota-${orderId}-mock`,
-    _mock: true,
+    deepLinkUrl:  `https://mock-mia.nota.md/pay/${paymentId}`,
+    expiresAt:    new Date(Date.now() + 180_000).toISOString(),
+    referenceId:  `nota-${orderId}-mock`,
+    _mock:        true,
+    _shouldFail:  shouldFail,
   };
 }
 
@@ -105,8 +113,9 @@ export async function getPaymentStatus(paymentId) {
     };
   }
 
-  // Mock: always return PAID after a short delay (simulates user approval)
-  return { status: 'PAID', paidAt: new Date().toISOString(), _mock: true };
+  // Mock: fail payments whose ID starts with 'mock-fail-'; succeed all others
+  const status = paymentId.startsWith('mock-fail-') ? 'FAILED' : 'PAID';
+  return { status, paidAt: status === 'PAID' ? new Date().toISOString() : null, _mock: true };
 }
 
 /**

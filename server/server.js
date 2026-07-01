@@ -1,26 +1,18 @@
 /**
  * server.js — nota. Express + Socket.io server
  *
- * Integrations:
- *   iiko  → server/iiko.js  (mock if IIKO_API_LOGIN not set)
- *   MIA   → server/mia.js   (mock if MIA_MERCHANT_ID not set)
- *   Auth  → server/auth.js  (always active)
+ * Payment settlement is strictly provider-confirmed:
+ *   1. Guest confirms → pending DB record created, items stay claimed
+ *   2. Only after MIA webhook/poll returns PAID → items marked paid, balance reduced
+ *   3. On FAILED/EXPIRED/CANCELLED or 3-min timeout → items released, balance unchanged
  *
  * ENV vars:
  *   DATABASE_URL          Postgres connection string (required)
  *   JWT_SECRET            Random secret for auth tokens (required in prod)
- *   APP_URL               Public URL e.g. https://nota.up.railway.app (for webhooks/QR)
+ *   APP_URL               Public URL e.g. https://nota.up.railway.app
  *   PORT                  Default 3000
- *   -- iiko (optional, enables live POS sync) --
- *   IIKO_API_LOGIN        iiko Cloud API login
- *   IIKO_BASE_URL         https://api-ru.iiko.services
- *   IIKO_ORG_ID           Organization UUID from iiko
- *   IIKO_EXTERNAL_PAYMENT_TYPE_ID   Payment type UUID for external payments
- *   -- MIA (optional, enables real payments) --
- *   MIA_BASE_URL          MIA API base URL
- *   MIA_MERCHANT_ID       Merchant ID
- *   MIA_SECRET            API secret
- *   MIA_WEBHOOK_SECRET    HMAC secret for webhook verification
+ *   IIKO_API_LOGIN / IIKO_BASE_URL / IIKO_ORG_ID  → enables live POS sync
+ *   MIA_BASE_URL / MIA_MERCHANT_ID / MIA_SECRET / MIA_WEBHOOK_SECRET  → enables real payments
  */
 
 import 'dotenv/config';
@@ -32,8 +24,8 @@ import { dirname, join } from 'path';
 import pg            from 'pg';
 import QRCode        from 'qrcode';
 
-import { getOpenOrder, addItem, payClaimedItems, parseIikoWebhook } from './iiko.js';
-import { requestPayment, getPaymentStatus, verifyWebhookSignature, parseWebhookPayload } from './mia.js';
+import { getOpenOrder, addItem, parseIikoWebhook } from './iiko.js';
+import { requestPayment, getPaymentStatus, verifyWebhookSignature, parseWebhookPayload, setMockFailNext } from './mia.js';
 import { register, login, me, requireAuth } from './auth.js';
 
 const { Pool } = pg;
@@ -48,10 +40,8 @@ const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\
 
 // ─── middleware ───────────────────────────────────────────────────────────────
 
-// Raw body for webhook signature verification (must come before json())
 app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
-
 app.use(express.json());
 app.use(express.static(join(__dirname, '../public'), { extensions: ['html'] }));
 
@@ -63,7 +53,6 @@ app.get( '/api/auth/me',       requireAuth, me);
 
 // ─── table / order routes ─────────────────────────────────────────────────────
 
-// Get open order by token (guest-facing — token resolves to table server-side)
 app.get('/api/table/by-token/:token', async (req, res) => {
   try {
     const { rows: [tbl] } = await pool.query(
@@ -79,18 +68,15 @@ app.get('/api/table/by-token/:token', async (req, res) => {
   }
 });
 
-// Get open order for a table by number (internal / dashboard use only)
 app.get('/api/table/:n', async (req, res) => {
   try {
     const order = await getOpenOrder(Number(req.params.n));
     res.json(order);
   } catch (err) {
-    console.error('[GET /api/table]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Return token URL for a table number (dev/testing)
 app.get('/api/dev/table-token/:n', async (req, res) => {
   try {
     const { rows: [tbl] } = await pool.query(
@@ -104,7 +90,6 @@ app.get('/api/dev/table-token/:n', async (req, res) => {
   }
 });
 
-// Add a dish (dev/demo only — in production waiter uses iikoFront)
 app.post('/api/table/:n/item', async (req, res) => {
   try {
     const { name, price } = req.body;
@@ -113,79 +98,42 @@ app.post('/api/table/:n/item', async (req, res) => {
     io.to(`table-${req.params.n}`).emit('order-update', order);
     res.json({ ok: true });
   } catch (err) {
-    console.error('[POST /api/table/item]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── payment routes ───────────────────────────────────────────────────────────
+// ─── payment webhook ──────────────────────────────────────────────────────────
 
-// Guest taps "Plătește cu MIA" — initiate payment
-app.post('/api/payment/initiate', async (req, res) => {
-  try {
-    const { amountLei, tipLei = 0, socketId, tableNumber, orderId } = req.body;
-    const result = await requestPayment({ amountLei, tipLei, orderId, tableNumber,
-      description: `Masă ${tableNumber} — nota.` });
-    res.json(result);
-
-    // If mock (no MIA keys), auto-complete payment after 2s for demo flow
-    if (result._mock) {
-      setTimeout(async () => {
-        try {
-          await completePay(socketId, tipLei, tableNumber);
-        } catch (e) {
-          console.error('[mock pay auto-complete]', e);
-        }
-      }, 2000);
-    } else {
-      // Start polling as fallback if webhook is slow
-      pollPaymentStatus(result.paymentId, socketId, tipLei, tableNumber);
-    }
-  } catch (err) {
-    console.error('[POST /api/payment/initiate]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// MIA webhook — bank confirms payment
 app.post('/api/payment/webhook', async (req, res) => {
   try {
-    const sig  = req.headers['x-mia-signature'] || req.headers['x-signature'] || '';
-    const valid = verifyWebhookSignature(req.body, sig);
-    if (!valid) return res.status(401).send('Bad signature');
+    const sig   = req.headers['x-mia-signature'] || req.headers['x-signature'] || '';
+    if (!verifyWebhookSignature(req.body, sig)) return res.status(401).send('Bad signature');
 
     const body    = JSON.parse(req.body.toString());
     const payload = parseWebhookPayload(body);
+    const miaId   = payload.paymentId;
 
-    if (payload.status === 'PAID' && payload.referenceId) {
-      // referenceId format: nota-{orderId}-{timestamp}
-      const parts    = payload.referenceId.split('-');
-      const socketId = pendingPayments.get(payload.paymentId);
-      if (socketId) {
-        const table = pendingTables.get(payload.paymentId);
-        const tip   = pendingTips.get(payload.paymentId) || 0;
-        await completePay(socketId, tip, table, payload.paymentId);
-        pendingPayments.delete(payload.paymentId);
-        pendingTables.delete(payload.paymentId);
-        pendingTips.delete(payload.paymentId);
-      }
+    if (payload.status === 'PAID') {
+      await settlePayment(miaId, miaId);
+    } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(payload.status)) {
+      await releasePayment(miaId, `Plata ${payload.status.toLowerCase()}`);
     }
 
     res.json({ received: true });
   } catch (err) {
-    console.error('[POST /api/payment/webhook]', err);
+    console.error('[webhook]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// iiko webhook — waiter added/removed items
+// ─── iiko webhook ─────────────────────────────────────────────────────────────
+
 app.post('/api/iiko/webhook', async (req, res) => {
   try {
     const body   = JSON.parse(req.body.toString());
     const orders = await parseIikoWebhook(body);
     for (const o of orders) {
       if (o.tableNumber) {
-        // Refresh the order from iiko and push to guests
         const fresh = await getOpenOrder(o.tableNumber);
         io.to(`table-${o.tableNumber}`).emit('order-update', fresh);
         io.to('dashboard').emit('order-update', { tableNumber: o.tableNumber, order: fresh });
@@ -193,12 +141,12 @@ app.post('/api/iiko/webhook', async (req, res) => {
     }
     res.json({ received: true });
   } catch (err) {
-    console.error('[POST /api/iiko/webhook]', err);
+    console.error('[iiko webhook]', err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// ─── dashboard API routes (require auth) ─────────────────────────────────────
+// ─── dashboard API (require auth) ─────────────────────────────────────────────
 
 app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
   try {
@@ -209,7 +157,7 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
         COUNT(*)                                AS payment_count,
         COALESCE(SUM(tip_lei), 0)               AS total_tips
       FROM payments
-      WHERE restaurant_id = $1 AND paid_at >= CURRENT_DATE
+      WHERE restaurant_id = $1 AND status = 'paid' AND paid_at >= CURRENT_DATE
     `, [rId]);
     res.json(rows[0]);
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -239,7 +187,7 @@ app.get('/api/dashboard/hourly', requireAuth, async (req, res) => {
              SUM(amount_lei + tip_lei)       AS total_lei,
              COUNT(*)                        AS count
       FROM payments
-      WHERE restaurant_id = $1 AND paid_at >= CURRENT_DATE
+      WHERE restaurant_id = $1 AND status = 'paid' AND paid_at >= CURRENT_DATE
       GROUP BY hour ORDER BY hour
     `, [rId]);
     res.json(rows);
@@ -253,14 +201,13 @@ app.get('/api/dashboard/recent', requireAuth, async (req, res) => {
       SELECT p.id, o.table_number, p.amount_lei, p.tip_lei, p.paid_at
       FROM payments p
       JOIN orders o ON o.id = p.order_id
-      WHERE p.restaurant_id = $1
+      WHERE p.restaurant_id = $1 AND p.status = 'paid'
       ORDER BY p.paid_at DESC LIMIT 30
     `, [rId]);
     res.json(rows);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// All tables status (live view for dashboard)
 app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
   try {
     const rId = req.restaurant.restaurantId;
@@ -280,13 +227,8 @@ app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── public dashboard (no auth needed — served by path) ──────────────────────
-// Dashboard page itself is public but API calls require token (stored in localStorage)
-
 // ─── dev / demo routes ────────────────────────────────────────────────────────
 
-// Seed 5 demo dishes into an open order for the given table (default: table 1).
-// POST /api/dev/seed-table   { tableNumber: 1, restaurantId: 1 }
 app.post('/api/dev/seed-table', async (req, res) => {
   try {
     const tableNumber  = req.body.tableNumber  ?? 1;
@@ -298,7 +240,6 @@ app.post('/api/dev/seed-table', async (req, res) => {
     );
     if (!tbl) return res.status(404).json({ error: `Table ${tableNumber} not found` });
 
-    // Get or create an open order for this table
     let { rows: [order] } = await pool.query(
       `SELECT id FROM orders WHERE table_id = $1 AND status = 'open' LIMIT 1`,
       [tbl.id]
@@ -312,7 +253,11 @@ app.post('/api/dev/seed-table', async (req, res) => {
       order = o;
     }
 
-    // Reset existing items so we can re-seed cleanly
+    // Also cancel any pending payments for this order so the state is clean
+    await pool.query(
+      `UPDATE payments SET status='cancelled' WHERE order_id=$1 AND status='pending'`,
+      [order.id]
+    );
     await pool.query(`DELETE FROM order_items WHERE order_id = $1`, [order.id]);
 
     const DEMO_DISHES = [
@@ -322,7 +267,6 @@ app.post('/api/dev/seed-table', async (req, res) => {
       ['Tiramisù',             95],
       ['Vino Rosso (pahar)',   75],
     ];
-
     for (const [name, price] of DEMO_DISHES) {
       await pool.query(
         `INSERT INTO order_items (order_id, name, price, status) VALUES ($1, $2, $3, 'available')`,
@@ -330,6 +274,8 @@ app.post('/api/dev/seed-table', async (req, res) => {
       );
     }
 
+    const fresh = await getOpenOrder(tableNumber);
+    io.to(`table-${tableNumber}`).emit('order-update', fresh);
     res.json({ ok: true, orderId: order.id, items: DEMO_DISHES.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -342,32 +288,27 @@ app.post('/api/dev/seed-payments', async (req, res) => {
       ['Tiramisù', 95], ['Vino Rosso (pahar)', 75], ['Acqua Minerale', 35],
       ['Pizza Margherita', 165], ['Bruschetta', 85], ['Panna Cotta', 90],
     ];
-
-    // Seed 20 fake payments spread over today
     for (let i = 0; i < 20; i++) {
       const tableNum = (i % 8) + 1;
       const { rows: [t] } = await pool.query(
         'SELECT id FROM tables WHERE restaurant_id = $1 AND number = $2', [rId, tableNum]
       );
       if (!t) continue;
-
       const { rows: [o] } = await pool.query(
         `INSERT INTO orders (table_id, table_number, restaurant_id, status)
          VALUES ($1, $2, $3, 'open') RETURNING id`,
         [t.id, tableNum, rId]
       );
-
       const dish = DISHES[i % DISHES.length];
-      const { rows: [item] } = await pool.query(
+      await pool.query(
         `INSERT INTO order_items (order_id, name, price, status)
-         VALUES ($1, $2, $3, 'paid') RETURNING id`,
+         VALUES ($1, $2, $3, 'paid')`,
         [o.id, dish[0], dish[1]]
       );
-
       const hoursAgo = Math.floor(Math.random() * 8);
       await pool.query(
-        `INSERT INTO payments (order_id, restaurant_id, amount_lei, tip_lei, paid_at)
-         VALUES ($1, $2, $3, $4, NOW() - INTERVAL '${hoursAgo} hours')`,
+        `INSERT INTO payments (order_id, restaurant_id, amount_lei, tip_lei, status, paid_at)
+         VALUES ($1, $2, $3, $4, 'paid', NOW() - INTERVAL '${hoursAgo} hours')`,
         [o.id, rId, dish[1], Math.round(dish[1] * 0.1)]
       );
     }
@@ -375,7 +316,13 @@ app.post('/api/dev/seed-payments', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// ─── QR code generator ────────────────────────────────────────────────────────
+// Trigger mock payment failure for the NEXT payment initiated
+app.post('/api/dev/mock-fail-next', (req, res) => {
+  setMockFailNext();
+  res.json({ ok: true, message: 'Next mock payment will be declined' });
+});
+
+// ─── QR codes ─────────────────────────────────────────────────────────────────
 
 app.get('/qrcodes', async (req, res) => {
   const restaurantId = req.query.r || 1;
@@ -383,73 +330,54 @@ app.get('/qrcodes', async (req, res) => {
     'SELECT number, token FROM tables WHERE restaurant_id = $1 ORDER BY number',
     [restaurantId]
   );
-
-  if (!tables.length) {
-    return res.status(404).send('<p>No tables found. Run setup-db.js first.</p>');
-  }
-
-  // Warn if any table is missing a token (shouldn't happen after setup-db.js)
+  if (!tables.length) return res.status(404).send('<p>No tables found. Run setup-db.js first.</p>');
   const missing = tables.filter(t => !t.token);
   if (missing.length) {
-    return res.status(500).send(`<p>Tables ${missing.map(t=>t.number).join(', ')} are missing tokens. Re-run setup-db.js.</p>`);
+    return res.status(500).send(`<p>Tables ${missing.map(t=>t.number).join(', ')} missing tokens. Re-run setup-db.js.</p>`);
   }
-
   const qrs = await Promise.all(
     tables.map(async t => ({
-      n:     t.number,
-      token: t.token,
-      url:   `${APP_URL}/?t=${t.token}`,
-      svg:   await QRCode.toString(`${APP_URL}/?t=${t.token}`, { type: 'svg', width: 200 }),
+      n: t.number, token: t.token,
+      url: `${APP_URL}/?t=${t.token}`,
+      svg: await QRCode.toString(`${APP_URL}/?t=${t.token}`, { type: 'svg', width: 200 }),
     }))
   );
-
   res.send(`<!DOCTYPE html>
-<html lang="ro">
-<head>
-<meta charset="UTF-8">
-<title>QR Coduri — nota.</title>
-<style>
-  * { box-sizing: border-box; }
-  body { font-family: sans-serif; background: #fafafa; padding: 2rem; }
-  h1 { margin-bottom: 1.5rem; }
-  .grid { display: grid; grid-template-columns: repeat(auto-fill, 220px); gap: 2rem; }
-  .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 1.25rem;
-          display: flex; flex-direction: column; align-items: center; gap: .5rem; }
-  .card h2 { margin: 0; font-size: 1rem; color: #374151; }
-  .card svg { width: 160px; height: 160px; }
-  .card small { font-size: 10px; color: #6b7280; word-break: break-all; text-align: center; }
-  @media print { body { padding: 0; } h1 { display: none; } }
-</style>
-</head>
-<body>
+<html lang="ro"><head><meta charset="UTF-8"><title>QR — nota.</title>
+<style>*{box-sizing:border-box}body{font-family:sans-serif;background:#fafafa;padding:2rem}h1{margin-bottom:1.5rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,220px);gap:2rem}
+.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;align-items:center;gap:.5rem}
+.card h2{margin:0;font-size:1rem;color:#374151}.card svg{width:160px;height:160px}
+.card small{font-size:10px;color:#6b7280;word-break:break-all;text-align:center}
+@media print{body{padding:0}h1{display:none}}</style>
+</head><body>
 <h1>QR Coduri Masă — nota.</h1>
 <div class="grid">
-${qrs.map(({ n, url, svg }) => `
-  <div class="card">
-    <h2>Masa ${n}</h2>
-    ${svg}
-    <small>${url}</small>
-  </div>`).join('')}
-</div>
-</body>
-</html>`);
+${qrs.map(({n,url,svg})=>`<div class="card"><h2>Masa ${n}</h2>${svg}<small>${url}</small></div>`).join('')}
+</div></body></html>`);
 });
 
 // ─── health ───────────────────────────────────────────────────────────────────
 
 app.get('/health', (_, res) => res.json({
-  ok:     true,
-  iiko:   !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID),
-  mia:    !!(process.env.MIA_MERCHANT_ID && process.env.MIA_SECRET),
-  db:     !!process.env.DATABASE_URL,
+  ok:   true,
+  iiko: !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID),
+  mia:  !!(process.env.MIA_MERCHANT_ID && process.env.MIA_SECRET),
+  db:   !!process.env.DATABASE_URL,
 }));
 
-// ─── Socket.io ────────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Payment state — in-memory meta for in-flight payments (lost on restart;
+// reconciliation picks up pending rows from DB on next tick).
+// ═══════════════════════════════════════════════════════════════════════════════
 
-// In-memory maps for pending MIA payments
-const pendingPayments = new Map(); // paymentId → socketId
-const pendingTables   = new Map(); // paymentId → tableNumber
-const pendingTips     = new Map(); // paymentId → tipLei
+// paymentId (MIA id) → { dbPaymentId, socketId, tableNumber, orderId, amountLei, tipLei, mode, timer }
+const paymentMeta = new Map();
+
+// socketId → miaPaymentId — to know if this socket has an in-flight payment
+const socketInflight = new Map();
+
+// ─── Socket.io ────────────────────────────────────────────────────────────────
 
 io.on('connection', socket => {
   let currentTable = null;
@@ -457,18 +385,14 @@ io.on('connection', socket => {
   socket.on('join-table', async ({ token, tableNumber, restaurantId } = {}) => {
     try {
       let resolvedNumber = tableNumber;
-
       if (token) {
-        // Resolve unguessable token → actual table number
         const { rows: [tbl] } = await pool.query(
           'SELECT number FROM tables WHERE token = $1', [token]
         );
         if (!tbl) return socket.emit('error', { message: 'Masă invalidă' });
         resolvedNumber = tbl.number;
       }
-
       if (!resolvedNumber) return socket.emit('error', { message: 'Masă invalidă' });
-
       currentTable = resolvedNumber;
       socket.join(`table-${resolvedNumber}`);
       const order = await getOpenOrder(resolvedNumber);
@@ -478,14 +402,10 @@ io.on('connection', socket => {
     }
   });
 
-  socket.on('join-dashboard', ({ restaurantId } = {}) => {
-    socket.join('dashboard');
-  });
+  socket.on('join-dashboard', () => { socket.join('dashboard'); });
 
-  // Guest claims items for payment
   socket.on('claim-items', async (itemIds, ack) => {
     try {
-      // Atomic claim — only unclaimed items can be claimed
       const { rows: claimed } = await pool.query(`
         UPDATE order_items
         SET status = 'claimed', claimed_by = $1
@@ -494,19 +414,18 @@ io.on('connection', socket => {
       `, [socket.id, itemIds]);
 
       const contestedIds = itemIds.filter(id => !claimed.find(r => r.id === id));
-
       const order = await getOpenOrder(currentTable);
       io.to(`table-${currentTable}`).emit('order-update', order);
-
       ack?.({ claimed: claimed.map(r => r.id), contested: contestedIds, order });
     } catch (err) {
       ack?.({ error: err.message });
     }
   });
 
-  // Guest releases their claims (navigated away / cancelled)
   socket.on('release-claims', async () => {
     try {
+      // Never release while payment is in-flight — that's the server's job
+      if (socketInflight.has(socket.id)) return;
       await pool.query(`
         UPDATE order_items SET status = 'available', claimed_by = NULL
         WHERE claimed_by = $1 AND status = 'claimed'
@@ -520,29 +439,40 @@ io.on('connection', socket => {
     }
   });
 
-  // Guest taps pay via socket (alternative to REST /api/payment/initiate)
-  socket.on('pay-claimed', async ({ tipLei, tableNumber, orderId, restaurantId }, ack) => {
+  // ── pay-claimed: item-level payment (splitMode = 'mine') ──────────────────
+  socket.on('pay-claimed', async ({ tipLei, tableNumber, orderId }, ack) => {
     try {
-      const order = await getOpenOrder(tableNumber || currentTable);
-      const claimed = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
-      if (!claimed.length) return ack?.({ error: 'No claimed items' });
+      const tbl   = tableNumber || currentTable;
+      const order = await getOpenOrder(tbl);
+      const mine  = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
+      if (!mine.length) return ack?.({ error: 'No claimed items' });
 
-      const amountLei = claimed.reduce((s, it) => s + Number(it.price), 0);
-      const payment   = await requestPayment({
-        amountLei, tipLei, orderId: order.id,
-        tableNumber: tableNumber || currentTable,
-      });
+      const amountLei = mine.reduce((s, it) => s + Number(it.price), 0);
+      const dbPmtId   = await createPendingPayment({ orderId: order.id, amountLei, tipLei: tipLei || 0, socketId: socket.id, mode: 'claimed' });
 
-      // Track for webhook matching
-      pendingPayments.set(payment.paymentId, socket.id);
-      pendingTables.set(payment.paymentId, tableNumber || currentTable);
-      pendingTips.set(payment.paymentId, tipLei || 0);
+      let payment;
+      try {
+        payment = await requestPayment({ amountLei, tipLei, orderId: order.id, tableNumber: tbl });
+      } catch (err) {
+        await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
+        return ack?.({ error: err.message });
+      }
+
+      await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
+
+      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei, tipLei: tipLei || 0, mode: 'claimed', itemIds: mine.map(i => i.id) };
+      paymentMeta.set(payment.paymentId, meta);
+      socketInflight.set(socket.id, payment.paymentId);
 
       ack?.({ success: true, ...payment });
 
-      // Mock: auto-complete after 2s
       if (payment._mock) {
-        setTimeout(() => completePay(socket.id, tipLei || 0, tableNumber || currentTable), 2000);
+        const timer = setTimeout(() => {
+          payment._shouldFail
+            ? releasePayment(payment.paymentId, 'Plata a fost refuzată')
+            : settlePayment(payment.paymentId);
+        }, 2000);
+        meta.timer = timer;
       }
     } catch (err) {
       console.error('[pay-claimed]', err);
@@ -550,14 +480,14 @@ io.on('connection', socket => {
     }
   });
 
-  // Pay a flat amount without item-level claiming (equal-split and pay-rest modes)
+  // ── pay-flat: flat-amount payment (splitMode = 'equal' or 'rest') ─────────
   socket.on('pay-flat', async ({ amountLei, tipLei = 0, mode, tableNumber, orderId }, ack) => {
     try {
-      const tbl = tableNumber || currentTable;
+      const tbl   = tableNumber || currentTable;
       const order = await getOpenOrder(tbl);
       if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
 
-      // For 'rest' mode recompute to be authoritative
+      // Server is authoritative for 'rest' mode
       let chargeAmount = Number(amountLei);
       if (mode === 'rest') {
         chargeAmount = order.items
@@ -566,19 +496,31 @@ io.on('connection', socket => {
       }
       if (chargeAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
 
-      const payment = await requestPayment({
-        amountLei: chargeAmount, tipLei, orderId: order.id, tableNumber: tbl,
-      });
+      const dbPmtId = await createPendingPayment({ orderId: order.id, amountLei: chargeAmount, tipLei, socketId: socket.id, mode: 'flat' });
+
+      let payment;
+      try {
+        payment = await requestPayment({ amountLei: chargeAmount, tipLei, orderId: order.id, tableNumber: tbl });
+      } catch (err) {
+        await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
+        return ack?.({ error: err.message });
+      }
+
+      await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
+
+      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei: chargeAmount, tipLei, mode: 'flat' };
+      paymentMeta.set(payment.paymentId, meta);
+      socketInflight.set(socket.id, payment.paymentId);
 
       ack?.({ success: true, chargeAmount, ...payment });
 
       if (payment._mock) {
-        setTimeout(() => completeFlatPay(tbl, order.id, chargeAmount, tipLei), 2000);
-      } else {
-        // Store for webhook completion
-        pendingPayments.set(payment.paymentId, socket.id);
-        pendingTables.set(payment.paymentId, tbl);
-        pendingTips.set(payment.paymentId, tipLei);
+        const timer = setTimeout(() => {
+          payment._shouldFail
+            ? releasePayment(payment.paymentId, 'Plata a fost refuzată')
+            : settlePayment(payment.paymentId);
+        }, 2000);
+        meta.timer = timer;
       }
     } catch (err) {
       console.error('[pay-flat]', err);
@@ -586,9 +528,13 @@ io.on('connection', socket => {
     }
   });
 
-  // Release claims on disconnect
   socket.on('disconnect', async () => {
     try {
+      // If a payment is in-flight, keep items claimed — settlement/timeout handles them
+      if (socketInflight.has(socket.id)) {
+        console.log(`[disconnect] socket ${socket.id} has in-flight payment — keeping items claimed`);
+        return;
+      }
       await pool.query(`
         UPDATE order_items SET status = 'available', claimed_by = NULL
         WHERE claimed_by = $1 AND status = 'claimed'
@@ -603,91 +549,302 @@ io.on('connection', socket => {
   });
 });
 
-// ─── completePay helper ───────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════════
+// Payment settlement helpers (idempotent — safe to call multiple times)
+// ═══════════════════════════════════════════════════════════════════════════════
 
-async function completePay(socketId, tipLei, tableNumber, miaPaymentId = null) {
-  const result = await payClaimedItems(socketId, tipLei);
-  if (!result) return;
-
-  // Attach mia_payment_id if we have it
-  if (miaPaymentId) {
-    await pool.query(
-      'UPDATE payments SET mia_payment_id = $1 WHERE id = $2',
-      [miaPaymentId, result.id]
-    );
-  }
-
-  const order = await getOpenOrder(tableNumber);
-  io.to(`table-${tableNumber}`).emit('order-update', order);
-  io.to('dashboard').emit('payment-made', {
-    id:           result.id,
-    table_number: tableNumber,
-    amount_lei:   result.amount_lei,
-    tip_lei:      result.tip_lei,
-    paid_at:      result.paid_at,
-  });
+async function createPendingPayment({ orderId, amountLei, tipLei, socketId, mode }) {
+  const { rows: [pmt] } = await pool.query(
+    `INSERT INTO payments (order_id, restaurant_id, amount_lei, tip_lei, status, socket_id, mode)
+     SELECT $1, o.restaurant_id, $2, $3, 'pending', $4, $5
+     FROM orders o WHERE o.id = $1
+     RETURNING id`,
+    [orderId, amountLei, tipLei, socketId, mode]
+  );
+  return pmt.id;
 }
 
-// ─── completeFlatPay — marks ALL remaining items paid, records flat payment ───
+async function settlePayment(miaPaymentId, confirmedMiaId = null) {
+  const meta = paymentMeta.get(miaPaymentId);
+  if (!meta) {
+    // Server restart: recover from DB
+    const { rows: [pmt] } = await pool.query(
+      `SELECT p.id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id, o.table_number
+       FROM payments p JOIN orders o ON o.id = p.order_id
+       WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
+      [miaPaymentId]
+    );
+    if (pmt) await settleFromDB(pmt, confirmedMiaId);
+    return;
+  }
 
-async function completeFlatPay(tableNumber, orderId, amountLei, tipLei) {
+  const { dbPaymentId, socketId, tableNumber, orderId, amountLei, tipLei, mode, itemIds, timer } = meta;
+  if (timer) clearTimeout(timer);
+
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // Atomically mark every unclaimed/claimed remaining item as paid
-    await client.query(
-      `UPDATE order_items SET status = 'paid', claimed_by = NULL
-       WHERE order_id = $1 AND status IN ('available', 'claimed')`,
-      [orderId]
-    );
-
-    // Record the flat payment (amountLei = what was actually charged, not item total)
+    // Idempotency: lock row and check status
     const { rows: [pmt] } = await client.query(
-      `INSERT INTO payments (order_id, amount_lei, tip_lei, paid_at)
-       VALUES ($1, $2, $3, NOW()) RETURNING *`,
-      [orderId, amountLei, tipLei]
+      'SELECT status FROM payments WHERE id=$1 FOR UPDATE', [dbPaymentId]
     );
+    if (!pmt || pmt.status !== 'pending') {
+      await client.query('ROLLBACK');
+      cleanupMeta(miaPaymentId, socketId);
+      return;
+    }
 
+    let itemsSettled = 0;
+    if (mode === 'claimed') {
+      const { rowCount } = await client.query(
+        `UPDATE order_items SET status='paid', claimed_by=NULL
+         WHERE claimed_by=$1 AND status='claimed'`,
+        [socketId]
+      );
+      itemsSettled = rowCount;
+    } else {
+      // flat: settle all remaining items
+      const { rowCount } = await client.query(
+        `UPDATE order_items SET status='paid', claimed_by=NULL
+         WHERE order_id=$1 AND status IN ('available','claimed')`,
+        [orderId]
+      );
+      itemsSettled = rowCount;
+    }
+
+    if (mode === 'claimed' && itemsSettled === 0) {
+      // Items were released + paid by someone else — this is a duplicate charge
+      await client.query(
+        `UPDATE payments SET status='duplicate', mia_payment_id=$2 WHERE id=$1`,
+        [dbPaymentId, confirmedMiaId || miaPaymentId]
+      );
+      await client.query('COMMIT');
+      const s = io.sockets.sockets.get(socketId);
+      if (s) s.emit('payment-failed', { reason: 'Preparatele au fost deja achitate de altcineva.' });
+      cleanupMeta(miaPaymentId, socketId);
+      return;
+    }
+
+    await client.query(
+      `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=$2 WHERE id=$1`,
+      [dbPaymentId, confirmedMiaId || miaPaymentId]
+    );
     await client.query('COMMIT');
+
+    // Emit confirmed to the guest's socket
+    const s = io.sockets.sockets.get(socketId);
+    if (s) s.emit('payment-confirmed', { amountLei, tipLei, total: Number(amountLei) + Number(tipLei), mode, itemIds: itemIds || [] });
 
     const order = await getOpenOrder(tableNumber);
     io.to(`table-${tableNumber}`).emit('order-update', order);
     io.to('dashboard').emit('payment-made', {
-      table_number: tableNumber,
-      amount_lei:   amountLei,
-      tip_lei:      tipLei,
-      paid_at:      pmt.paid_at,
+      table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
+      paid_at: new Date().toISOString(),
     });
+
+    cleanupMeta(miaPaymentId, socketId);
   } catch (err) {
     await client.query('ROLLBACK');
-    console.error('[completeFlatPay]', err);
+    console.error('[settlePayment]', err);
   } finally {
     client.release();
   }
 }
 
-// ─── poll payment status (fallback if webhook is slow) ───────────────────────
+async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
+  const meta = paymentMeta.get(miaPaymentId);
+  if (!meta) {
+    const { rows: [pmt] } = await pool.query(
+      `SELECT p.id, p.socket_id, p.mode, p.order_id, o.table_number
+       FROM payments p JOIN orders o ON o.id = p.order_id
+       WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
+      [miaPaymentId]
+    );
+    if (pmt) await releaseFromDB(pmt, reason);
+    return;
+  }
 
-async function pollPaymentStatus(paymentId, socketId, tipLei, tableNumber, attempts = 0) {
-  if (attempts > 20) return; // give up after ~60s
-  setTimeout(async () => {
-    try {
-      const { status } = await getPaymentStatus(paymentId);
-      if (status === 'PAID') {
-        await completePay(socketId, tipLei, tableNumber, paymentId);
-        pendingPayments.delete(paymentId);
-        pendingTables.delete(paymentId);
-        pendingTips.delete(paymentId);
-      } else if (status === 'PENDING') {
-        pollPaymentStatus(paymentId, socketId, tipLei, tableNumber, attempts + 1);
-      }
-      // EXPIRED / FAILED → stop polling, guest will see timeout
-    } catch (err) {
-      console.error('[poll]', err.message);
+  const { dbPaymentId, socketId, tableNumber, mode, timer } = meta;
+  if (timer) clearTimeout(timer);
+
+  const newStatus = reason.toLowerCase().includes('expir') ? 'expired' : 'failed';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const { rows: [pmt] } = await client.query(
+      'SELECT status FROM payments WHERE id=$1 FOR UPDATE', [dbPaymentId]
+    );
+    if (!pmt || pmt.status !== 'pending') {
+      await client.query('ROLLBACK');
+      cleanupMeta(miaPaymentId, socketId);
+      return;
     }
-  }, 3000);
+
+    await client.query(`UPDATE payments SET status=$2 WHERE id=$1`, [dbPaymentId, newStatus]);
+
+    if (mode === 'claimed') {
+      await client.query(
+        `UPDATE order_items SET status='available', claimed_by=NULL
+         WHERE claimed_by=$1 AND status='claimed'`,
+        [socketId]
+      );
+    }
+    // flat mode: no items were claimed, nothing to release
+
+    await client.query('COMMIT');
+
+    const s = io.sockets.sockets.get(socketId);
+    if (s) s.emit('payment-failed', { reason });
+
+    const order = await getOpenOrder(tableNumber);
+    io.to(`table-${tableNumber}`).emit('order-update', order);
+
+    cleanupMeta(miaPaymentId, socketId);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[releasePayment]', err);
+  } finally {
+    client.release();
+  }
 }
+
+// DB-only settlement/release for payments where in-memory meta is gone (server restart)
+async function settleFromDB(pmt, confirmedMiaId = null) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [row] } = await client.query(
+      'SELECT status FROM payments WHERE id=$1 FOR UPDATE', [pmt.id]
+    );
+    if (!row || row.status !== 'pending') { await client.query('ROLLBACK'); return; }
+
+    let itemsSettled = 0;
+    if (pmt.mode === 'claimed') {
+      const { rowCount } = await client.query(
+        `UPDATE order_items SET status='paid', claimed_by=NULL WHERE claimed_by=$1 AND status='claimed'`,
+        [pmt.socket_id]
+      );
+      itemsSettled = rowCount;
+    } else {
+      const { rowCount } = await client.query(
+        `UPDATE order_items SET status='paid', claimed_by=NULL WHERE order_id=$1 AND status IN ('available','claimed')`,
+        [pmt.order_id]
+      );
+      itemsSettled = rowCount;
+    }
+
+    if (pmt.mode === 'claimed' && itemsSettled === 0) {
+      await client.query(`UPDATE payments SET status='duplicate' WHERE id=$1`, [pmt.id]);
+      await client.query('COMMIT');
+      return;
+    }
+
+    await client.query(
+      `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=COALESCE($2, mia_payment_id) WHERE id=$1`,
+      [pmt.id, confirmedMiaId]
+    );
+    await client.query('COMMIT');
+
+    const order = await getOpenOrder(pmt.table_number);
+    io.to(`table-${pmt.table_number}`).emit('order-update', order);
+    io.to('dashboard').emit('payment-made', {
+      table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
+      paid_at: new Date().toISOString(),
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[settleFromDB]', err);
+  } finally {
+    client.release();
+  }
+}
+
+async function releaseFromDB(pmt, reason = '') {
+  const newStatus = reason.toLowerCase().includes('expir') ? 'expired' : 'failed';
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rowCount } = await client.query(
+      `UPDATE payments SET status=$2 WHERE id=$1 AND status='pending'`,
+      [pmt.id, newStatus]
+    );
+    if (rowCount === 0) { await client.query('ROLLBACK'); return; }
+
+    if (pmt.mode === 'claimed') {
+      await client.query(
+        `UPDATE order_items SET status='available', claimed_by=NULL WHERE claimed_by=$1 AND status='claimed'`,
+        [pmt.socket_id]
+      );
+    }
+    await client.query('COMMIT');
+
+    const order = await getOpenOrder(pmt.table_number);
+    io.to(`table-${pmt.table_number}`).emit('order-update', order);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[releaseFromDB]', err);
+  } finally {
+    client.release();
+  }
+}
+
+function cleanupMeta(miaPaymentId, socketId) {
+  paymentMeta.delete(miaPaymentId);
+  if (socketId) socketInflight.delete(socketId);
+}
+
+// ─── Reconciliation — runs every 30 s ────────────────────────────────────────
+// Catches: dropped webhooks, server restarts with pending payments, MIA timeouts.
+
+async function reconcilePendingPayments() {
+  try {
+    const { rows: pending } = await pool.query(`
+      SELECT p.id, p.mia_payment_id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
+             o.table_number, p.created_at
+      FROM payments p
+      JOIN orders o ON o.id = p.order_id
+      WHERE p.status = 'pending'
+    `);
+
+    const now = Date.now();
+    for (const pmt of pending) {
+      const ageMs = now - new Date(pmt.created_at).getTime();
+      const miaId = pmt.mia_payment_id;
+
+      if (ageMs > 3 * 60 * 1000) {
+        // Expired — release regardless
+        if (miaId && paymentMeta.has(miaId)) {
+          await releasePayment(miaId, 'Plata a expirat (timeout)');
+        } else {
+          await releaseFromDB(pmt, 'expired');
+        }
+        continue;
+      }
+
+      // 30s–3min and live MIA → poll for status
+      if (ageMs > 30_000 && miaId && process.env.MIA_MERCHANT_ID) {
+        try {
+          const { status } = await getPaymentStatus(miaId);
+          if (status === 'PAID') {
+            if (paymentMeta.has(miaId)) await settlePayment(miaId, miaId);
+            else await settleFromDB(pmt, miaId);
+          } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(status)) {
+            if (paymentMeta.has(miaId)) await releasePayment(miaId, `Plata ${status}`);
+            else await releaseFromDB(pmt, status.toLowerCase());
+          }
+        } catch (err) {
+          console.error('[reconcile poll]', err.message);
+        }
+      }
+    }
+  } catch (err) {
+    console.error('[reconcile]', err);
+  }
+}
+
+setInterval(reconcilePendingPayments, 30_000);
 
 // ─── start ────────────────────────────────────────────────────────────────────
 
@@ -697,6 +854,15 @@ httpServer.listen(PORT, async () => {
   console.log(`   iiko:     ${process.env.IIKO_API_LOGIN ? '✅ LIVE' : '⚠️  mock'}`);
   console.log(`   MIA:      ${process.env.MIA_MERCHANT_ID ? '✅ LIVE' : '⚠️  mock'}`);
   console.log(`   DB:       ${process.env.DATABASE_URL ? '✅ connected' : '❌ DATABASE_URL missing'}`);
+
+  // Release any items that were left claimed by a socket from the previous process
+  try {
+    await reconcilePendingPayments();
+    const { rows: stuck } = await pool.query(
+      `SELECT DISTINCT claimed_by, order_id FROM order_items WHERE status='claimed' AND claimed_by IS NOT NULL`
+    );
+    if (stuck.length) console.log(`   [startup] ${stuck.length} socket(s) have claimed items — reconciliation will resolve pending payments`);
+  } catch {}
 
   try {
     const { rows: [t1] } = await pool.query(

@@ -79,13 +79,16 @@ async function setup() {
     // ── payments ─────────────────────────────────────────────────────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS payments (
-        id            SERIAL PRIMARY KEY,
-        order_id      INT          NOT NULL REFERENCES orders(id),
-        restaurant_id INT          REFERENCES restaurants(id),
-        amount_lei    NUMERIC(8,2) NOT NULL,
-        tip_lei       NUMERIC(8,2) NOT NULL DEFAULT 0,
-        mia_payment_id TEXT,                                  -- set when MIA LIVE
-        paid_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        id             SERIAL PRIMARY KEY,
+        order_id       INT          NOT NULL REFERENCES orders(id),
+        restaurant_id  INT          REFERENCES restaurants(id),
+        amount_lei     NUMERIC(8,2) NOT NULL,
+        tip_lei        NUMERIC(8,2) NOT NULL DEFAULT 0,
+        status         VARCHAR(20)  NOT NULL DEFAULT 'paid',
+        mode           VARCHAR(20)  NOT NULL DEFAULT 'claimed',
+        socket_id      TEXT,
+        mia_payment_id TEXT,
+        paid_at        TIMESTAMPTZ
       )
     `);
 
@@ -108,6 +111,18 @@ async function setup() {
     try {
       await client.query(`ALTER TABLE tables ADD COLUMN IF NOT EXISTS token VARCHAR(20) UNIQUE`);
     } catch { /* already exists */ }
+
+    // ── upgrade payments table for provider-confirmed settlement ─────────────
+    // status: pending → paid/failed/expired/cancelled/duplicate
+    // mode: claimed (item-level) | flat (split/rest)
+    // socket_id: who initiated the payment (for routing confirmation events)
+    // paid_at: NULL until MIA confirms; set at settlement time
+    await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS status VARCHAR(20) NOT NULL DEFAULT 'paid'`);
+    await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS mode VARCHAR(20) NOT NULL DEFAULT 'claimed'`);
+    await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS socket_id TEXT`);
+    // Make paid_at nullable — pending records have NULL until settlement
+    try { await client.query(`ALTER TABLE payments ALTER COLUMN paid_at DROP NOT NULL`); } catch {}
+    try { await client.query(`ALTER TABLE payments ALTER COLUMN paid_at DROP DEFAULT`);  } catch {}
 
     // ── add restaurant_id / table_number to existing tables if upgrading ─────
     // (safe no-ops if columns already exist)
