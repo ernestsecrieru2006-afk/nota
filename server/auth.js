@@ -149,13 +149,14 @@ export async function register(req, res) {
       [name, email.toLowerCase(), passwordHash, tableCount]
     );
 
-    // Create tables — single multi-row INSERT
+    // Create tables with unique QR tokens — single multi-row INSERT
     const tParams = [restaurant.id];
     const tPlaceholders = Array.from({ length: tableCount }, (_, i) => {
-      tParams.push(i + 1);
-      return `($1, $${tParams.length})`;
+      const tableToken = crypto.randomBytes(8).toString('hex');
+      tParams.push(i + 1, tableToken);
+      return `($1, $${tParams.length - 1}, $${tParams.length})`;
     }).join(', ');
-    await client.query(`INSERT INTO tables (restaurant_id, number) VALUES ${tPlaceholders}`, tParams);
+    await client.query(`INSERT INTO tables (restaurant_id, number, token) VALUES ${tPlaceholders}`, tParams);
 
     await client.query('COMMIT');
 
