@@ -22,6 +22,8 @@ import { Server }       from 'socket.io';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import compression      from 'compression';
+import helmet          from 'helmet';
+import rateLimit       from 'express-rate-limit';
 import QRCode           from 'qrcode';
 
 import { pool } from './db.js';
@@ -38,10 +40,12 @@ const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\
 
 // ─── middleware ───────────────────────────────────────────────────────────────
 
+app.set('trust proxy', 1);
 app.use(compression());
+app.use(helmet({ contentSecurityPolicy: false }));
 app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 app.use(express.static(join(__dirname, '../public'), {
   extensions: ['html'],
   setHeaders(res, filePath) {
@@ -52,10 +56,30 @@ app.use(express.static(join(__dirname, '../public'), {
   },
 }));
 
+// ─── rate limiting ────────────────────────────────────────────────────────────
+
+const limiterGlobal = rateLimit({
+  windowMs: 60_000, max: 200,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests' },
+});
+const limiterAuth = rateLimit({
+  windowMs: 15 * 60_000, max: 20,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many auth attempts' },
+});
+const limiterPaymentHttp = rateLimit({
+  windowMs: 60_000, max: 30,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many payment requests' },
+});
+
+app.use(limiterGlobal);
+
 // ─── auth routes ─────────────────────────────────────────────────────────────
 
-app.post('/api/auth/register', register);
-app.post('/api/auth/login',    login);
+app.post('/api/auth/register', limiterAuth, register);
+app.post('/api/auth/login',    limiterAuth, login);
 app.get( '/api/auth/me',       requireAuth, me);
 
 // ─── table / order routes ─────────────────────────────────────────────────────
@@ -111,7 +135,7 @@ app.post('/api/table/:n/item', async (req, res) => {
 
 // ─── payment webhook ──────────────────────────────────────────────────────────
 
-app.post('/api/payment/webhook', async (req, res) => {
+app.post('/api/payment/webhook', limiterPaymentHttp, async (req, res) => {
   try {
     const sig   = req.headers['x-mia-signature'] || req.headers['x-signature'] || '';
     if (!verifyWebhookSignature(req.body, sig)) return res.status(401).send('Bad signature');
@@ -396,15 +420,37 @@ const paymentMeta = new Map();
 // socketId → miaPaymentId — to know if this socket has an in-flight payment
 const socketInflight = new Map();
 
+// Per-socket event rate limit: 30 events per 10s window
+const socketThrottle = new Map();
+
+function checkThrottle(socket) {
+  const now = Date.now();
+  let s = socketThrottle.get(socket.id);
+  if (!s || now >= s.resetAt) {
+    socketThrottle.set(socket.id, { count: 1, resetAt: now + 10_000 });
+    return false;
+  }
+  s.count++;
+  if (s.count > 30) {
+    socket.disconnect(true);
+    return true;
+  }
+  return false;
+}
+
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 
 io.on('connection', socket => {
   let currentTable = null;
 
   socket.on('join-table', async ({ token, tableNumber, restaurantId } = {}) => {
+    if (checkThrottle(socket)) return;
     try {
       let resolvedNumber = tableNumber;
       if (token) {
+        if (typeof token !== 'string' || !/^[0-9a-f]{16}$/.test(token)) {
+          return socket.emit('error', { message: 'Masă invalidă' });
+        }
         const { rows: [tbl] } = await pool.query(
           'SELECT number FROM tables WHERE token = $1', [token]
         );
@@ -424,13 +470,24 @@ io.on('connection', socket => {
   socket.on('join-dashboard', () => { socket.join('dashboard'); });
 
   socket.on('claim-items', async (itemIds, ack) => {
+    if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
+    if (!currentTable) return ack?.({ error: 'Not joined to a table' });
+    if (!Array.isArray(itemIds) || itemIds.length === 0 || itemIds.length > 50) {
+      return ack?.({ error: 'Invalid itemIds' });
+    }
+    if (itemIds.some(id => !Number.isInteger(id) || id <= 0)) {
+      return ack?.({ error: 'Invalid itemIds' });
+    }
     try {
       const { rows: claimed } = await pool.query(`
-        UPDATE order_items
+        UPDATE order_items oi
         SET status = 'claimed', claimed_by = $1
-        WHERE id = ANY($2) AND status = 'available'
-        RETURNING id
-      `, [socket.id, itemIds]);
+        FROM orders o
+        JOIN tables t ON t.id = o.table_id
+        WHERE oi.id = ANY($2) AND oi.status = 'available'
+          AND oi.order_id = o.id AND o.status = 'open' AND t.number = $3
+        RETURNING oi.id
+      `, [socket.id, itemIds, currentTable]);
 
       const contestedIds = itemIds.filter(id => !claimed.find(r => r.id === id));
       if (claimed.length > 0) {
@@ -445,15 +502,18 @@ io.on('connection', socket => {
   });
 
   socket.on('release-claims', async () => {
+    if (!currentTable) return;
     try {
       // Never release while payment is in-flight — that's the server's job
       if (socketInflight.has(socket.id)) return;
       const { rows: released } = await pool.query(`
-        UPDATE order_items SET status = 'available', claimed_by = NULL
-        WHERE claimed_by = $1 AND status = 'claimed'
-        RETURNING id
-      `, [socket.id]);
-      if (currentTable && released.length > 0) {
+        UPDATE order_items oi SET status = 'available', claimed_by = NULL
+        FROM orders o JOIN tables t ON t.id = o.table_id
+        WHERE oi.claimed_by = $1 AND oi.status = 'claimed'
+          AND oi.order_id = o.id AND o.status = 'open' AND t.number = $2
+        RETURNING oi.id
+      `, [socket.id, currentTable]);
+      if (released.length > 0) {
         io.to(`table-${currentTable}`).emit('items-patch',
           released.map(r => ({ id: r.id, status: 'available', claimed_by: null }))
         );
@@ -466,14 +526,18 @@ io.on('connection', socket => {
   // Single-item deselect — only releases the one tapped item, never others.
   // This fixes the "deselect clears everything" bug caused by release-all + re-claim-rest.
   socket.on('release-item', async (itemId, ack) => {
+    if (!currentTable) return ack?.({ released: [] });
+    if (!Number.isInteger(itemId) || itemId <= 0) return ack?.({ error: 'Invalid itemId' });
     try {
       if (socketInflight.has(socket.id)) return ack?.({ released: [] });
       const { rows } = await pool.query(`
-        UPDATE order_items SET status = 'available', claimed_by = NULL
-        WHERE id = $1 AND claimed_by = $2 AND status = 'claimed'
-        RETURNING id
-      `, [itemId, socket.id]);
-      if (rows.length > 0 && currentTable) {
+        UPDATE order_items oi SET status = 'available', claimed_by = NULL
+        FROM orders o JOIN tables t ON t.id = o.table_id
+        WHERE oi.id = $1 AND oi.claimed_by = $2 AND oi.status = 'claimed'
+          AND oi.order_id = o.id AND o.status = 'open' AND t.number = $3
+        RETURNING oi.id
+      `, [itemId, socket.id, currentTable]);
+      if (rows.length > 0) {
         io.to(`table-${currentTable}`).emit('items-patch',
           [{ id: rows[0].id, status: 'available', claimed_by: null }]
         );
@@ -485,19 +549,23 @@ io.on('connection', socket => {
   });
 
   // ── pay-claimed: item-level payment (splitMode = 'mine') ──────────────────
-  socket.on('pay-claimed', async ({ tipLei, tableNumber, orderId }, ack) => {
+  socket.on('pay-claimed', async ({ tipLei }, ack) => {
+    if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
+    if (!currentTable) return ack?.({ error: 'Not joined to a table' });
+    const tip = Number(tipLei) || 0;
+    if (!Number.isFinite(tip) || tip < 0) return ack?.({ error: 'Invalid tip' });
     try {
-      const tbl   = tableNumber || currentTable;
+      const tbl   = currentTable;
       const order = await getOpenOrder(tbl);
       const mine  = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
       if (!mine.length) return ack?.({ error: 'No claimed items' });
 
       const amountLei = mine.reduce((s, it) => s + Number(it.price), 0);
-      const dbPmtId   = await createPendingPayment({ orderId: order.id, amountLei, tipLei: tipLei || 0, socketId: socket.id, mode: 'claimed' });
+      const dbPmtId   = await createPendingPayment({ orderId: order.id, amountLei, tipLei: tip, socketId: socket.id, mode: 'claimed' });
 
       let payment;
       try {
-        payment = await requestPayment({ amountLei, tipLei, orderId: order.id, tableNumber: tbl });
+        payment = await requestPayment({ amountLei, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         return ack?.({ error: err.message });
@@ -505,7 +573,7 @@ io.on('connection', socket => {
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
 
-      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei, tipLei: tipLei || 0, mode: 'claimed', itemIds: mine.map(i => i.id) };
+      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei, tipLei: tip, mode: 'claimed', itemIds: mine.map(i => i.id) };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
@@ -526,26 +594,39 @@ io.on('connection', socket => {
   });
 
   // ── pay-flat: flat-amount payment (splitMode = 'equal' or 'rest') ─────────
-  socket.on('pay-flat', async ({ amountLei, tipLei = 0, mode, tableNumber, orderId }, ack) => {
+  socket.on('pay-flat', async ({ amountLei, tipLei = 0, mode }, ack) => {
+    if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
+    if (!currentTable) return ack?.({ error: 'Not joined to a table' });
+    if (!['equal', 'rest'].includes(mode)) return ack?.({ error: 'Invalid mode' });
+    const tip = Number(tipLei) || 0;
+    if (!Number.isFinite(tip) || tip < 0) return ack?.({ error: 'Invalid tip' });
+    if (mode === 'equal') {
+      const amt = Number(amountLei);
+      if (!Number.isFinite(amt) || amt <= 0) return ack?.({ error: 'Invalid amount' });
+    }
     try {
-      const tbl   = tableNumber || currentTable;
+      const tbl   = currentTable;
       const order = await getOpenOrder(tbl);
       if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
 
-      // Server is authoritative for 'rest' mode
-      let chargeAmount = Number(amountLei);
+      const remaining = order.items
+        .filter(it => it.status !== 'paid')
+        .reduce((s, it) => s + Number(it.price), 0);
+
+      // Server is authoritative: 'rest' uses full remaining; 'equal' caps at remaining
+      let chargeAmount;
       if (mode === 'rest') {
-        chargeAmount = order.items
-          .filter(it => it.status !== 'paid')
-          .reduce((s, it) => s + Number(it.price), 0);
+        chargeAmount = remaining;
+      } else {
+        chargeAmount = Math.min(Number(amountLei), remaining);
       }
       if (chargeAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
 
-      const dbPmtId = await createPendingPayment({ orderId: order.id, amountLei: chargeAmount, tipLei, socketId: socket.id, mode: 'flat' });
+      const dbPmtId = await createPendingPayment({ orderId: order.id, amountLei: chargeAmount, tipLei: tip, socketId: socket.id, mode: 'flat' });
 
       let payment;
       try {
-        payment = await requestPayment({ amountLei: chargeAmount, tipLei, orderId: order.id, tableNumber: tbl });
+        payment = await requestPayment({ amountLei: chargeAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         return ack?.({ error: err.message });
@@ -553,7 +634,7 @@ io.on('connection', socket => {
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
 
-      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei: chargeAmount, tipLei, mode: 'flat' };
+      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, orderId: order.id, amountLei: chargeAmount, tipLei: tip, mode: 'flat' };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
@@ -574,6 +655,7 @@ io.on('connection', socket => {
   });
 
   socket.on('disconnect', async () => {
+    socketThrottle.delete(socket.id);
     try {
       // If a payment is in-flight, keep items claimed — settlement/timeout handles them
       if (socketInflight.has(socket.id)) {
@@ -892,6 +974,17 @@ async function reconcilePendingPayments() {
 }
 
 setInterval(reconcilePendingPayments, 30_000);
+
+// ─── global error handler ─────────────────────────────────────────────────────
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, _next) => {
+  console.error('[express error]', err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
+process.on('uncaughtException',  err  => console.error('[uncaughtException]',  err));
+process.on('unhandledRejection', err  => console.error('[unhandledRejection]', err));
 
 // ─── start ────────────────────────────────────────────────────────────────────
 

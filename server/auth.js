@@ -17,6 +17,9 @@ import crypto from 'crypto';
 import { pool } from './db.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nota-dev-secret-change-in-production';
+if (!process.env.JWT_SECRET) {
+  console.warn('[auth] ⚠️  JWT_SECRET not set — using insecure dev default. Set JWT_SECRET in production.');
+}
 
 // ─── simple JWT (no external library needed) ──────────────────────────────────
 
@@ -82,6 +85,35 @@ export function requireAuth(req, res, next) {
 
   req.restaurant = payload;   // { restaurantId, name, email }
   next();
+}
+
+// ─── login brute-force protection (in-memory, resets on restart) ─────────────
+
+const MAX_FAILURES   = 5;
+const LOCKOUT_MS     = 15 * 60 * 1000; // 15 min
+
+// Map<email|ip → { failures, lockedUntil }>
+const loginAttempts = new Map();
+
+function checkLockout(key) {
+  const s = loginAttempts.get(key);
+  if (!s) return false;
+  if (s.lockedUntil && Date.now() < s.lockedUntil) return true;
+  if (s.lockedUntil && Date.now() >= s.lockedUntil) {
+    loginAttempts.delete(key);
+  }
+  return false;
+}
+
+function recordFailure(key) {
+  const s = loginAttempts.get(key) || { failures: 0, lockedUntil: null };
+  s.failures++;
+  if (s.failures >= MAX_FAILURES) s.lockedUntil = Date.now() + LOCKOUT_MS;
+  loginAttempts.set(key, s);
+}
+
+function clearAttempts(key) {
+  loginAttempts.delete(key);
 }
 
 // ─── route handlers ───────────────────────────────────────────────────────────
@@ -150,17 +182,34 @@ export async function login(req, res) {
     return res.status(400).json({ error: 'email and password are required' });
   }
 
+  const ip        = req.ip || req.socket.remoteAddress || 'unknown';
+  const emailKey  = `email:${email.toLowerCase()}`;
+  const ipKey     = `ip:${ip}`;
+
+  if (checkLockout(emailKey) || checkLockout(ipKey)) {
+    return res.status(429).json({ error: 'Too many failed attempts — try again in 15 minutes' });
+  }
+
   const { rows } = await pool.query(
     'SELECT id, name, email, password_hash FROM restaurants WHERE email = $1',
     [email.toLowerCase()]
   );
   if (!rows.length) {
+    recordFailure(emailKey);
+    recordFailure(ipKey);
     return res.status(401).json({ error: 'Invalid credentials' });
   }
 
   const restaurant = rows[0];
   const valid = await checkPassword(password, restaurant.password_hash);
-  if (!valid) return res.status(401).json({ error: 'Invalid credentials' });
+  if (!valid) {
+    recordFailure(emailKey);
+    recordFailure(ipKey);
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+
+  clearAttempts(emailKey);
+  clearAttempts(ipKey);
 
   const token = signJWT({
     restaurantId: restaurant.id,
