@@ -9,7 +9,7 @@
  * ENV vars:
  *   DATABASE_URL          Postgres connection string (required)
  *   JWT_SECRET            Random secret for auth tokens (required in prod)
- *   APP_URL               Public URL e.g. https://nota.up.railway.app
+ *   APP_URL               Public URL e.g. https://paynota.com
  *   PORT                  Default 3000
  *   IIKO_API_LOGIN / IIKO_BASE_URL / IIKO_ORG_ID  → enables live POS sync
  *   MIA_BASE_URL / MIA_MERCHANT_ID / MIA_SECRET / MIA_WEBHOOK_SECRET  → enables real payments
@@ -38,9 +38,31 @@ const io        = new Server(httpServer, { cors: { origin: '*' }, perMessageDefl
 const PORT      = process.env.PORT || 3000;
 const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
+// Canonical hostname — used for the production 301 redirect.
+// Derived from APP_URL so no second variable needs to be set.
+let _canonicalHost = null;
+try { _canonicalHost = new URL(APP_URL).hostname; } catch {}
+const CANONICAL_HOST      = _canonicalHost;
+const ENFORCE_CANONICAL   = APP_URL.startsWith('https://') &&
+                            !!CANONICAL_HOST &&
+                            !CANONICAL_HOST.includes('localhost') &&
+                            !CANONICAL_HOST.includes('127.0.0.1');
+
 // ─── middleware ───────────────────────────────────────────────────────────────
 
 app.set('trust proxy', 1);
+
+// 301-redirect any non-canonical host (old Railway subdomain, www, etc.) to the canonical URL.
+// Only active in production (when APP_URL is an https:// non-localhost address).
+if (ENFORCE_CANONICAL) {
+  app.use((req, res, next) => {
+    if (req.hostname !== CANONICAL_HOST) {
+      return res.redirect(301, `https://${CANONICAL_HOST}${req.url}`);
+    }
+    next();
+  });
+}
+
 app.use(compression());
 app.use(helmet({ contentSecurityPolicy: false }));
 app.use('/api/payment/webhook', express.raw({ type: '*/*' }));

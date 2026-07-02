@@ -198,7 +198,7 @@ export async function payClaimedItems(socketId, tipLei, restaurantId) {
  * We refresh our local order cache and emit a socket update.
  *
  * Register your webhook URL in iiko back-office:
- *   Settings → Notifications → Webhook → URL: https://your-app.up.railway.app/api/iiko/webhook
+ *   Settings → Notifications → Webhook → URL: https://paynota.com/api/iiko/webhook
  */
 export async function parseIikoWebhook(payload) {
   // iiko sends { eventType, organizationId, correlationId, tableOrders: [...] }
