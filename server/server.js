@@ -68,6 +68,7 @@ app.set('trust proxy', 1);
 // normalises X-Forwarded-Host to the custom domain for all requests.
 if (ENFORCE_CANONICAL) {
   app.use((req, res, next) => {
+    if (req.path === '/health') return next(); // healthcheck must not redirect
     const rawHost = (req.headers.host || '').split(':')[0].toLowerCase();
     if (rawHost && rawHost !== CANONICAL_HOST) {
       return res.redirect(301, `https://${CANONICAL_HOST}${req.url}`);
