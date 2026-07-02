@@ -1091,7 +1091,7 @@ async function reconcilePendingPayments() {
   try {
     const { rows: pending } = await pool.query(`
       SELECT p.id, p.mia_payment_id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
-             o.table_number, o.restaurant_id, p.created_at
+             o.table_number, o.restaurant_id, o.created_at
       FROM payments p
       JOIN orders o ON o.id = p.order_id
       WHERE p.status = 'pending'
