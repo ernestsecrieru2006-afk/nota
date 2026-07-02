@@ -124,11 +124,7 @@ export async function getPaymentStatus(paymentId) {
  * rawBody must be the raw Buffer/string (not parsed JSON).
  */
 export function verifyWebhookSignature(rawBody, signatureHeader) {
-  if (!WH_SECRET) {
-    // No secret configured → accept in dev, warn loudly
-    console.warn('[MIA] MIA_WEBHOOK_SECRET not set — accepting all webhooks (dev mode only!)');
-    return true;
-  }
+  if (!WH_SECRET) return false; // fail closed — no secret means reject all
   const expected = crypto
     .createHmac('sha256', WH_SECRET)
     .update(typeof rawBody === 'string' ? rawBody : rawBody.toString('utf8'))

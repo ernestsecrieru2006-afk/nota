@@ -468,24 +468,25 @@
   const token  = params.get('t') || '';
 
   // ── App state ─────────────────────────────────────────────────────────────────
-  let order         = null;
-  let resolvedTable = null;
-  let mySelected    = new Set();   // item IDs selected in 'mine' mode
-  let splitMode     = 'mine';
-  let guestCount    = 2;
-  let tipPercent    = 10;
-  let payBase       = 0;
-  let payTipLei     = 0;
-  let payTotal      = 0;
-  let payMethod     = 'mia';
-  let confirming    = false;       // guard against double-tap
+  let order           = null;
+  let resolvedTable   = null;
+  let mySelected      = new Set();   // item IDs selected in 'mine' mode
+  let splitMode       = 'mine';
+  let guestCount      = 2;
+  let tipPercent      = 10;
+  let payBase         = 0;
+  let payTipLei       = 0;
+  let payTotal        = 0;
+  let payMethod       = 'mia';
+  let confirming      = false;       // guard against double-tap
+  let pendingPaymentId = null;       // held across reconnects for recovery
 
   // ── Socket ────────────────────────────────────────────────────────────────────
   const socket = io({ transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
     if (!token) return showScreen('error');
-    socket.emit('join-table', { token });
+    socket.emit('join-table', { token, paymentId: pendingPaymentId });
   });
 
   socket.on('error', ({ message } = {}) => {
@@ -546,7 +547,8 @@
   // ── payment-confirmed: ONLY signal that advances to success screen ────────────
   // The client NEVER decides payment success on its own.
   socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [] }) => {
-    confirming = false;
+    confirming       = false;
+    pendingPaymentId = null;
     document.getElementById('ov-mia').classList.remove('show');
 
     const tva = Number(total) * 20 / 120;
@@ -585,7 +587,8 @@
 
   // ── payment-failed: ONLY signal that advances to failure screen ───────────────
   socket.on('payment-failed', ({ reason } = {}) => {
-    confirming = false;
+    confirming       = false;
+    pendingPaymentId = null;
     document.getElementById('ov-mia').classList.remove('show');
     document.getElementById('fail-reason').textContent = reason || 'A apărut o problemă la procesarea plății.';
     mySelected = new Set();   // server already released our claims
@@ -843,18 +846,22 @@
 
     document.getElementById('ov-mia').classList.add('show');
 
-    const onAckError = ({ error } = {}) => {
-      if (!error) return;
-      confirming = false;
-      document.getElementById('ov-mia').classList.remove('show');
-      document.getElementById('fail-reason').textContent = error;
-      showScreen('fail');
+    const onAck = (ack = {}) => {
+      if (ack.error) {
+        confirming = false;
+        document.getElementById('ov-mia').classList.remove('show');
+        document.getElementById('fail-reason').textContent = ack.error;
+        showScreen('fail');
+        return;
+      }
+      // Store paymentId so we can recover if we reconnect before confirmation arrives
+      if (ack.paymentId) pendingPaymentId = ack.paymentId;
     };
 
     if (splitMode === 'mine') {
-      socket.emit('pay-claimed', { tipLei: payTipLei, tableNumber: resolvedTable, orderId: order?.id }, onAckError);
+      socket.emit('pay-claimed', { tipLei: payTipLei, tableNumber: resolvedTable, orderId: order?.id }, onAck);
     } else {
-      socket.emit('pay-flat', { amountLei: calcShare(), tipLei: payTipLei, mode: splitMode, tableNumber: resolvedTable, orderId: order?.id }, onAckError);
+      socket.emit('pay-flat', { amountLei: calcShare(), tipLei: payTipLei, mode: splitMode, tableNumber: resolvedTable, orderId: order?.id }, onAck);
     }
   }
 

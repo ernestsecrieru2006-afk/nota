@@ -11,6 +11,7 @@
  *   JWT_SECRET            Random secret for auth tokens (required in prod)
  *   APP_URL               Public URL e.g. https://paynota.com
  *   PORT                  Default 3000
+ *   DEV_API_KEY           Optional secret header for /api/dev/* endpoints
  *   IIKO_API_LOGIN / IIKO_BASE_URL / IIKO_ORG_ID  → enables live POS sync
  *   MIA_BASE_URL / MIA_MERCHANT_ID / MIA_SECRET / MIA_WEBHOOK_SECRET  → enables real payments
  */
@@ -27,16 +28,19 @@ import rateLimit       from 'express-rate-limit';
 import QRCode           from 'qrcode';
 
 import { pool } from './db.js';
-import { getOpenOrder, addItem, parseIikoWebhook } from './iiko.js';
+import { getOpenOrder, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, verifyWebhookSignature, parseWebhookPayload, setMockFailNext } from './mia.js';
-import { register, login, me, requireAuth } from './auth.js';
+import { register, login, me, requireAuth, verifyJWT } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app       = express();
 const httpServer= createServer(app);
-const io        = new Server(httpServer, { cors: { origin: '*' }, perMessageDeflate: true });
 const PORT      = process.env.PORT || 3000;
 const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
+
+const DEV_API_KEY = process.env.DEV_API_KEY || null;
+const MIA_LIVE    = !!(process.env.MIA_MERCHANT_ID && process.env.MIA_SECRET);
+const IIKO_LIVE   = !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID);
 
 // Canonical hostname — used for the production 301 redirect.
 // Derived from APP_URL so no second variable needs to be set.
@@ -48,15 +52,20 @@ const ENFORCE_CANONICAL   = APP_URL.startsWith('https://') &&
                             !CANONICAL_HOST.includes('localhost') &&
                             !CANONICAL_HOST.includes('127.0.0.1');
 
+// Socket.io: tighten CORS to APP_URL in production
+const io = new Server(httpServer, {
+  cors: { origin: ENFORCE_CANONICAL ? APP_URL : '*' },
+  perMessageDeflate: true,
+});
+
 // ─── middleware ───────────────────────────────────────────────────────────────
 
 app.set('trust proxy', 1);
 
-// 301-redirect any non-canonical host (old Railway subdomain, www, etc.) to the canonical URL.
-// Only active in production (when APP_URL is an https:// non-localhost address).
+// 301-redirect any non-canonical host to the canonical URL.
+// Only active in production (when APP_URL is https:// non-localhost).
 // Use req.headers.host (raw header) rather than req.hostname because Railway's Hikari proxy
-// normalises X-Forwarded-Host to the custom domain for all requests, making req.hostname
-// always equal to CANONICAL_HOST regardless of which domain the client actually hit.
+// normalises X-Forwarded-Host to the custom domain for all requests.
 if (ENFORCE_CANONICAL) {
   app.use((req, res, next) => {
     const rawHost = (req.headers.host || '').split(':')[0].toLowerCase();
@@ -68,7 +77,19 @@ if (ENFORCE_CANONICAL) {
 }
 
 app.use(compression());
-app.use(helmet({ contentSecurityPolicy: false }));
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc:  ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+      styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
+      fontSrc:    ["'self'", "fonts.gstatic.com"],
+      connectSrc: ["'self'", "ws:", "wss:"],
+      imgSrc:     ["'self'", "data:"],
+      objectSrc:  ["'none'"],
+    },
+  },
+}));
 app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
 app.use(express.json({ limit: '100kb' }));
@@ -102,6 +123,31 @@ const limiterPaymentHttp = rateLimit({
 
 app.use(limiterGlobal);
 
+// ─── auth middleware helpers ──────────────────────────────────────────────────
+
+// DEV_API_KEY or JWT: gates /api/dev/* routes.
+// Key-auth: req.restaurant.restaurantId is null → body restaurantId honored.
+// JWT-auth: req.restaurant.restaurantId from token → body restaurantId ignored.
+function requireDevAuth(req, res, next) {
+  if (DEV_API_KEY && req.headers['x-dev-key'] === DEV_API_KEY) {
+    req.restaurant = { restaurantId: null };
+    return next();
+  }
+  requireAuth(req, res, next);
+}
+
+// JWT from ?token= query param OR Authorization: Bearer header.
+// Used for browser-navigated pages (e.g. /qrcodes opened in a new tab).
+function requireAuthOrQuery(req, res, next) {
+  const queryToken = req.query.token;
+  if (queryToken) {
+    const payload = verifyJWT(queryToken);
+    if (payload) { req.restaurant = payload; return next(); }
+    return res.status(401).send('<p>Token invalid. <a href="/dashboard">Înapoi la dashboard</a></p>');
+  }
+  requireAuth(req, res, next);
+}
+
 // ─── auth routes ─────────────────────────────────────────────────────────────
 
 app.post('/api/auth/register', limiterAuth, register);
@@ -109,6 +155,8 @@ app.post('/api/auth/login',    limiterAuth, login);
 app.get( '/api/auth/me',       requireAuth, me);
 
 // ─── table / order routes ─────────────────────────────────────────────────────
+// NOTE: Legacy numeric routes (GET /api/table/:n, POST /api/table/:n/item) removed —
+// they bypassed token security. Use GET /api/table/by-token/:token instead.
 
 app.get('/api/table/by-token/:token', async (req, res) => {
   try {
@@ -121,52 +169,17 @@ app.get('/api/table/by-token/:token', async (req, res) => {
     res.json({ ...order, table_number: tbl.number });
   } catch (err) {
     console.error('[GET /api/table/by-token]', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/table/:n', async (req, res) => {
-  try {
-    const order = await getOpenOrder(Number(req.params.n));
-    res.json(order);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.get('/api/dev/table-token/:n', async (req, res) => {
-  try {
-    const rId    = req.query.restaurantId ? Number(req.query.restaurantId) : null;
-    const filter = rId ? ' AND restaurant_id = $2' : '';
-    const params = rId ? [Number(req.params.n), rId] : [Number(req.params.n)];
-    const { rows: [tbl] } = await pool.query(
-      `SELECT number, token FROM tables WHERE number = $1${filter} LIMIT 1`,
-      params
-    );
-    if (!tbl) return res.status(404).json({ error: 'Table not found' });
-    res.json({ number: tbl.number, token: tbl.token, url: `${APP_URL}/?t=${tbl.token}` });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-app.post('/api/table/:n/item', async (req, res) => {
-  try {
-    const { name, price } = req.body;
-    await addItem(Number(req.params.n), name, price);
-    const order = await getOpenOrder(Number(req.params.n));
-    io.to(`table-${req.params.n}`).emit('order-update', order);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Eroare internă' });
   }
 });
 
 // ─── payment webhook ──────────────────────────────────────────────────────────
 
 app.post('/api/payment/webhook', limiterPaymentHttp, async (req, res) => {
+  // Mock mode: settlements happen via internal timers only — reject external webhooks.
+  if (!MIA_LIVE) return res.status(403).json({ error: 'Webhook indisponibil în modul demo' });
   try {
-    const sig   = req.headers['x-mia-signature'] || req.headers['x-signature'] || '';
+    const sig = req.headers['x-mia-signature'] || req.headers['x-signature'] || '';
     if (!verifyWebhookSignature(req.body, sig)) return res.status(401).send('Bad signature');
 
     const body    = JSON.parse(req.body.toString());
@@ -182,27 +195,36 @@ app.post('/api/payment/webhook', limiterPaymentHttp, async (req, res) => {
     res.json({ received: true });
   } catch (err) {
     console.error('[webhook]', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Eroare internă' });
   }
 });
 
 // ─── iiko webhook ─────────────────────────────────────────────────────────────
 
-app.post('/api/iiko/webhook', async (req, res) => {
+app.post('/api/iiko/webhook', limiterPaymentHttp, async (req, res) => {
+  if (!IIKO_LIVE) return res.status(403).json({ error: 'iiko not configured' });
   try {
+    if (!req.body || req.body.length === 0) return res.status(400).json({ error: 'Empty payload' });
     const body   = JSON.parse(req.body.toString());
     const orders = await parseIikoWebhook(body);
     for (const o of orders) {
       if (o.tableNumber) {
-        const fresh = await getOpenOrder(o.tableNumber);
-        io.to(`table-${o.tableNumber}`).emit('order-update', fresh);
-        io.to('dashboard').emit('order-update', { tableNumber: o.tableNumber, order: fresh });
+        // Resolve restaurant from table number (single-org iiko setup)
+        const { rows: [tbl] } = await pool.query(
+          'SELECT restaurant_id FROM tables WHERE number = $1 LIMIT 1', [o.tableNumber]
+        );
+        const rid   = tbl?.restaurant_id;
+        const fresh = await getOpenOrder(o.tableNumber, rid);
+        if (rid) {
+          io.to(`table-${rid}-${o.tableNumber}`).emit('order-update', fresh);
+          io.to(`dashboard-${rid}`).emit('order-update', { tableNumber: o.tableNumber, order: fresh });
+        }
       }
     }
     res.json({ received: true });
   } catch (err) {
     console.error('[iiko webhook]', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Eroare internă' });
   }
 });
 
@@ -220,7 +242,10 @@ app.get('/api/dashboard/stats', requireAuth, async (req, res) => {
       WHERE restaurant_id = $1 AND status = 'paid' AND paid_at >= CURRENT_DATE
     `, [rId]);
     res.json(rows[0]);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[stats]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
 app.get('/api/dashboard/top-dishes', requireAuth, async (req, res) => {
@@ -236,7 +261,10 @@ app.get('/api/dashboard/top-dishes', requireAuth, async (req, res) => {
       ORDER BY times_ordered DESC LIMIT 10
     `, [rId]);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[top-dishes]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
 app.get('/api/dashboard/hourly', requireAuth, async (req, res) => {
@@ -251,7 +279,10 @@ app.get('/api/dashboard/hourly', requireAuth, async (req, res) => {
       GROUP BY hour ORDER BY hour
     `, [rId]);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[hourly]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
 app.get('/api/dashboard/recent', requireAuth, async (req, res) => {
@@ -265,7 +296,10 @@ app.get('/api/dashboard/recent', requireAuth, async (req, res) => {
       ORDER BY p.paid_at DESC LIMIT 30
     `, [rId]);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[recent]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
 app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
@@ -284,15 +318,54 @@ app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
       GROUP BY t.number ORDER BY t.number
     `, [rId]);
     res.json(rows);
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[tables]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
-// ─── dev / demo routes ────────────────────────────────────────────────────────
+// ─── CSV export ───────────────────────────────────────────────────────────────
 
-app.post('/api/dev/seed-table', async (req, res) => {
+app.get('/api/dashboard/export', requireAuth, async (req, res) => {
+  try {
+    const rId       = req.restaurant.restaurantId;
+    const date      = req.query.date;
+    const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
+
+    const { rows } = await pool.query(`
+      SELECT p.paid_at, o.table_number, p.amount_lei, p.tip_lei,
+             (p.amount_lei + p.tip_lei) AS total_lei, p.mia_payment_id
+      FROM payments p JOIN orders o ON o.id = p.order_id
+      WHERE p.restaurant_id = $1 AND p.status = 'paid'
+        ${validDate ? 'AND p.paid_at::date = $2::date' : 'AND p.paid_at >= CURRENT_DATE'}
+      ORDER BY p.paid_at
+    `, validDate ? [rId, validDate] : [rId]);
+
+    const csvDate = validDate || new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="nota-${csvDate}.csv"`);
+
+    const lines = [
+      'Ora,Masa,Suma (lei),Bacsis (lei),Total (lei),MIA ID',
+      ...rows.map(r => {
+        const time = new Date(r.paid_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+        return [time, r.table_number, r.amount_lei, r.tip_lei, r.total_lei, r.mia_payment_id || ''].join(',');
+      }),
+    ];
+    res.send(lines.join('\n'));
+  } catch (err) {
+    console.error('[export]', err);
+    res.status(500).json({ error: 'Eroare la export' });
+  }
+});
+
+// ─── dev / demo routes (require DEV_API_KEY header or JWT) ────────────────────
+
+app.post('/api/dev/seed-table', requireDevAuth, async (req, res) => {
   try {
     const tableNumber  = req.body.tableNumber  ?? 1;
-    const restaurantId = req.body.restaurantId ?? 1;
+    // JWT auth: restaurantId from token; key auth: from body
+    const restaurantId = req.restaurant.restaurantId ?? req.body.restaurantId ?? 1;
 
     const { rows: [tbl] } = await pool.query(
       'SELECT id FROM tables WHERE restaurant_id = $1 AND number = $2',
@@ -340,13 +413,16 @@ app.post('/api/dev/seed-table', async (req, res) => {
     );
 
     const fresh = await getOpenOrder(tableNumber, restaurantId);
-    io.to(`table-${tableNumber}`).emit('order-update', fresh);
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', fresh);
     res.json({ ok: true, orderId: order.id, items: DEMO_DISHES.length });
-  } catch (err) { res.status(500).json({ error: err.message }); }
+  } catch (err) {
+    console.error('[seed-table]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
-app.post('/api/dev/seed-payments', async (req, res) => {
-  const rId = req.body.restaurantId || 1;
+app.post('/api/dev/seed-payments', requireDevAuth, async (req, res) => {
+  const rId = req.restaurant.restaurantId ?? req.body.restaurantId ?? 1;
   const DISHES = [
     ['Spaghetti Carbonara', 185], ['Risotto ai Funghi', 210], ['Branzino al Forno', 290],
     ['Tiramisù', 95], ['Vino Rosso (pahar)', 75], ['Acqua Minerale', 35],
@@ -382,22 +458,40 @@ app.post('/api/dev/seed-payments', async (req, res) => {
     res.json({ ok: true, seeded: 20 });
   } catch (err) {
     await client.query('ROLLBACK');
-    res.status(500).json({ error: err.message });
+    console.error('[seed-payments]', err);
+    res.status(500).json({ error: 'Eroare internă' });
   } finally {
     client.release();
   }
 });
 
 // Trigger mock payment failure for the NEXT payment initiated
-app.post('/api/dev/mock-fail-next', (req, res) => {
+app.post('/api/dev/mock-fail-next', requireDevAuth, (req, res) => {
   setMockFailNext();
   res.json({ ok: true, message: 'Next mock payment will be declined' });
 });
 
-// ─── QR codes ─────────────────────────────────────────────────────────────────
+app.get('/api/dev/table-token/:n', requireDevAuth, async (req, res) => {
+  try {
+    const rId    = req.restaurant.restaurantId ?? (req.query.restaurantId ? Number(req.query.restaurantId) : null);
+    const filter = rId ? ' AND restaurant_id = $2' : '';
+    const params = rId ? [Number(req.params.n), rId] : [Number(req.params.n)];
+    const { rows: [tbl] } = await pool.query(
+      `SELECT number, token FROM tables WHERE number = $1${filter} LIMIT 1`,
+      params
+    );
+    if (!tbl) return res.status(404).json({ error: 'Table not found' });
+    res.json({ number: tbl.number, token: tbl.token, url: `${APP_URL}/?t=${tbl.token}` });
+  } catch (err) {
+    console.error('[dev/table-token]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
 
-app.get('/qrcodes', async (req, res) => {
-  const restaurantId = req.query.r || 1;
+// ─── QR codes (require dashboard auth, scoped to calling restaurant) ──────────
+
+app.get('/qrcodes', requireAuthOrQuery, async (req, res) => {
+  const restaurantId = req.restaurant.restaurantId;
   const { rows: tables } = await pool.query(
     'SELECT number, token FROM tables WHERE restaurant_id = $1 ORDER BY number',
     [restaurantId]
@@ -433,8 +527,8 @@ ${qrs.map(({n,url,svg})=>`<div class="card"><h2>Masa ${n}</h2>${svg}<small>${url
 
 app.get('/health', (_, res) => res.json({
   ok:   true,
-  iiko: !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID),
-  mia:  !!(process.env.MIA_MERCHANT_ID && process.env.MIA_SECRET),
+  iiko: IIKO_LIVE,
+  mia:  MIA_LIVE,
   db:   !!process.env.DATABASE_URL,
 }));
 
@@ -443,7 +537,7 @@ app.get('/health', (_, res) => res.json({
 // reconciliation picks up pending rows from DB on next tick).
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// paymentId (MIA id) → { dbPaymentId, socketId, tableNumber, orderId, amountLei, tipLei, mode, timer }
+// paymentId (MIA id) → { dbPaymentId, socketId, tableNumber, restaurantId, orderId, amountLei, tipLei, mode, itemIds, timer }
 const paymentMeta = new Map();
 
 // socketId → miaPaymentId — to know if this socket has an in-flight payment
@@ -473,7 +567,7 @@ io.on('connection', socket => {
   let currentTable = null;
   let currentRestaurantId = null;
 
-  socket.on('join-table', async ({ token, tableNumber, restaurantId } = {}) => {
+  socket.on('join-table', async ({ token, tableNumber, restaurantId, paymentId } = {}) => {
     if (checkThrottle(socket)) return;
     try {
       let resolvedNumber = tableNumber;
@@ -492,15 +586,46 @@ io.on('connection', socket => {
       if (!resolvedNumber) return socket.emit('error', { message: 'Masă invalidă' });
       currentTable = resolvedNumber;
       currentRestaurantId = resolvedRestaurantId;
-      socket.join(`table-${resolvedNumber}`);
+      socket.join(`table-${resolvedRestaurantId}-${resolvedNumber}`);
       const order = await getOpenOrder(resolvedNumber, currentRestaurantId);
       socket.emit('order-update', order);
+
+      // Payment recovery on reconnect: re-emit confirmed/failed based on DB state
+      if (paymentId && typeof paymentId === 'string' && paymentId.length < 128) {
+        try {
+          const { rows: [pmt] } = await pool.query(
+            `SELECT p.status, p.amount_lei, p.tip_lei, p.mode
+             FROM payments p JOIN orders o ON o.id = p.order_id
+             WHERE p.mia_payment_id = $1 AND o.restaurant_id = $2`,
+            [paymentId, resolvedRestaurantId]
+          );
+          if (pmt) {
+            if (pmt.status === 'paid') {
+              socket.emit('payment-confirmed', {
+                amountLei: pmt.amount_lei, tipLei: pmt.tip_lei,
+                total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
+                mode: pmt.mode, itemIds: [],
+              });
+            } else if (['failed', 'expired', 'cancelled', 'duplicate'].includes(pmt.status)) {
+              socket.emit('payment-failed', { reason: 'Plata nu a putut fi confirmată' });
+            }
+          }
+        } catch (recErr) {
+          console.error('[join-table recovery]', recErr);
+        }
+      }
     } catch (err) {
-      socket.emit('error', { message: err.message });
+      console.error('[join-table]', err);
+      socket.emit('error', { message: 'Eroare internă' });
     }
   });
 
-  socket.on('join-dashboard', () => { socket.join('dashboard'); });
+  // Authenticated: requires valid JWT in the event payload
+  socket.on('join-dashboard', ({ token: dashToken } = {}) => {
+    const payload = verifyJWT(dashToken);
+    if (!payload) return socket.emit('error', { message: 'Unauthorized' });
+    socket.join(`dashboard-${payload.restaurantId}`);
+  });
 
   socket.on('claim-items', async (itemIds, ack) => {
     if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
@@ -524,13 +649,14 @@ io.on('connection', socket => {
 
       const contestedIds = itemIds.filter(id => !claimed.find(r => r.id === id));
       if (claimed.length > 0) {
-        io.to(`table-${currentTable}`).emit('items-patch',
+        io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           claimed.map(r => ({ id: r.id, status: 'claimed', claimed_by: socket.id }))
         );
       }
       ack?.({ claimed: claimed.map(r => r.id), contested: contestedIds });
     } catch (err) {
-      ack?.({ error: err.message });
+      console.error('[claim-items]', err);
+      ack?.({ error: 'Eroare internă' });
     }
   });
 
@@ -547,7 +673,7 @@ io.on('connection', socket => {
         RETURNING oi.id
       `, [socket.id, currentTable]);
       if (released.length > 0) {
-        io.to(`table-${currentTable}`).emit('items-patch',
+        io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           released.map(r => ({ id: r.id, status: 'available', claimed_by: null }))
         );
       }
@@ -571,13 +697,14 @@ io.on('connection', socket => {
         RETURNING oi.id
       `, [itemId, socket.id, currentTable]);
       if (rows.length > 0) {
-        io.to(`table-${currentTable}`).emit('items-patch',
+        io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           [{ id: rows[0].id, status: 'available', claimed_by: null }]
         );
       }
       ack?.({ released: rows.map(r => r.id) });
     } catch (err) {
-      ack?.({ error: err.message });
+      console.error('[release-item]', err);
+      ack?.({ error: 'Eroare internă' });
     }
   });
 
@@ -601,7 +728,7 @@ io.on('connection', socket => {
         payment = await requestPayment({ amountLei, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
-        return ack?.({ error: err.message });
+        return ack?.({ error: 'Plata nu a putut fi inițiată' });
       }
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
@@ -622,7 +749,7 @@ io.on('connection', socket => {
       }
     } catch (err) {
       console.error('[pay-claimed]', err);
-      ack?.({ error: err.message });
+      ack?.({ error: 'Eroare internă' });
     }
   });
 
@@ -662,7 +789,7 @@ io.on('connection', socket => {
         payment = await requestPayment({ amountLei: chargeAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
-        return ack?.({ error: err.message });
+        return ack?.({ error: 'Plata nu a putut fi inițiată' });
       }
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
@@ -683,7 +810,7 @@ io.on('connection', socket => {
       }
     } catch (err) {
       console.error('[pay-flat]', err);
-      ack?.({ error: err.message });
+      ack?.({ error: 'Eroare internă' });
     }
   });
 
@@ -701,7 +828,7 @@ io.on('connection', socket => {
         RETURNING id
       `, [socket.id]);
       if (currentTable && released.length > 0) {
-        io.to(`table-${currentTable}`).emit('items-patch',
+        io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           released.map(r => ({ id: r.id, status: 'available', claimed_by: null }))
         );
       }
@@ -799,8 +926,8 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
     if (s) s.emit('payment-confirmed', { amountLei, tipLei, total: Number(amountLei) + Number(tipLei), mode, itemIds: itemIds || [] });
 
     const order = await getOpenOrder(tableNumber, restaurantId);
-    io.to(`table-${tableNumber}`).emit('order-update', order);
-    io.to('dashboard').emit('payment-made', {
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', order);
+    io.to(`dashboard-${restaurantId}`).emit('payment-made', {
       table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
       paid_at: new Date().toISOString(),
     });
@@ -861,7 +988,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     if (s) s.emit('payment-failed', { reason });
 
     const order = await getOpenOrder(tableNumber, restaurantId);
-    io.to(`table-${tableNumber}`).emit('order-update', order);
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', order);
 
     cleanupMeta(miaPaymentId, socketId);
   } catch (err) {
@@ -910,8 +1037,8 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
     await client.query('COMMIT');
 
     const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
-    io.to(`table-${pmt.table_number}`).emit('order-update', order);
-    io.to('dashboard').emit('payment-made', {
+    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', order);
+    io.to(`dashboard-${pmt.restaurant_id}`).emit('payment-made', {
       table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
       paid_at: new Date().toISOString(),
     });
@@ -943,7 +1070,7 @@ async function releaseFromDB(pmt, reason = '') {
     await client.query('COMMIT');
 
     const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
-    io.to(`table-${pmt.table_number}`).emit('order-update', order);
+    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', order);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[releaseFromDB]', err);
@@ -1016,7 +1143,7 @@ app.use((err, req, res, _next) => {
     return res.status(err.status).json({ error: err.message || 'Request error' });
   }
   console.error('[express error]', err);
-  res.status(500).json({ error: 'Internal server error' });
+  res.status(500).json({ error: 'Eroare internă' });
 });
 
 process.on('uncaughtException',  err  => console.error('[uncaughtException]',  err));
@@ -1027,8 +1154,8 @@ process.on('unhandledRejection', err  => console.error('[unhandledRejection]', e
 httpServer.listen(PORT, async () => {
   console.log(`\n🍽  nota. server running on port ${PORT}`);
   console.log(`   App URL:  ${APP_URL}`);
-  console.log(`   iiko:     ${process.env.IIKO_API_LOGIN ? '✅ LIVE' : '⚠️  mock'}`);
-  console.log(`   MIA:      ${process.env.MIA_MERCHANT_ID ? '✅ LIVE' : '⚠️  mock'}`);
+  console.log(`   iiko:     ${IIKO_LIVE ? '✅ LIVE' : '⚠️  mock'}`);
+  console.log(`   MIA:      ${MIA_LIVE  ? '✅ LIVE' : '⚠️  mock'}`);
   console.log(`   DB:       ${process.env.DATABASE_URL ? '✅ connected' : '❌ DATABASE_URL missing'}`);
 
   // Release any items that were left claimed by a socket from the previous process

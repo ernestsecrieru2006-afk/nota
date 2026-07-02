@@ -36,7 +36,7 @@ function signJWT(payload) {
   return `${header}.${body}.${sig}`;
 }
 
-function verifyJWT(token) {
+export function verifyJWT(token) {
   try {
     const [header, body, sig] = token.split('.');
     const expected = base64url(
@@ -89,8 +89,16 @@ export function requireAuth(req, res, next) {
 
 // ─── login brute-force protection (in-memory, resets on restart) ─────────────
 
-const MAX_FAILURES   = 5;
-const LOCKOUT_MS     = 15 * 60 * 1000; // 15 min
+const MAX_FAILURES = 5;
+
+// Exponential backoff: 2nd fail=30s, 3rd=2min, 4th=5min, 5th+=10min
+function getLockoutMs(failures) {
+  if (failures < 2) return 0;
+  if (failures < 3) return 30_000;
+  if (failures < 4) return 120_000;
+  if (failures < 5) return 300_000;
+  return 10 * 60_000;
+}
 
 // Map<email|ip → { failures, lockedUntil }>
 const loginAttempts = new Map();
@@ -99,16 +107,15 @@ function checkLockout(key) {
   const s = loginAttempts.get(key);
   if (!s) return false;
   if (s.lockedUntil && Date.now() < s.lockedUntil) return true;
-  if (s.lockedUntil && Date.now() >= s.lockedUntil) {
-    loginAttempts.delete(key);
-  }
+  if (s.lockedUntil && Date.now() >= s.lockedUntil) loginAttempts.delete(key);
   return false;
 }
 
 function recordFailure(key) {
   const s = loginAttempts.get(key) || { failures: 0, lockedUntil: null };
   s.failures++;
-  if (s.failures >= MAX_FAILURES) s.lockedUntil = Date.now() + LOCKOUT_MS;
+  const ms = getLockoutMs(s.failures);
+  s.lockedUntil = ms > 0 ? Date.now() + ms : null;
   loginAttempts.set(key, s);
 }
 
@@ -188,7 +195,7 @@ export async function login(req, res) {
   const ipKey     = `ip:${ip}`;
 
   if (checkLockout(emailKey) || checkLockout(ipKey)) {
-    return res.status(429).json({ error: 'Too many failed attempts — try again in 15 minutes' });
+    return res.status(429).json({ error: 'Prea multe încercări eșuate — încearcă mai târziu' });
   }
 
   const { rows } = await pool.query(

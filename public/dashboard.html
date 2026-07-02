@@ -649,7 +649,7 @@ html, body {
         <a class="nav-item active">
           <span class="nav-icon">▪</span>Tablou de bord
         </a>
-        <a class="nav-item" href="/qrcodes" target="_blank">
+        <a class="nav-item" id="qr-link" href="/qrcodes" target="_blank">
           <span class="nav-icon">⬡</span>Coduri QR
         </a>
 
@@ -690,8 +690,11 @@ html, body {
           <div class="main-title">Tablou de bord</div>
           <div class="main-date" id="main-date"></div>
         </div>
-        <div class="live-pill">
-          <div class="live-dot"></div>Live
+        <div style="display:flex;align-items:center;gap:10px">
+          <button id="export-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--em)';this.style.color='var(--em)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↓ Export CSV</button>
+          <div class="live-pill">
+            <div class="live-dot"></div>Live
+          </div>
         </div>
       </div>
 
@@ -948,6 +951,9 @@ function showDashboard() {
   const name = restaurant?.name || 'Restaurant';
   document.getElementById('rest-name').textContent  = name;
   document.getElementById('rb-avatar').textContent  = name.charAt(0).toUpperCase();
+
+  // Include auth token in QR codes link so the page validates ownership
+  document.getElementById('qr-link').href = `/qrcodes?token=${encodeURIComponent(token)}`;
 
   loadAll();
   connectSocket();
@@ -1214,7 +1220,7 @@ function connectSocket() {
   socket = io({ transports: ['websocket', 'polling'] });
 
   socket.on('connect', () => {
-    socket.emit('join-dashboard', { restaurantId: restaurant?.id });
+    socket.emit('join-dashboard', { token });
   });
 
   socket.on('payment-made', p => {
@@ -1251,8 +1257,8 @@ document.getElementById('seed-btn').addEventListener('click', async () => {
   try {
     await fetch('/api/dev/seed-payments', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ restaurantId: restaurant?.id }),
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+      body: JSON.stringify({}),
     });
     await loadAll();
     toast('Date demo adăugate!', 'success');
@@ -1262,6 +1268,25 @@ document.getElementById('seed-btn').addEventListener('click', async () => {
     btn.disabled    = false;
     btn.textContent = '+ Adaugă date demo';
   }
+});
+
+// ── Export CSV ────────────────────────────────────────────────────────────────
+document.getElementById('export-btn').addEventListener('click', () => {
+  const today = new Date().toISOString().slice(0, 10);
+  const a     = document.createElement('a');
+  a.href      = `/api/dashboard/export?date=${today}`;
+  a.setAttribute('download', `nota-${today}.csv`);
+  // Pass auth via header not possible for direct download — use fetch + blob
+  fetch(`/api/dashboard/export?date=${today}`, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      a.href    = url;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+    })
+    .catch(() => toast('Eroare la export CSV.'));
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
