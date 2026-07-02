@@ -54,9 +54,13 @@ app.set('trust proxy', 1);
 
 // 301-redirect any non-canonical host (old Railway subdomain, www, etc.) to the canonical URL.
 // Only active in production (when APP_URL is an https:// non-localhost address).
+// Use req.headers.host (raw header) rather than req.hostname because Railway's Hikari proxy
+// normalises X-Forwarded-Host to the custom domain for all requests, making req.hostname
+// always equal to CANONICAL_HOST regardless of which domain the client actually hit.
 if (ENFORCE_CANONICAL) {
   app.use((req, res, next) => {
-    if (req.hostname !== CANONICAL_HOST) {
+    const rawHost = (req.headers.host || '').split(':')[0].toLowerCase();
+    if (rawHost && rawHost !== CANONICAL_HOST) {
       return res.redirect(301, `https://${CANONICAL_HOST}${req.url}`);
     }
     next();
