@@ -1075,7 +1075,7 @@
     const remaining = items.filter(it => it.status !== 'paid');
     if (splitMode === 'mine') {
       return items
-        .filter(it => mySelected.has(it.id) && it.status === 'claimed' && it.claimed_by === socket.id)
+        .filter(it => mySelected.has(it.id) && it.status !== 'paid')
         .reduce((s, it) => s + +it.price, 0);
     }
     if (splitMode === 'rest') return remaining.reduce((s, it) => s + +it.price, 0);
