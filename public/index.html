@@ -59,6 +59,44 @@
     @keyframes pulse-dot { 0%,100%{opacity:1} 50%{opacity:.25} }
     .live-txt  { font-size: 11px; font-weight: 500; color: var(--secondary); }
 
+    /* ── Header actions (lang + waiter) ─────────────── */
+    .hdr-actions { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .lang-toggle {
+      background: rgba(197,160,89,0.12); border: 1px solid rgba(197,160,89,0.3);
+      border-radius: 6px; padding: 4px 8px;
+      font-family: 'Manrope', sans-serif; font-size: 10.5px; font-weight: 700;
+      color: var(--secondary); cursor: pointer; letter-spacing: 0.1em;
+      transition: all 0.15s; touch-action: manipulation;
+    }
+    .lang-toggle:hover { background: rgba(197,160,89,0.2); }
+    .waiter-btn {
+      background: none; border: none;
+      color: var(--outline); cursor: pointer;
+      padding: 5px; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; line-height: 1;
+      transition: background 0.15s, color 0.15s;
+      touch-action: manipulation;
+    }
+    .waiter-btn:hover  { background: rgba(197,160,89,0.1); color: var(--brass); }
+    .waiter-btn:active { transform: scale(0.92); }
+    .waiter-btn:disabled { opacity: 0.32; cursor: not-allowed; }
+
+    /* ── Guest toast (waiter confirm + activity) ─────── */
+    #guest-toast {
+      position: fixed; bottom: calc(128px + var(--safe-b));
+      left: 50%; transform: translateX(-50%) translateY(8px);
+      background: var(--primary); color: #fff;
+      padding: 9px 18px; border-radius: 20px;
+      font-size: 13px; font-weight: 600; text-align: center;
+      opacity: 0; pointer-events: none; white-space: nowrap;
+      transition: opacity 0.22s ease, transform 0.22s ease;
+      z-index: 300; max-width: calc(100vw - 32px);
+    }
+    #guest-toast.show {
+      opacity: 1; transform: translateX(-50%) translateY(0);
+    }
+
     /* ── Screens ─────────────────────────────────────── */
     .screen { display: none; }
     .screen.active { display: block; }
@@ -223,11 +261,9 @@
     .fail-reason { font-size: 14px; color: #7f1f1f; line-height: 1.5; }
 
     /* ══ TOUCH OPTIMIZATIONS ══════════════════════════════ */
-    /* Eliminate 300ms tap delay on all interactive elements */
     .item-card, .btn-primary, .btn-ghost, .back-btn,
     .m-tab, .t-card, .p-card, .g-btn { touch-action: manipulation; }
 
-    /* Extend existing transitions to include GPU-only transform (no layout thrash) */
     .item-card { transition: border-color 0.15s, background 0.15s, transform 100ms ease-out; }
     .item-card:active:not(.paid):not(.rsv):not(.readonly) { transform: scale(0.97); }
 
@@ -253,12 +289,18 @@
 <header id="hdr">
   <div class="hdr-inner">
     <span class="msym hdr-icon">table_restaurant</span>
-    <div>
+    <div style="flex:1;min-width:0">
       <div class="hdr-brand">Carmelo Ristorante</div>
       <div class="hdr-live">
         <div class="live-dot"></div>
         <span class="live-txt" id="live-lbl">Live • Masa —</span>
       </div>
+    </div>
+    <div class="hdr-actions">
+      <button class="lang-toggle" id="lang-btn" onclick="toggleLang()">RU</button>
+      <button class="waiter-btn" id="waiter-btn" onclick="callWaiter()">
+        <span class="msym">notifications</span>
+      </button>
     </div>
   </div>
 </header>
@@ -267,21 +309,21 @@
 <div class="screen active" id="screen-bill">
   <div class="col">
     <div class="prog-section">
-      <div class="prog-lbl">Status Plată</div>
+      <div class="prog-lbl" data-i18n="status_plata">Status Plată</div>
       <div class="prog-text" id="prog-text">Masa a achitat: 0 MDL din — MDL</div>
       <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
     </div>
 
-    <div class="settled-banner" id="settled">✓ Nota a fost achitată integral!</div>
+    <div class="settled-banner" id="settled" data-i18n="settled_banner">✓ Nota a fost achitată integral!</div>
 
     <div class="mode-pill">
-      <button class="m-tab active" id="tab-mine"  onclick="setSplit('mine')">Pozițiile mele</button>
-      <button class="m-tab"        id="tab-equal" onclick="setSplit('equal')">Împărțim egal</button>
-      <button class="m-tab"        id="tab-rest"  onclick="setSplit('rest')">Plătesc restul</button>
+      <button class="m-tab active" id="tab-mine"  onclick="setSplit('mine')"  data-i18n="tab_mine">Pozițiile mele</button>
+      <button class="m-tab"        id="tab-equal" onclick="setSplit('equal')" data-i18n="tab_equal">Împărțim egal</button>
+      <button class="m-tab"        id="tab-rest"  onclick="setSplit('rest')"  data-i18n="tab_rest">Plătesc restul</button>
     </div>
 
     <div class="guest-box" id="guest-box">
-      <span class="guest-lbl">Câți suntem la masă?</span>
+      <span class="guest-lbl" data-i18n="how_many">Câți suntem la masă?</span>
       <div class="g-ctrl">
         <button class="g-btn" onclick="chgGuests(-1)">−</button>
         <span class="g-num" id="g-num">2</span>
@@ -291,9 +333,9 @@
 
     <div class="mode-info" id="mode-info"></div>
 
-    <div class="items-hdr">Comanda Ta</div>
+    <div class="items-hdr" data-i18n="comanda_ta">Comanda Ta</div>
     <div id="bill-skel"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
-    <div class="empty-msg" id="empty-msg">Nu sunt preparate la această masă.</div>
+    <div class="empty-msg" id="empty-msg" data-i18n="empty_order">Nu sunt preparate la această masă.</div>
     <div id="items-list"></div>
   </div>
 
@@ -303,9 +345,10 @@
         <span class="bill-tot-lbl" id="tot-lbl">Total selectat</span>
         <span class="bill-tot-amt" id="tot-amt">0 MDL</span>
       </div>
-      <div class="bill-note">Serviciu și TVA incluse</div>
+      <div class="bill-note" data-i18n="service_vat">Serviciu și TVA incluse</div>
       <button class="btn-primary" id="btn-cont" onclick="goToTip()" disabled>
-        Continuă <span class="msym" style="font-size:18px">chevron_right</span>
+        <span data-i18n="btn_continue">Continuă</span>
+        <span class="msym" style="font-size:18px">chevron_right</span>
       </button>
     </div>
   </div>
@@ -315,35 +358,47 @@
 <div class="screen" id="screen-tip">
   <div class="col">
     <button class="back-btn" onclick="goToScreen('bill')">
-      <span class="msym" style="font-size:18px">arrow_back</span> Înapoi
+      <span class="msym" style="font-size:18px">arrow_back</span>
+      <span data-i18n="back">Înapoi</span>
     </button>
-    <div class="sec-title">Aproape gata</div>
-    <div class="sec-sub">Adaugă un bacșiș dacă ai fost mulțumit de serviciu.</div>
+    <div class="sec-title" data-i18n="screen2_title">Aproape gata</div>
+    <div class="sec-sub" data-i18n="screen2_sub">Adaugă un bacșiș dacă ai fost mulțumit de serviciu.</div>
 
     <div class="sum-card">
-      <div class="sum-row"><span class="lbl">Subtotal</span><span class="val" id="t-base">0.00 MDL</span></div>
       <div class="sum-row">
-        <span class="lbl">Bacșiș (<span id="t-pct-lbl">10</span>%)</span>
+        <span class="lbl" data-i18n="sum_subtotal">Subtotal</span>
+        <span class="val" id="t-base">0.00 MDL</span>
+      </div>
+      <div class="sum-row">
+        <span class="lbl"><span data-i18n="sum_bacsis">Bacșiș</span> (<span id="t-pct-lbl">10</span>%)</span>
         <span class="val" id="t-tip">0.00 MDL</span>
       </div>
       <div class="sum-total">
-        <span class="lbl">Total spre plată</span>
+        <span class="lbl" data-i18n="sum_total">Total spre plată</span>
         <span class="val" id="t-tot">0.00 MDL</span>
       </div>
     </div>
 
     <div class="tip-grid">
-      <button class="t-card"        onclick="setTip(0,this)"><div class="t-pct">0%</div><div class="t-lbl">Fără</div></button>
-      <button class="t-card active" onclick="setTip(10,this)"><div class="t-pct">10%</div><div class="t-lbl">Standard</div></button>
-      <button class="t-card"        onclick="setTip(15,this)"><div class="t-pct">15%</div><div class="t-lbl">Grozav</div></button>
-      <button class="t-card"        onclick="setTip(20,this)"><div class="t-pct">20%</div><div class="t-lbl">Excepțional</div></button>
+      <button class="t-card"        onclick="setTip(0,this)">
+        <div class="t-pct">0%</div><div class="t-lbl" data-i18n="tip_fara">Fără</div>
+      </button>
+      <button class="t-card active" onclick="setTip(10,this)">
+        <div class="t-pct">10%</div><div class="t-lbl" data-i18n="tip_standard">Standard</div>
+      </button>
+      <button class="t-card"        onclick="setTip(15,this)">
+        <div class="t-pct">15%</div><div class="t-lbl" data-i18n="tip_grozav">Grozav</div>
+      </button>
+      <button class="t-card"        onclick="setTip(20,this)">
+        <div class="t-pct">20%</div><div class="t-lbl" data-i18n="tip_exceptional">Excepțional</div>
+      </button>
     </div>
 
     <div class="sec-box">
       <span class="msym ico">verified_user</span>
       <div>
-        <div class="sec-ttl">Securizat prin MIA</div>
-        <div class="sec-txt">Plata este procesată prin sistemul național de plăți instantanee MIA, aprobat de Banca Națională a Moldovei.</div>
+        <div class="sec-ttl" data-i18n="mia_secure_title">Securizat prin MIA</div>
+        <div class="sec-txt" data-i18n="mia_secure_txt">Plata este procesată prin sistemul național de plăți instantanee MIA, aprobat de Banca Națională a Moldovei.</div>
       </div>
     </div>
   </div>
@@ -351,7 +406,8 @@
   <div class="act-bar">
     <div class="act-inner">
       <button class="btn-primary" onclick="goToPayment()">
-        Alege plata <span class="msym" style="font-size:18px">chevron_right</span>
+        <span data-i18n="btn_choose_pay">Alege plata</span>
+        <span class="msym" style="font-size:18px">chevron_right</span>
       </button>
     </div>
   </div>
@@ -361,26 +417,33 @@
 <div class="screen" id="screen-payment">
   <div class="col">
     <button class="back-btn" onclick="goToScreen('tip')">
-      <span class="msym" style="font-size:18px">arrow_back</span> Înapoi
+      <span class="msym" style="font-size:18px">arrow_back</span>
+      <span data-i18n="back">Înapoi</span>
     </button>
-    <div class="sec-title">Alege metoda de plată</div>
-    <div class="sec-sub">Selectează cum dorești să achitezi nota.</div>
+    <div class="sec-title" data-i18n="screen3_title">Alege metoda de plată</div>
+    <div class="sec-sub" data-i18n="screen3_sub">Selectează cum dorești să achitezi nota.</div>
 
     <div class="total-hero">
-      <div class="th-lbl">Total Final</div>
+      <div class="th-lbl" data-i18n="total_final">Total Final</div>
       <div class="th-amt" id="pay-amt">0.00 MDL</div>
-      <div class="th-note">Include TVA (20%)</div>
+      <div class="th-note" data-i18n="incl_vat">Include TVA (20%)</div>
     </div>
 
     <div class="pay-cards">
       <div class="p-card sel" id="pc-mia" onclick="selectMethod('mia')">
         <div class="p-ico mia">M</div>
-        <div class="p-text"><div class="p-name">MIA Transfer</div><div class="p-sub">Sistem de Plăți Instant</div></div>
+        <div class="p-text">
+          <div class="p-name" data-i18n="mia_name">MIA Transfer</div>
+          <div class="p-sub" data-i18n="mia_sub">Sistem de Plăți Instant</div>
+        </div>
         <div class="p-badge"><span class="msym" style="font-size:14px">check</span></div>
       </div>
       <div class="p-card off">
         <div class="p-ico ap"><span class="msym" style="font-size:20px;color:#fff">phone_iphone</span></div>
-        <div class="p-text"><div class="p-name">Apple Pay</div><div class="p-sub">în curând disponibil</div></div>
+        <div class="p-text">
+          <div class="p-name" data-i18n="apple_name">Apple Pay</div>
+          <div class="p-sub" data-i18n="apple_sub">în curând disponibil</div>
+        </div>
         <div class="p-badge"></div>
       </div>
     </div>
@@ -389,9 +452,10 @@
   <div class="act-bar">
     <div class="act-inner">
       <button class="btn-primary" id="btn-confirm" onclick="confirmPayment()">
-        Confirmă Plata <span class="msym" style="font-size:18px">lock</span>
+        <span data-i18n="btn_confirm">Confirmă Plata</span>
+        <span class="msym" style="font-size:18px">lock</span>
       </button>
-      <button class="btn-ghost" onclick="goToScreen('bill')">Înapoi la comandă</button>
+      <button class="btn-ghost" onclick="goToScreen('bill')" data-i18n="btn_back_order">Înapoi la comandă</button>
     </div>
   </div>
 </div>
@@ -401,8 +465,8 @@
   <div class="col">
     <div class="center-screen">
       <div class="cs-icon"><span class="msym" style="font-size:48px">qr_code_scanner</span></div>
-      <div class="sec-title">Masă invalidă</div>
-      <div class="sec-sub">Codul QR nu este valid sau masa nu există. Scanați din nou.</div>
+      <div class="sec-title" data-i18n="error_title">Masă invalidă</div>
+      <div class="sec-sub" data-i18n="error_sub">Codul QR nu este valid sau masa nu există. Scanați din nou.</div>
     </div>
   </div>
 </div>
@@ -412,19 +476,20 @@
   <div class="col">
     <div class="fail-card">
       <div class="fail-icon"><span class="msym" style="font-size:40px">cancel</span></div>
-      <div class="fail-ttl">Plata nu a reușit</div>
+      <div class="fail-ttl" data-i18n="fail_title">Plata nu a reușit</div>
       <div class="fail-reason" id="fail-reason">A apărut o problemă la procesarea plății.</div>
     </div>
-    <p style="font-size:13px;color:var(--on-sv);text-align:center;margin-bottom:20px;line-height:1.5">
+    <p style="font-size:13px;color:var(--on-sv);text-align:center;margin-bottom:20px;line-height:1.5" data-i18n="fail_note">
       Nicio sumă nu a fost debitată. Preparatele selectate sunt din nou disponibile.
     </p>
   </div>
   <div class="act-bar">
     <div class="act-inner">
       <button class="btn-primary" onclick="retryPayment()">
-        <span class="msym" style="font-size:18px">refresh</span> Încearcă din nou
+        <span class="msym" style="font-size:18px">refresh</span>
+        <span data-i18n="btn_retry">Încearcă din nou</span>
       </button>
-      <button class="btn-ghost" onclick="goToScreen('bill')">Înapoi la comandă</button>
+      <button class="btn-ghost" onclick="goToScreen('bill')" data-i18n="btn_back_order">Înapoi la comandă</button>
     </div>
   </div>
 </div>
@@ -434,8 +499,8 @@
   <div class="mia-sheet">
     <div class="sh-handle"></div>
     <div class="mia-ico">M</div>
-    <div class="mia-ttl">Se procesează plata</div>
-    <div class="mia-sub">Așteptăm confirmarea băncii…</div>
+    <div class="mia-ttl" data-i18n="mia_processing_title">Se procesează plata</div>
+    <div class="mia-sub" data-i18n="mia_processing_sub">Așteptăm confirmarea băncii…</div>
     <div class="spinner"></div>
   </div>
 </div>
@@ -446,40 +511,228 @@
     <div class="suc-inner">
       <div class="suc-hero">
         <div class="suc-icon">✓</div>
-        <div class="suc-ttl">Plată confirmată!</div>
+        <div class="suc-ttl" data-i18n="suc_title">Plată confirmată!</div>
         <div class="suc-amt" id="suc-amt">0 MDL</div>
       </div>
       <div class="receipt">
-        <div class="rcpt-hdr">Bon Fiscal Electronic</div>
+        <div class="rcpt-hdr" data-i18n="receipt_hdr">Bon Fiscal Electronic</div>
         <div class="rcpt-body" id="rcpt-body"></div>
       </div>
       <div class="iiko-tag">
         <span class="msym" style="font-size:16px">receipt_long</span>
-        BON FISCAL ELECTRONIC emis prin iiko
+        <span data-i18n="iiko_tag">BON FISCAL ELECTRONIC emis prin iiko</span>
       </div>
     </div>
   </div>
 </div>
 
+<!-- ══ GUEST TOAST ════════════════════════════════════════════ -->
+<div id="guest-toast"></div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
-  // ── Token from URL (never parseInt — must be the raw hex slug) ──────────────
+  // ── Translations ──────────────────────────────────────────────────────────────
+  const TRANS = {
+    ro: {
+      table_word: 'Masa',
+      status_plata: 'Status Plată',
+      prog_paid: 'Masa a achitat: ',
+      prog_of: ' din ',
+      settled_banner: '✓ Nota a fost achitată integral!',
+      tab_mine: 'Pozițiile mele',
+      tab_equal: 'Împărțim egal',
+      tab_rest: 'Plătesc restul',
+      how_many: 'Câți suntem la masă?',
+      mode_equal_info: 'Vei plăti o parte egală din nota rămasă. Preparatele rămân neatribuite.',
+      mode_rest_info: 'Vei achita integral nota rămasă. Niciun preparat nu va fi selectat manual.',
+      comanda_ta: 'Comanda Ta',
+      empty_order: 'Nu sunt preparate la această masă.',
+      item_reserved: 'rezervat de altcineva',
+      item_paid: 'achitat',
+      tot_mine: 'Total selectat',
+      tot_equal: 'Estimat per persoană',
+      service_vat: 'Serviciu și TVA incluse',
+      btn_continue: 'Continuă',
+      back: 'Înapoi',
+      screen2_title: 'Aproape gata',
+      screen2_sub: 'Adaugă un bacșiș dacă ai fost mulțumit de serviciu.',
+      sum_subtotal: 'Subtotal',
+      sum_bacsis: 'Bacșiș',
+      sum_total: 'Total spre plată',
+      tip_fara: 'Fără',
+      tip_standard: 'Standard',
+      tip_grozav: 'Grozav',
+      tip_exceptional: 'Excepțional',
+      mia_secure_title: 'Securizat prin MIA',
+      mia_secure_txt: 'Plata este procesată prin sistemul național de plăți instantanee MIA, aprobat de Banca Națională a Moldovei.',
+      btn_choose_pay: 'Alege plata',
+      screen3_title: 'Alege metoda de plată',
+      screen3_sub: 'Selectează cum dorești să achitezi nota.',
+      total_final: 'Total Final',
+      incl_vat: 'Include TVA (20%)',
+      mia_name: 'MIA Transfer',
+      mia_sub: 'Sistem de Plăți Instant',
+      apple_name: 'Apple Pay',
+      apple_sub: 'în curând disponibil',
+      btn_confirm: 'Confirmă Plata',
+      btn_back_order: 'Înapoi la comandă',
+      error_title: 'Masă invalidă',
+      error_sub: 'Codul QR nu este valid sau masa nu există. Scanați din nou.',
+      fail_title: 'Plata nu a reușit',
+      fail_reason_default: 'A apărut o problemă la procesarea plății.',
+      fail_note: 'Nicio sumă nu a fost debitată. Preparatele selectate sunt din nou disponibile.',
+      btn_retry: 'Încearcă din nou',
+      mia_processing_title: 'Se procesează plata',
+      mia_processing_sub: 'Așteptăm confirmarea băncii…',
+      suc_title: 'Plată confirmată!',
+      receipt_hdr: 'Bon Fiscal Electronic',
+      rcpt_tip: 'Bacșiș',
+      rcpt_contribution: 'Contribuție egală',
+      rcpt_total: 'TOTAL',
+      rcpt_tva_prefix: 'incl. TVA 20% —',
+      iiko_tag: 'BON FISCAL ELECTRONIC emis prin iiko',
+      waiter_btn_title: 'Cheamă ospătarul',
+      waiter_confirmed: 'Ospătarul a fost anunțat ✓',
+      toast_paid_pre: 'Cineva a plătit ',
+      toast_paid_suf: ' lei ✓',
+    },
+    ru: {
+      table_word: 'Стол',
+      status_plata: 'Статус счёта',
+      prog_paid: 'Стол оплатил: ',
+      prog_of: ' из ',
+      settled_banner: '✓ Счёт полностью оплачен!',
+      tab_mine: 'Мои позиции',
+      tab_equal: 'Делим поровну',
+      tab_rest: 'Оплачу остаток',
+      how_many: 'Сколько нас за столом?',
+      mode_equal_info: 'Вы платите равную долю от остатка. Позиции не привязаны.',
+      mode_rest_info: 'Вы оплачиваете весь оставшийся счёт.',
+      comanda_ta: 'Ваш заказ',
+      empty_order: 'На этом столе нет позиций.',
+      item_reserved: 'занято другим',
+      item_paid: 'оплачено',
+      tot_mine: 'Выбранная сумма',
+      tot_equal: 'Примерно на человека',
+      service_vat: 'Сервисный сбор и НДС включены',
+      btn_continue: 'Продолжить',
+      back: 'Назад',
+      screen2_title: 'Почти готово',
+      screen2_sub: 'Добавьте чаевые, если остались довольны.',
+      sum_subtotal: 'Сумма',
+      sum_bacsis: 'Чаевые',
+      sum_total: 'К оплате',
+      tip_fara: 'Без',
+      tip_standard: 'Стандарт',
+      tip_grozav: 'Отлично',
+      tip_exceptional: 'Превосходно',
+      mia_secure_title: 'Защищено через MIA',
+      mia_secure_txt: 'Платёж обрабатывается через национальную систему мгновенных платежей MIA, одобренную Национальным банком Молдовы.',
+      btn_choose_pay: 'Выбрать оплату',
+      screen3_title: 'Выберите способ оплаты',
+      screen3_sub: 'Выберите способ оплаты счёта.',
+      total_final: 'Итого',
+      incl_vat: 'Вкл. НДС (20%)',
+      mia_name: 'MIA Transfer',
+      mia_sub: 'Система мгновенных платежей',
+      apple_name: 'Apple Pay',
+      apple_sub: 'скоро будет доступно',
+      btn_confirm: 'Подтвердить оплату',
+      btn_back_order: 'К заказу',
+      error_title: 'Неверный стол',
+      error_sub: 'QR-код недействителен или стол не существует. Отсканируйте снова.',
+      fail_title: 'Оплата не удалась',
+      fail_reason_default: 'Произошла ошибка при обработке платежа.',
+      fail_note: 'Никакая сумма не была списана. Выбранные позиции снова доступны.',
+      btn_retry: 'Повторить',
+      mia_processing_title: 'Обрабатываем платёж',
+      mia_processing_sub: 'Ожидаем подтверждения банка…',
+      suc_title: 'Оплата подтверждена!',
+      receipt_hdr: 'Электронный фискальный чек',
+      rcpt_tip: 'Чаевые',
+      rcpt_contribution: 'Равная доля',
+      rcpt_total: 'ИТОГО',
+      rcpt_tva_prefix: 'вкл. НДС 20% —',
+      iiko_tag: 'ЭЛЕКТРОННЫЙ ФИСКАЛЬНЫЙ ЧЕК выдан через iiko',
+      waiter_btn_title: 'Вызвать официанта',
+      waiter_confirmed: 'Официант уведомлён ✓',
+      toast_paid_pre: 'Кто-то оплатил ',
+      toast_paid_suf: ' лей ✓',
+    },
+  };
+
+  let lang = localStorage.getItem('nota_lang') || 'ro';
+  const t = key => TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
+
+  function translateReason(reason) {
+    if (lang === 'ro') return reason;
+    const map = {
+      'Plata a eșuat': 'Оплата не прошла',
+      'Plata a expirat (timeout)': 'Время оплаты истекло',
+      'Plata a fost refuzată': 'Оплата отклонена',
+      'Preparatele au fost deja achitate de altcineva.': 'Позиции уже оплачены другим гостем.',
+      'Plata nu a putut fi confirmată': 'Не удалось подтвердить оплату',
+      'Plata nu a putut fi inițiată': 'Не удалось инициировать оплату',
+      'Eroare internă': 'Внутренняя ошибка',
+      'Nimic de plătit': 'Нечего оплачивать',
+      'No claimed items': 'Нет выбранных позиций',
+    };
+    return map[reason] || t('fail_reason_default');
+  }
+
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.dataset.i18n;
+      el.textContent = t(key);
+    });
+    // Update waiter button title
+    document.getElementById('waiter-btn').title = t('waiter_btn_title');
+    // Lang toggle shows the OTHER language
+    document.getElementById('lang-btn').textContent = lang === 'ro' ? 'RU' : 'RO';
+    // Update mode info text
+    const infoEl = document.getElementById('mode-info');
+    if (splitMode === 'equal') infoEl.textContent = t('mode_equal_info');
+    else if (splitMode === 'rest') infoEl.textContent = t('mode_rest_info');
+    else infoEl.textContent = '';
+    // Update live label with table number
+    const liveEl = document.getElementById('live-lbl');
+    liveEl.textContent = resolvedTable
+      ? `Live • ${t('table_word')} ${resolvedTable}`
+      : `Live • ${t('table_word')} —`;
+    // Update progress (uses t() internally)
+    updateProgress();
+    // Re-render items list to pick up translated meta text
+    if (order) render();
+  }
+
+  function toggleLang() {
+    lang = lang === 'ro' ? 'ru' : 'ro';
+    localStorage.setItem('nota_lang', lang);
+    applyLang();
+  }
+
+  // ── Token from URL ────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
   const token  = params.get('t') || '';
 
   // ── App state ─────────────────────────────────────────────────────────────────
-  let order           = null;
-  let resolvedTable   = null;
-  let mySelected      = new Set();   // item IDs selected in 'mine' mode
-  let splitMode       = 'mine';
-  let guestCount      = 2;
-  let tipPercent      = 10;
-  let payBase         = 0;
-  let payTipLei       = 0;
-  let payTotal        = 0;
-  let payMethod       = 'mia';
-  let confirming      = false;       // guard against double-tap
-  let pendingPaymentId = null;       // held across reconnects for recovery
+  let order            = null;
+  let resolvedTable    = null;
+  let mySelected       = new Set();
+  let splitMode        = 'mine';
+  let guestCount       = 2;
+  let tipPercent       = 10;
+  let payBase          = 0;
+  let payTipLei        = 0;
+  let payTotal         = 0;
+  let payMethod        = 'mia';
+  let confirming       = false;
+  let pendingPaymentId = null;
+
+  // Waiter call cooldown
+  let waiterCooldown = false;
+  let waiterTimer    = null;
 
   // ── Socket ────────────────────────────────────────────────────────────────────
   const socket = io({ transports: ['websocket', 'polling'] });
@@ -498,9 +751,8 @@
     order = incoming;
     if (!resolvedTable && order?.table_number) {
       resolvedTable = order.table_number;
-      document.getElementById('live-lbl').textContent = `Live • Masa ${resolvedTable}`;
+      document.getElementById('live-lbl').textContent = `Live • ${t('table_word')} ${resolvedTable}`;
     }
-    // Clean up stale 'mine' selections
     if (splitMode === 'mine' && order?.items) {
       for (const it of order.items) {
         if (mySelected.has(it.id) && (it.status === 'paid' || (it.status === 'claimed' && it.claimed_by !== socket.id))) {
@@ -511,8 +763,17 @@
     render();
   });
 
-  // Batch rapid items-patch bursts so we do at most one DOM pass per animation frame.
-  // State updates (order.items, mySelected) happen synchronously; only the DOM write is deferred.
+  // ── table-payment: someone at this table completed a confirmed payment ─────────
+  socket.on('table-payment', ({ amountLei, total }) => {
+    // Don't show to the payer — they're on the success overlay already.
+    // Show to everyone still on the bill screen.
+    if (document.getElementById('ov-suc').classList.contains('show')) return;
+    if (document.getElementById('ov-mia').classList.contains('show')) return;
+    const display = Math.round(Number(total));
+    showGuestToast(`${t('toast_paid_pre')}${display}${t('toast_paid_suf')}`);
+  });
+
+  // Batch rapid items-patch bursts
   let _patchBuf = null;
 
   function schedulePatch(ids) {
@@ -525,10 +786,8 @@
     });
   }
 
-  // Diff event: server-sent patches for claim/release — avoids full list rebuild
   socket.on('items-patch', patches => {
     if (!order) return;
-    // Update state synchronously (no rAF — must be current before any render)
     for (const p of patches) {
       const item = order.items.find(i => i.id === p.id);
       if (item) { item.status = p.status; item.claimed_by = p.claimed_by; }
@@ -544,8 +803,6 @@
     schedulePatch(patches.map(p => p.id));
   });
 
-  // ── payment-confirmed: ONLY signal that advances to success screen ────────────
-  // The client NEVER decides payment success on its own.
   socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [] }) => {
     confirming       = false;
     pendingPaymentId = null;
@@ -566,34 +823,70 @@
         `<div class="rcpt-line"><span>${esc(it.name)}</span><span>${fmt0(it.price)} MDL</span></div>`
       ).join('');
       if (splitMode === 'equal') {
-        itemLines += `<div class="rcpt-line" style="color:var(--on-sv);font-style:italic"><span>Contribuție egală (1/${guestCount})</span></div>`;
+        itemLines += `<div class="rcpt-line" style="color:var(--on-sv);font-style:italic"><span>${t('rcpt_contribution')} (1/${guestCount})</span></div>`;
       }
     }
     if (Number(tipLei) > 0) {
-      itemLines += `<div class="rcpt-line"><span>Bacșiș (${tipPercent}%)</span><span>${fmtMDL(tipLei)}</span></div>`;
+      itemLines += `<div class="rcpt-line"><span>${t('rcpt_tip')} (${tipPercent}%)</span><span>${fmtMDL(tipLei)}</span></div>`;
     }
 
+    const tableWord = t('table_word');
     document.getElementById('suc-amt').textContent = fmtMDL(total);
     document.getElementById('rcpt-body').innerHTML = `
-      <div class="rcpt-meta">Carmelo Ristorante<br>Masa ${resolvedTable || '—'} · ${now}</div>
+      <div class="rcpt-meta">Carmelo Ristorante<br>${tableWord} ${resolvedTable || '—'} · ${now}</div>
       ${itemLines}
-      <div class="rcpt-line rcpt-tot"><span>TOTAL</span><span>${fmtMDL(total)}</span></div>
-      <div class="rcpt-tva">incl. TVA 20% — ${fmtMDL(tva)}</div>
+      <div class="rcpt-line rcpt-tot"><span>${t('rcpt_total')}</span><span>${fmtMDL(total)}</span></div>
+      <div class="rcpt-tva">${t('rcpt_tva_prefix')} ${fmtMDL(tva)}</div>
     `;
 
     mySelected = new Set();
     document.getElementById('ov-suc').classList.add('show');
   });
 
-  // ── payment-failed: ONLY signal that advances to failure screen ───────────────
   socket.on('payment-failed', ({ reason } = {}) => {
     confirming       = false;
     pendingPaymentId = null;
     document.getElementById('ov-mia').classList.remove('show');
-    document.getElementById('fail-reason').textContent = reason || 'A apărut o problemă la procesarea plății.';
-    mySelected = new Set();   // server already released our claims
+    document.getElementById('fail-reason').textContent = translateReason(reason || t('fail_reason_default'));
+    mySelected = new Set();
     showScreen('fail');
   });
+
+  // ── Waiter call ───────────────────────────────────────────────────────────────
+  function callWaiter() {
+    if (waiterCooldown || !resolvedTable) return;
+    const btn = document.getElementById('waiter-btn');
+    btn.disabled = true;
+    waiterCooldown = true;
+
+    socket.emit('waiter-call', null, (ack = {}) => {
+      if (ack.error === 'Cooldown') {
+        // Server says still cooling down — same UI response
+      } else if (ack.error) {
+        console.warn('[waiter-call]', ack.error);
+        btn.disabled   = false;
+        waiterCooldown = false;
+        return;
+      }
+      showGuestToast(t('waiter_confirmed'));
+      // 60 s cooldown
+      clearTimeout(waiterTimer);
+      waiterTimer = setTimeout(() => {
+        waiterCooldown = false;
+        btn.disabled   = false;
+      }, 60_000);
+    });
+  }
+
+  // ── Guest toast ───────────────────────────────────────────────────────────────
+  let _guestToastTimer = null;
+  function showGuestToast(msg, durationMs = 3500) {
+    const el = document.getElementById('guest-toast');
+    el.textContent = msg;
+    el.classList.add('show');
+    clearTimeout(_guestToastTimer);
+    _guestToastTimer = setTimeout(() => el.classList.remove('show'), durationMs);
+  }
 
   // ── Screen navigation ──────────────────────────────────────────────────────────
   function showScreen(name) {
@@ -620,7 +913,7 @@
   // ── Split mode ─────────────────────────────────────────────────────────────────
   function setSplit(mode) {
     splitMode = mode;
-    document.querySelectorAll('.m-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.m-tab').forEach(tab => tab.classList.remove('active'));
     document.getElementById('tab-' + mode).classList.add('active');
     document.getElementById('guest-box').classList.toggle('show', mode === 'equal');
 
@@ -631,10 +924,10 @@
 
     const infoEl = document.getElementById('mode-info');
     if (mode === 'equal') {
-      infoEl.textContent = 'Vei plăti o parte egală din nota rămasă. Preparatele rămân neatribuite.';
+      infoEl.textContent = t('mode_equal_info');
       infoEl.classList.add('show');
     } else if (mode === 'rest') {
-      infoEl.textContent = 'Vei achita integral nota rămasă. Niciun preparat nu va fi selectat manual.';
+      infoEl.textContent = t('mode_rest_info');
       infoEl.classList.add('show');
     } else {
       infoEl.textContent = '';
@@ -649,7 +942,7 @@
     updateProgress();
   }
 
-  // ── Item toggle ('mine' mode only) ─────────────────────────────────────────────
+  // ── Item toggle ────────────────────────────────────────────────────────────────
   function toggleItem(id) {
     if (splitMode !== 'mine') return;
     const it = order?.items?.find(i => i.id === id);
@@ -657,35 +950,27 @@
     if (it.status === 'claimed' && it.claimed_by !== socket.id) return;
 
     if (mySelected.has(id)) {
-      // Deselect exactly this one item — never touch the others.
-      // Uses release-item (single-item) instead of release-all + re-claim-rest
-      // so there is no intermediate "everything deselected" flash.
       mySelected.delete(id);
-      patchRender([id]); // instant visual feedback
-
+      patchRender([id]);
       socket.emit('release-item', id, ({ released = [], error } = {}) => {
         if (error || !released.includes(id)) {
-          // Server rejected (e.g. payment now in-flight) — roll back only this item
           mySelected.add(id);
           patchRender([id]);
         }
-        // On success: items-patch from server already updated order state
       });
     } else {
-      // Select: optimistic — reflect tap immediately, roll back if server rejects
       mySelected.add(id);
       patchRender([id]);
       socket.emit('claim-items', [id], ({ claimed = [], error } = {}) => {
         if (error || !claimed.includes(id)) {
           mySelected.delete(id);
-          patchRender([id]); // rollback: show as not selected / reserved by other
+          patchRender([id]);
         }
-        // Confirmed → items-patch from server already updated order state
       });
     }
   }
 
-  // ── Render items ──────────────────────────────────────────────────────────────
+  // ── Render ─────────────────────────────────────────────────────────────────────
   function render() {
     const skel    = document.getElementById('bill-skel');
     const emptyEl = document.getElementById('empty-msg');
@@ -722,8 +1007,8 @@
       const nCls  = isPaid ? 'item-name g' : 'item-name';
       const pCls  = isPaid ? 'item-price g' : 'item-price';
       const chk   = (isMine || isPaid) ? '&#10003;' : '';
-      const meta  = isOther ? '<div class="item-meta">rezervat de altcineva</div>'
-                  : isPaid  ? '<div class="item-meta" style="color:var(--green)">achitat</div>' : '';
+      const meta  = isOther ? `<div class="item-meta">${t('item_reserved')}</div>`
+                  : isPaid  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
       const click = (!isPaid && !isOther && !isReadonly) ? `onclick="toggleItem(${it.id})"` : '';
 
       return `<div class="${cls}" data-item-id="${it.id}" ${click}>
@@ -736,16 +1021,16 @@
     updateProgress();
   }
 
-  // ── Incremental patch: update only changed item cards ─────────────────────────
+  // ── Incremental patch ─────────────────────────────────────────────────────────
   function patchRender(changedIds) {
     const list = document.getElementById('items-list');
     if (!order || !list || !list.children.length) { render(); return; }
 
-    const items = order.items || [];
+    const items      = order.items || [];
     const isReadonly = splitMode !== 'mine';
 
     for (const id of changedIds) {
-      const it = order.items.find(i => i.id === id);
+      const it = items.find(i => i.id === id);
       const el = list.querySelector(`[data-item-id="${id}"]`);
       if (!it || !el) continue;
 
@@ -765,8 +1050,8 @@
       const nCls = isPaid ? 'item-name g' : 'item-name';
       const pCls = isPaid ? 'item-price g' : 'item-price';
       const chk  = (isMine || isPaid) ? '&#10003;' : '';
-      const meta = isOther ? '<div class="item-meta">rezervat de altcineva</div>'
-                 : isPaid  ? '<div class="item-meta" style="color:var(--green)">achitat</div>' : '';
+      const meta = isOther ? `<div class="item-meta">${t('item_reserved')}</div>`
+                 : isPaid  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
 
       const infoEl  = el.querySelector('.item-info');
       const priceEl = el.querySelector('.item-price');
@@ -781,7 +1066,7 @@
     updateProgress();
   }
 
-  // ── Progress & share calculation ──────────────────────────────────────────────
+  // ── Progress & share ──────────────────────────────────────────────────────────
   function calcShare() {
     const items     = order?.items || [];
     const remaining = items.filter(it => it.status !== 'paid');
@@ -801,11 +1086,12 @@
     const paid  = items.filter(it => it.status === 'paid').reduce((s, it) => s + +it.price, 0);
     const pct   = total > 0 ? (paid / total * 100) : 0;
 
-    document.getElementById('prog-text').textContent = `Masa a achitat: ${fmt0(paid)} MDL din ${fmt0(total)} MDL`;
-    document.getElementById('prog-fill').style.width  = pct.toFixed(1) + '%';
+    document.getElementById('prog-text').textContent =
+      `${t('prog_paid')}${fmt0(paid)} MDL${t('prog_of')}${fmt0(total)} MDL`;
+    document.getElementById('prog-fill').style.width = pct.toFixed(1) + '%';
 
     const share = calcShare();
-    document.getElementById('tot-lbl').textContent = splitMode === 'equal' ? 'Estimat per persoană' : 'Total selectat';
+    document.getElementById('tot-lbl').textContent = splitMode === 'equal' ? t('tot_equal') : t('tot_mine');
     document.getElementById('tot-amt').textContent = fmtMDL(share);
     document.getElementById('btn-cont').disabled   = share <= 0;
   }
@@ -834,9 +1120,6 @@
   }
 
   // ── Confirm payment ────────────────────────────────────────────────────────────
-  // Sends pay event to server, shows processing overlay, then waits.
-  // SUCCESS is ONLY triggered by socket.on('payment-confirmed') from the server.
-  // FAILURE is ONLY triggered by socket.on('payment-failed') from the server.
   function confirmPayment() {
     if (confirming || payMethod !== 'mia') return;
     confirming = true;
@@ -850,11 +1133,10 @@
       if (ack.error) {
         confirming = false;
         document.getElementById('ov-mia').classList.remove('show');
-        document.getElementById('fail-reason').textContent = ack.error;
+        document.getElementById('fail-reason').textContent = translateReason(ack.error);
         showScreen('fail');
         return;
       }
-      // Store paymentId so we can recover if we reconnect before confirmation arrives
       if (ack.paymentId) pendingPaymentId = ack.paymentId;
     };
 
@@ -865,8 +1147,6 @@
     }
   }
 
-  // ── Retry after failure ────────────────────────────────────────────────────────
-  // Server already released claimed items — just go back to the bill screen.
   function retryPayment() {
     mySelected = new Set();
     showScreen('bill');
@@ -879,6 +1159,9 @@
   function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
+
+  // Apply initial language on load
+  applyLang();
 </script>
 </body>
 </html>

@@ -503,25 +503,143 @@ app.get('/qrcodes', requireAuthOrQuery, async (req, res) => {
     return res.status(500).send(`<p>Tables ${missing.map(t=>t.number).join(', ')} missing tokens. Re-run setup-db.js.</p>`);
   }
   const qrs = await Promise.all(
-    tables.map(async t => ({
-      n: t.number, token: t.token,
-      url: `${APP_URL}/?t=${t.token}`,
-      svg: await QRCode.toString(`${APP_URL}/?t=${t.token}`, { type: 'svg', width: 200 }),
-    }))
+    tables.map(async t => {
+      const url = `${APP_URL}/?t=${t.token}`;
+      const svg = await QRCode.toString(url, { type: 'svg', width: 280, margin: 1 });
+      return { n: t.number, url, svg };
+    })
   );
+
   res.send(`<!DOCTYPE html>
-<html lang="ro"><head><meta charset="UTF-8"><title>QR — nota.</title>
-<style>*{box-sizing:border-box}body{font-family:sans-serif;background:#fafafa;padding:2rem}h1{margin-bottom:1.5rem}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,220px);gap:2rem}
-.card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:1.25rem;display:flex;flex-direction:column;align-items:center;gap:.5rem}
-.card h2{margin:0;font-size:1rem;color:#374151}.card svg{width:160px;height:160px}
-.card small{font-size:10px;color:#6b7280;word-break:break-all;text-align:center}
-@media print{body{padding:0}h1{display:none}}</style>
-</head><body>
-<h1>QR Coduri Masă — nota.</h1>
-<div class="grid">
-${qrs.map(({n,url,svg})=>`<div class="card"><h2>Masa ${n}</h2>${svg}<small>${url}</small></div>`).join('')}
-</div></body></html>`);
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QR Mese — nota.</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: Georgia, 'Times New Roman', serif; background: #f0ede8; padding: 28px; }
+
+.top-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 28px; flex-wrap: wrap; gap: 12px;
+}
+.top-bar h1 { font-size: 22px; font-weight: 700; color: #1a1a1a; font-family: Georgia, serif; }
+.print-btn {
+  background: #00333c; color: #fff; border: none;
+  padding: 10px 22px; border-radius: 8px; font-size: 14px;
+  font-weight: 600; cursor: pointer; font-family: inherit;
+  letter-spacing: .02em; transition: background .15s;
+}
+.print-btn:hover { background: #004d59; }
+
+.tents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 298px);
+  gap: 24px;
+  justify-content: center;
+}
+
+/* The tent card — screen preview */
+.tent {
+  width: 298px;
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #d9d0c2;
+  display: flex; flex-direction: column; align-items: center;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0,0,0,.10);
+}
+
+.tent-top {
+  width: 100%; background: #00333c;
+  padding: 14px 20px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.tent-brand { font-size: 22px; font-weight: 700; color: #fed488; letter-spacing: -0.5px; }
+.tent-tagline { font-size: 9px; color: rgba(255,255,255,.55); text-transform: uppercase; letter-spacing: .14em; margin-top: 2px; }
+.tent-num-badge {
+  background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
+  border-radius: 8px; padding: 6px 10px; text-align: center;
+}
+.tent-num-label { font-size: 8px; color: rgba(255,255,255,.6); text-transform: uppercase; letter-spacing: .1em; }
+.tent-num-val { font-size: 22px; font-weight: 700; color: #fff; line-height: 1.1; }
+
+.tent-qr {
+  padding: 20px 24px 8px;
+  display: flex; align-items: center; justify-content: center;
+}
+.tent-qr svg { width: 200px; height: 200px; }
+
+.tent-scan-ro { font-size: 14px; font-weight: 600; color: #00333c; text-align: center; padding: 0 16px; }
+.tent-scan-ru { font-size: 12.5px; color: #6b5c3e; text-align: center; padding: 4px 16px 0; }
+
+.tent-divider {
+  width: calc(100% - 40px); height: 1px;
+  background: linear-gradient(to right, transparent, #d9d0c2, transparent);
+  margin: 12px 0 10px;
+}
+
+.tent-footer { font-size: 9.5px; color: #9b8e7a; text-align: center; padding: 0 16px 16px; letter-spacing: .05em; }
+.tent-url { font-size: 8px; color: #b5a894; padding: 0 16px 12px; text-align: center; word-break: break-all; }
+
+/* ── Print styles ──────────────────────────────────────── */
+@media print {
+  @page { size: A6 portrait; margin: 6mm; }
+  body { background: white; padding: 0; }
+  .top-bar { display: none !important; }
+  .tents-grid { display: block; }
+
+  .tent {
+    width: 100%; height: calc(148mm - 12mm); /* A6 height minus margins */
+    border: none; border-radius: 0; box-shadow: none;
+    page-break-after: always;
+    break-after: page;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: space-between;
+  }
+  .tent:last-child { page-break-after: avoid; break-after: avoid; }
+
+  .tent-top { padding: 12px 16px 10px; }
+  .tent-brand { font-size: 20px; }
+  .tent-qr { padding: 12px 16px 4px; }
+  .tent-qr svg { width: 185px; height: 185px; }
+  .tent-scan-ro { font-size: 13px; }
+  .tent-scan-ru { font-size: 12px; }
+  .tent-url { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="top-bar no-print">
+  <h1>📋 QR Mese — nota.</h1>
+  <button class="print-btn" onclick="window.print()">🖨 Printează</button>
+</div>
+
+<div class="tents-grid">
+${qrs.map(({ n, url, svg }) => `
+  <div class="tent">
+    <div class="tent-top">
+      <div>
+        <div class="tent-brand">nota.</div>
+        <div class="tent-tagline">QR Table Payment</div>
+      </div>
+      <div class="tent-num-badge">
+        <div class="tent-num-label">Masa</div>
+        <div class="tent-num-val">${n}</div>
+      </div>
+    </div>
+    <div class="tent-qr">${svg}</div>
+    <div class="tent-scan-ro">Scanează pentru a plăti</div>
+    <div class="tent-scan-ru">Отсканируйте, чтобы оплатить</div>
+    <div class="tent-divider"></div>
+    <div class="tent-footer">powered by nota. · paynota.com</div>
+    <div class="tent-url">${url}</div>
+  </div>`).join('')}
+</div>
+
+</body></html>`);
 });
 
 // ─── health ───────────────────────────────────────────────────────────────────
@@ -546,6 +664,9 @@ const socketInflight = new Map();
 
 // Per-socket event rate limit: 30 events per 10s window
 const socketThrottle = new Map();
+
+// Per-table waiter-call throttle: max 1 call per 60 s
+const waiterCallThrottle = new Map(); // `${restaurantId}-${tableNumber}` → timestamp
 
 function checkThrottle(socket) {
   const now = Date.now();
@@ -815,6 +936,18 @@ io.on('connection', socket => {
     }
   });
 
+  socket.on('waiter-call', (_, ack) => {
+    if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
+    if (!currentTable || !currentRestaurantId) return ack?.({ error: 'Not at a table' });
+    const key = `${currentRestaurantId}-${currentTable}`;
+    const now = Date.now();
+    const last = waiterCallThrottle.get(key);
+    if (last && now - last < 60_000) return ack?.({ error: 'Cooldown' });
+    waiterCallThrottle.set(key, now);
+    io.to(`dashboard-${currentRestaurantId}`).emit('waiter-called', { tableNumber: currentTable });
+    ack?.({ ok: true });
+  });
+
   socket.on('disconnect', async () => {
     socketThrottle.delete(socket.id);
     try {
@@ -928,6 +1061,9 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
 
     const order = await getOpenOrder(tableNumber, restaurantId);
     io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', order);
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('table-payment', {
+      amountLei, total: Number(amountLei) + Number(tipLei),
+    });
     io.to(`dashboard-${restaurantId}`).emit('payment-made', {
       table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
       paid_at: new Date().toISOString(),
@@ -1039,6 +1175,9 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
 
     const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
     io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', order);
+    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('table-payment', {
+      amountLei: pmt.amount_lei, total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
+    });
     io.to(`dashboard-${pmt.restaurant_id}`).emit('payment-made', {
       table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
       paid_at: new Date().toISOString(),

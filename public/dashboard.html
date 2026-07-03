@@ -374,6 +374,9 @@ html, body {
 }
 .t-active .t-indicator { background: var(--amber-hi); box-shadow: 0 0 6px rgba(245,158,11,.45); }
 .t-paid   .t-indicator { background: var(--em);       box-shadow: 0 0 6px rgba(16,185,129,.4); }
+.t-waiter { border-color: var(--red) !important; background: var(--red-bg) !important; }
+.t-waiter .t-indicator { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.5); animation: pulse 1s infinite; }
+.t-waiter .t-status    { color: var(--red) !important; }
 
 .t-amount {
   font-size: 13px; font-weight: 700;
@@ -857,6 +860,7 @@ let paymentCount = 0;
 let revenueChart = null;
 let dishesChart  = null;
 let socket;
+const waitercalls = new Set(); // tableNumbers with active waiter calls
 
 // Categorical palette for top-dishes donut — distinguishable, refined, not all-green
 const DISH_PALETTE = [
@@ -1163,11 +1167,12 @@ async function loadTables() {
     const unpaid  = Number(t.unpaid_lei);
     const hasAct  = Number(t.available) > 0 || Number(t.claimed) > 0;
     const hasPaid = Number(t.paid) > 0 && !hasAct;
-    const cls     = hasAct ? 't-active' : hasPaid ? 't-paid' : 't-empty';
+    const isWaiter = waitercalls.has(Number(t.number));
+    const cls     = (hasAct ? 't-active' : hasPaid ? 't-paid' : 't-empty') + (isWaiter ? ' t-waiter' : '');
     const amtTxt  = unpaid > 0 ? `${Math.round(unpaid)} lei` : '';
-    const stTxt   = hasAct
-      ? `${t.available} disp · ${t.claimed} sel`
-      : hasPaid ? 'Achitat' : 'Liberă';
+    const stTxt   = isWaiter
+      ? '🔔 ospătar'
+      : hasAct ? `${t.available} disp · ${t.claimed} sel` : hasPaid ? 'Achitat' : 'Liberă';
     return `
       <div class="t-tile ${cls}">
         <div class="t-num">Masa ${t.number}</div>
@@ -1247,6 +1252,46 @@ function connectSocket() {
   });
 
   socket.on('order-update', () => { loadTables(); });
+
+  socket.on('waiter-called', ({ tableNumber }) => {
+    waitercalls.add(Number(tableNumber));
+    addWaiterFeedEntry(tableNumber);
+    loadTables();
+    toast(`🔔 Masa ${tableNumber} cheamă ospătarul`);
+  });
+}
+
+function addWaiterFeedEntry(tableNumber) {
+  const feed    = document.getElementById('payments-feed');
+  const emptyEl = feed.querySelector('.feed-empty');
+  if (emptyEl) feed.innerHTML = '';
+
+  const existing = feed.querySelector(`[data-waiter="${tableNumber}"]`);
+  if (existing) existing.remove();
+
+  const div = document.createElement('div');
+  div.className = 'pay-row pay-new';
+  div.dataset.waiter = tableNumber;
+  div.style.borderLeft = '2px solid var(--red)';
+  div.innerHTML = `
+    <div class="pay-icon-wrap" style="background:var(--red-bg);border-color:rgba(239,68,68,.2)">
+      <span style="font-size:16px">🔔</span>
+    </div>
+    <div class="pay-info">
+      <div class="pay-table">Masa ${tableNumber}</div>
+      <div class="pay-meta" style="color:var(--red)">cheamă ospătarul</div>
+    </div>
+    <div class="pay-right">
+      <button onclick="dismissWaiter(${tableNumber})" style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Rezolvat</button>
+    </div>`;
+  feed.prepend(div);
+}
+
+function dismissWaiter(tableNumber) {
+  waitercalls.delete(Number(tableNumber));
+  const el = document.getElementById('payments-feed').querySelector(`[data-waiter="${tableNumber}"]`);
+  if (el) el.remove();
+  loadTables();
 }
 
 // ── Seed ──────────────────────────────────────────────────────────────────────
