@@ -80,14 +80,18 @@ if (ENFORCE_CANONICAL) {
 app.use(compression());
 app.use(helmet({
   contentSecurityPolicy: {
+    useDefaults: false,
     directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc:  ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
-      styleSrc:   ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
-      fontSrc:    ["'self'", "fonts.gstatic.com"],
-      connectSrc: ["'self'", "ws:", "wss:"],
-      imgSrc:     ["'self'", "data:"],
-      objectSrc:  ["'none'"],
+      defaultSrc:    ["'self'"],
+      scriptSrc:     ["'self'", "'unsafe-inline'", "cdn.jsdelivr.net"],
+      scriptSrcAttr: ["'none'"],
+      styleSrc:      ["'self'", "'unsafe-inline'", "fonts.googleapis.com"],
+      fontSrc:       ["'self'", "fonts.gstatic.com"],
+      connectSrc:    ["'self'", "ws:", "wss:"],
+      imgSrc:        ["'self'", "data:"],
+      objectSrc:     ["'none'"],
+      baseUri:       ["'self'"],
+      formAction:    ["'self'"],
     },
   },
 }));

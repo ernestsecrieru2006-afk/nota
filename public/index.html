@@ -301,8 +301,8 @@
       </div>
     </div>
     <div class="hdr-actions">
-      <button class="lang-toggle" id="lang-btn" onclick="toggleLang()">RU</button>
-      <button class="waiter-btn" id="waiter-btn" onclick="callWaiter()">
+      <button class="lang-toggle" id="lang-btn">RU</button>
+      <button class="waiter-btn" id="waiter-btn">
         <span class="msym">notifications</span>
         <span data-i18n="waiter_btn_title">Cheamă ospătarul</span>
       </button>
@@ -322,17 +322,17 @@
     <div class="settled-banner" id="settled" data-i18n="settled_banner">✓ Nota a fost achitată integral!</div>
 
     <div class="mode-pill">
-      <button class="m-tab active" id="tab-mine"  onclick="setSplit('mine')"  data-i18n="tab_mine">Pozițiile mele</button>
-      <button class="m-tab"        id="tab-equal" onclick="setSplit('equal')" data-i18n="tab_equal">Împărțim egal</button>
-      <button class="m-tab"        id="tab-rest"  onclick="setSplit('rest')"  data-i18n="tab_rest">Plătesc restul</button>
+      <button class="m-tab active" id="tab-mine"  data-i18n="tab_mine">Pozițiile mele</button>
+      <button class="m-tab"        id="tab-equal" data-i18n="tab_equal">Împărțim egal</button>
+      <button class="m-tab"        id="tab-rest"  data-i18n="tab_rest">Plătesc restul</button>
     </div>
 
     <div class="guest-box" id="guest-box">
       <span class="guest-lbl" data-i18n="how_many">Câți suntem la masă?</span>
       <div class="g-ctrl">
-        <button class="g-btn" onclick="chgGuests(-1)">−</button>
+        <button class="g-btn" id="btn-guests-minus">−</button>
         <span class="g-num" id="g-num">2</span>
-        <button class="g-btn" onclick="chgGuests(+1)">+</button>
+        <button class="g-btn" id="btn-guests-plus">+</button>
       </div>
     </div>
 
@@ -351,7 +351,7 @@
         <span class="bill-tot-amt" id="tot-amt">0 MDL</span>
       </div>
       <div class="bill-note" data-i18n="service_vat">Serviciu și TVA incluse</div>
-      <button class="btn-primary" id="btn-cont" onclick="goToTip()" disabled>
+      <button class="btn-primary" id="btn-cont" disabled>
         <span data-i18n="btn_continue">Continuă</span>
         <span class="msym" style="font-size:18px">chevron_right</span>
       </button>
@@ -362,7 +362,7 @@
 <!-- ══ SCREEN 2 — TIP ═══════════════════════════════════════ -->
 <div class="screen" id="screen-tip">
   <div class="col">
-    <button class="back-btn" onclick="goToScreen('bill')">
+    <button class="back-btn" id="btn-back-tip">
       <span class="msym" style="font-size:18px">arrow_back</span>
       <span data-i18n="back">Înapoi</span>
     </button>
@@ -385,16 +385,16 @@
     </div>
 
     <div class="tip-grid">
-      <button class="t-card"        onclick="setTip(0,this)">
+      <button class="t-card"        data-pct="0">
         <div class="t-pct">0%</div><div class="t-lbl" data-i18n="tip_fara">Fără</div>
       </button>
-      <button class="t-card active" onclick="setTip(10,this)">
+      <button class="t-card active" data-pct="10">
         <div class="t-pct">10%</div><div class="t-lbl" data-i18n="tip_standard">Standard</div>
       </button>
-      <button class="t-card"        onclick="setTip(15,this)">
+      <button class="t-card"        data-pct="15">
         <div class="t-pct">15%</div><div class="t-lbl" data-i18n="tip_grozav">Grozav</div>
       </button>
-      <button class="t-card"        onclick="setTip(20,this)">
+      <button class="t-card"        data-pct="20">
         <div class="t-pct">20%</div><div class="t-lbl" data-i18n="tip_exceptional">Excepțional</div>
       </button>
     </div>
@@ -410,7 +410,7 @@
 
   <div class="act-bar">
     <div class="act-inner">
-      <button class="btn-primary" onclick="goToPayment()">
+      <button class="btn-primary" id="btn-to-pay">
         <span data-i18n="btn_choose_pay">Alege plata</span>
         <span class="msym" style="font-size:18px">chevron_right</span>
       </button>
@@ -421,7 +421,7 @@
 <!-- ══ SCREEN 3 — PAYMENT METHOD ═══════════════════════════ -->
 <div class="screen" id="screen-payment">
   <div class="col">
-    <button class="back-btn" onclick="goToScreen('tip')">
+    <button class="back-btn" id="btn-back-pay">
       <span class="msym" style="font-size:18px">arrow_back</span>
       <span data-i18n="back">Înapoi</span>
     </button>
@@ -435,7 +435,7 @@
     </div>
 
     <div class="pay-cards">
-      <div class="p-card sel" id="pc-mia" onclick="selectMethod('mia')">
+      <div class="p-card sel" id="pc-mia">
         <div class="p-ico mia">M</div>
         <div class="p-text">
           <div class="p-name" data-i18n="mia_name">MIA Transfer</div>
@@ -456,11 +456,11 @@
 
   <div class="act-bar">
     <div class="act-inner">
-      <button class="btn-primary" id="btn-confirm" onclick="confirmPayment()">
+      <button class="btn-primary" id="btn-confirm">
         <span data-i18n="btn_confirm">Confirmă Plata</span>
         <span class="msym" style="font-size:18px">lock</span>
       </button>
-      <button class="btn-ghost" onclick="goToScreen('bill')" data-i18n="btn_back_order">Înapoi la comandă</button>
+      <button class="btn-ghost" id="btn-back-order-pay" data-i18n="btn_back_order">Înapoi la comandă</button>
     </div>
   </div>
 </div>
@@ -490,11 +490,11 @@
   </div>
   <div class="act-bar">
     <div class="act-inner">
-      <button class="btn-primary" onclick="retryPayment()">
+      <button class="btn-primary" id="btn-retry">
         <span class="msym" style="font-size:18px">refresh</span>
         <span data-i18n="btn_retry">Încearcă din nou</span>
       </button>
-      <button class="btn-ghost" onclick="goToScreen('bill')" data-i18n="btn_back_order">Înapoi la comandă</button>
+      <button class="btn-ghost" id="btn-back-order-fail" data-i18n="btn_back_order">Înapoi la comandă</button>
     </div>
   </div>
 </div>
@@ -1012,9 +1012,7 @@
       const chk   = (isMine || isPaid) ? '&#10003;' : '';
       const meta  = isOther ? `<div class="item-meta">${t('item_reserved')}</div>`
                   : isPaid  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
-      const click = (!isPaid && !isOther && !isReadonly) ? `onclick="toggleItem(${it.id})"` : '';
-
-      return `<div class="${cls}" data-item-id="${it.id}" ${click}>
+      return `<div class="${cls}" data-item-id="${it.id}">
         <div class="item-info"><div class="${nCls}">${esc(it.name)}</div>${meta}</div>
         <div class="${pCls}">${fmt0(it.price)} MDL</div>
         <div class="i-cb">${chk}</div>
@@ -1043,12 +1041,6 @@
 
       el.className = 'item-card' +
         (isPaid ? ' paid' : isMine ? ' sel' : isOther ? ' rsv' : isReadonly ? ' readonly' : '');
-
-      if (!isPaid && !isOther && !isReadonly) {
-        el.setAttribute('onclick', `toggleItem(${it.id})`);
-      } else {
-        el.removeAttribute('onclick');
-      }
 
       const nCls = isPaid ? 'item-name g' : 'item-name';
       const pCls = isPaid ? 'item-price g' : 'item-price';
@@ -1165,6 +1157,48 @@
 
   // Apply initial language on load
   applyLang();
+
+  // ── CSP-safe event wiring (no inline onclick= handlers) ──────────────────────
+  // Header
+  document.getElementById('lang-btn').addEventListener('click', toggleLang);
+  document.getElementById('waiter-btn').addEventListener('click', callWaiter);
+
+  // Split-mode tabs
+  document.getElementById('tab-mine').addEventListener('click',  () => setSplit('mine'));
+  document.getElementById('tab-equal').addEventListener('click', () => setSplit('equal'));
+  document.getElementById('tab-rest').addEventListener('click',  () => setSplit('rest'));
+
+  // Guest count (screen 1)
+  document.getElementById('btn-guests-minus').addEventListener('click', () => chgGuests(-1));
+  document.getElementById('btn-guests-plus').addEventListener('click',  () => chgGuests(+1));
+
+  // Continue to tip (screen 1)
+  document.getElementById('btn-cont').addEventListener('click', goToTip);
+
+  // Tip screen (screen 2)
+  document.getElementById('btn-back-tip').addEventListener('click', () => goToScreen('bill'));
+  document.querySelectorAll('.t-card').forEach(btn => {
+    btn.addEventListener('click', () => setTip(Number(btn.dataset.pct), btn));
+  });
+  document.getElementById('btn-to-pay').addEventListener('click', goToPayment);
+
+  // Payment method screen (screen 3)
+  document.getElementById('btn-back-pay').addEventListener('click',       () => goToScreen('tip'));
+  document.getElementById('pc-mia').addEventListener('click',             () => selectMethod('mia'));
+  document.getElementById('btn-confirm').addEventListener('click',        confirmPayment);
+  document.getElementById('btn-back-order-pay').addEventListener('click', () => goToScreen('bill'));
+
+  // Fail screen
+  document.getElementById('btn-retry').addEventListener('click',           retryPayment);
+  document.getElementById('btn-back-order-fail').addEventListener('click', () => goToScreen('bill'));
+
+  // Item list — delegated click: reads data-item-id from closest .item-card
+  document.getElementById('items-list').addEventListener('click', e => {
+    const card = e.target.closest('.item-card');
+    if (!card) return;
+    const id = Number(card.dataset.itemId);
+    if (id) toggleItem(id);
+  });
 </script>
 </body>
 </html>

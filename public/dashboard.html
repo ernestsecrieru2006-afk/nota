@@ -1282,7 +1282,7 @@ function addWaiterFeedEntry(tableNumber) {
       <div class="pay-meta" style="color:var(--red)">cheamă ospătarul</div>
     </div>
     <div class="pay-right">
-      <button onclick="dismissWaiter(${tableNumber})" style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Rezolvat</button>
+      <button data-dismiss-waiter="${tableNumber}" style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Rezolvat</button>
     </div>`;
   feed.prepend(div);
 }
@@ -1293,6 +1293,12 @@ function dismissWaiter(tableNumber) {
   if (el) el.remove();
   loadTables();
 }
+
+// Delegated handler for dismiss buttons in feed (CSP-safe: no inline onclick)
+document.getElementById('payments-feed').addEventListener('click', e => {
+  const btn = e.target.closest('[data-dismiss-waiter]');
+  if (btn) dismissWaiter(Number(btn.dataset.dismissWaiter));
+});
 
 // ── Seed ──────────────────────────────────────────────────────────────────────
 document.getElementById('seed-btn').addEventListener('click', async () => {
