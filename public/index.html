@@ -997,9 +997,9 @@
     const isReadonly = splitMode !== 'mine';
 
     list.innerHTML = items.map(it => {
-      const isMine  = !isReadonly && mySelected.has(it.id) && it.status === 'claimed' && it.claimed_by === socket.id;
-      const isOther = it.status === 'claimed' && it.claimed_by !== socket.id;
       const isPaid  = it.status === 'paid';
+      const isMine  = !isReadonly && mySelected.has(it.id) && !isPaid;
+      const isOther = !isMine && it.status === 'claimed' && it.claimed_by !== socket.id;
 
       let cls = 'item-card';
       if (isPaid)        cls += ' paid';
@@ -1037,9 +1037,9 @@
       const el = list.querySelector(`[data-item-id="${id}"]`);
       if (!it || !el) continue;
 
-      const isMine  = !isReadonly && mySelected.has(it.id) && it.status === 'claimed' && it.claimed_by === socket.id;
-      const isOther = it.status === 'claimed' && it.claimed_by !== socket.id;
       const isPaid  = it.status === 'paid';
+      const isMine  = !isReadonly && mySelected.has(it.id) && !isPaid;
+      const isOther = !isMine && it.status === 'claimed' && it.claimed_by !== socket.id;
 
       el.className = 'item-card' +
         (isPaid ? ' paid' : isMine ? ' sel' : isOther ? ' rsv' : isReadonly ? ' readonly' : '');
