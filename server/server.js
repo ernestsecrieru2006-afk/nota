@@ -387,6 +387,12 @@ app.post('/api/dev/seed-table', requireDevAuth, async (req, res) => {
       order = o;
     }
 
+    // Enforce exactly one open order per table — close any older stale open orders
+    await pool.query(
+      `UPDATE orders SET status='closed' WHERE table_id=$1 AND status='open' AND id != $2`,
+      [tbl.id, order.id]
+    );
+
     // Also cancel any pending payments for this order so the state is clean
     await pool.query(
       `UPDATE payments SET status='cancelled' WHERE order_id=$1 AND status='pending'`,
@@ -440,7 +446,7 @@ app.post('/api/dev/seed-payments', requireDevAuth, async (req, res) => {
       if (!t) continue;
       const { rows: [o] } = await client.query(
         `INSERT INTO orders (table_id, table_number, restaurant_id, status)
-         VALUES ($1, $2, $3, 'open') RETURNING id`,
+         VALUES ($1, $2, $3, 'closed') RETURNING id`,
         [t.id, tableNum, rId]
       );
       const dish = DISHES[i % DISHES.length];
@@ -1289,6 +1295,113 @@ app.use((err, req, res, _next) => {
 process.on('uncaughtException',  err  => console.error('[uncaughtException]',  err));
 process.on('unhandledRejection', err  => console.error('[unhandledRejection]', err));
 
+// ─── startup helpers ──────────────────────────────────────────────────────────
+
+async function cleanupStaleOpenOrders() {
+  try {
+    // Step 1: close open orders whose items are all paid (or have no items) and
+    // have no pending payments — these are fully-settled orders left open by old seeds.
+    const { rowCount: r1 } = await pool.query(`
+      UPDATE orders SET status='closed'
+      WHERE status='open'
+        AND id NOT IN (SELECT DISTINCT order_id FROM payments WHERE status='pending')
+        AND NOT EXISTS (
+          SELECT 1 FROM order_items WHERE order_id=orders.id AND status IN ('available','claimed')
+        )
+    `);
+
+    // Step 2: for tables that still have multiple open orders, keep only the newest
+    // and close the rest (those with no pending payments).
+    const { rowCount: r2 } = await pool.query(`
+      UPDATE orders SET status='closed'
+      WHERE status='open'
+        AND id NOT IN (
+          SELECT DISTINCT ON (table_id) id FROM orders WHERE status='open'
+          ORDER BY table_id, created_at DESC
+        )
+        AND id NOT IN (SELECT DISTINCT order_id FROM payments WHERE status='pending')
+    `);
+
+    if (r1 + r2 > 0) {
+      console.log(`   [startup] closed ${r1} all-paid/empty + ${r2} duplicate open orders`);
+    }
+  } catch (err) {
+    console.error('[startup] cleanupStaleOpenOrders:', err.message);
+  }
+}
+
+// Demo dishes per table — varied so the demo doesn't look copy-pasted
+const _SEED_TABLE_DISHES = {
+  1: [['Spaghetti Carbonara', 185], ['Risotto ai Funghi', 210], ['Branzino al Forno', 290], ['Tiramisù', 95], ['Vino Rosso (pahar)', 75]],
+  2: [['Risotto ai Funghi', 210], ['Branzino al Forno', 290], ['Pizza Margherita', 165], ['Bruschetta', 85], ['Tiramisù', 95]],
+  3: [['Branzino al Forno', 290], ['Spaghetti Carbonara', 185], ['Vino Rosso (pahar)', 75], ['Panna Cotta', 90], ['Acqua Minerale', 35]],
+};
+
+async function autoSeedDemoTables() {
+  try {
+    for (const [tn, dishes] of Object.entries(_SEED_TABLE_DISHES)) {
+      const tNum = Number(tn);
+      const { rows: [tbl] } = await pool.query(
+        'SELECT id, token FROM tables WHERE restaurant_id=1 AND number=$1', [tNum]
+      );
+      if (!tbl) continue;
+
+      // Skip if a live open order with available items already exists
+      const { rows: [live] } = await pool.query(`
+        SELECT o.id FROM orders o
+        WHERE o.table_id=$1 AND o.status='open'
+          AND EXISTS (SELECT 1 FROM order_items WHERE order_id=o.id AND status='available')
+        LIMIT 1
+      `, [tbl.id]);
+      if (live) {
+        console.log(`   [startup] Table ${tNum}: live order exists — skipping auto-seed`);
+        console.log(`   [startup] Table ${tNum} URL: ${APP_URL}/?t=${tbl.token}`);
+        continue;
+      }
+
+      // Find or create the single open order for this table
+      let { rows: [order] } = await pool.query(
+        `SELECT id FROM orders WHERE table_id=$1 AND status='open' ORDER BY created_at DESC LIMIT 1`,
+        [tbl.id]
+      );
+      if (!order) {
+        const { rows: [o] } = await pool.query(
+          `INSERT INTO orders (table_id, table_number, restaurant_id, status)
+           VALUES ($1, $2, 1, 'open') RETURNING id`,
+          [tbl.id, tNum]
+        );
+        order = o;
+      }
+
+      // Close any other open orders for this table (safety net)
+      await pool.query(
+        `UPDATE orders SET status='closed' WHERE table_id=$1 AND status='open' AND id!=$2`,
+        [tbl.id, order.id]
+      );
+
+      await pool.query(`UPDATE payments SET status='cancelled' WHERE order_id=$1 AND status='pending'`, [order.id]);
+      await pool.query(`DELETE FROM order_items WHERE order_id=$1`, [order.id]);
+
+      const params = [order.id];
+      const placeholders = dishes.map(([name, price]) => {
+        params.push(name, price);
+        const n = params.length;
+        return `($1, $${n - 1}, $${n}, 'available')`;
+      }).join(', ');
+      await pool.query(
+        `INSERT INTO order_items (order_id, name, price, status) VALUES ${placeholders}`,
+        params
+      );
+
+      const total = dishes.reduce((s, [, p]) => s + p, 0);
+      console.log(`   [startup] Table ${tNum} seeded: ${dishes.length} items, ${total} MDL`);
+      console.log(`   [startup] Table ${tNum} URL: ${APP_URL}/?t=${tbl.token}`);
+    }
+  } catch (err) {
+    console.error('[startup] autoSeedDemoTables:', err.message);
+  }
+}
+
 // ─── start ────────────────────────────────────────────────────────────────────
 
 httpServer.listen(PORT, async () => {
@@ -1307,15 +1420,10 @@ httpServer.listen(PORT, async () => {
     if (stuck.length) console.log(`   [startup] ${stuck.length} socket(s) have claimed items — reconciliation will resolve pending payments`);
   } catch {}
 
-  try {
-    const { rows: [t1] } = await pool.query(
-      "SELECT token FROM tables WHERE number = 1 ORDER BY restaurant_id LIMIT 1"
-    );
-    const guestUrl = t1?.token ? `${APP_URL}/?t=${t1.token}` : `${APP_URL}/?t=<run-setup-db>`;
-    console.log(`\n   Guest:     ${guestUrl}`);
-  } catch {
-    console.log(`\n   Guest:     ${APP_URL}/?t=<token>`);
-  }
+  // Clean up stale open orders left by old seeds, then ensure demo tables are ready
+  await cleanupStaleOpenOrders();
+  await autoSeedDemoTables();
+
   console.log(`   Dashboard: ${APP_URL}/dashboard`);
   console.log(`   QR codes:  ${APP_URL}/qrcodes\n`);
 });
