@@ -70,15 +70,19 @@
     }
     .lang-toggle:hover { background: rgba(197,160,89,0.2); }
     .waiter-btn {
-      background: none; border: none;
+      background: none;
+      border: 1.5px solid rgba(197,160,89,0.28);
+      border-radius: 999px;
       color: var(--outline); cursor: pointer;
-      padding: 5px; border-radius: 8px;
-      display: flex; align-items: center; justify-content: center;
-      font-size: 22px; line-height: 1;
-      transition: background 0.15s, color 0.15s;
+      padding: 5px 11px;
+      display: flex; align-items: center; gap: 5px;
+      font-family: 'Manrope', sans-serif;
+      font-size: 12px; font-weight: 600; line-height: 1;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
       touch-action: manipulation;
     }
-    .waiter-btn:hover  { background: rgba(197,160,89,0.1); color: var(--brass); }
+    .waiter-btn .msym  { font-size: 17px; }
+    .waiter-btn:hover  { background: rgba(197,160,89,0.1); color: var(--brass); border-color: rgba(197,160,89,0.5); }
     .waiter-btn:active { transform: scale(0.92); }
     .waiter-btn:disabled { opacity: 0.32; cursor: not-allowed; }
 
@@ -300,6 +304,7 @@
       <button class="lang-toggle" id="lang-btn" onclick="toggleLang()">RU</button>
       <button class="waiter-btn" id="waiter-btn" onclick="callWaiter()">
         <span class="msym">notifications</span>
+        <span data-i18n="waiter_btn_title">Cheamă ospătarul</span>
       </button>
     </div>
   </div>
@@ -686,8 +691,6 @@
       const key = el.dataset.i18n;
       el.textContent = t(key);
     });
-    // Update waiter button title
-    document.getElementById('waiter-btn').title = t('waiter_btn_title');
     // Lang toggle shows the OTHER language
     document.getElementById('lang-btn').textContent = lang === 'ro' ? 'RU' : 'RO';
     // Update mode info text
