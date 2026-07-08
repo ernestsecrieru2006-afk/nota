@@ -162,6 +162,23 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_device   ON payments(restaurant_id, device_id) WHERE device_id IS NOT NULL`);
     } catch { /* columns/indexes may already exist */ }
 
+    // ── Club Eats v2: members + member-gated offers ───────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS members (
+        id            SERIAL       PRIMARY KEY,
+        email         TEXT         NOT NULL UNIQUE,
+        password_hash TEXT         NOT NULL,
+        plan          TEXT         NOT NULL DEFAULT 'free',
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    try {
+      await client.query(`ALTER TABLE offers ADD COLUMN IF NOT EXISTS member_only    BOOLEAN NOT NULL DEFAULT true`);
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS member_id    INT REFERENCES members(id)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_member ON payments(restaurant_id, member_id) WHERE member_id IS NOT NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_members_email   ON members(email)`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

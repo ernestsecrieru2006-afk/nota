@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Club Eats — nota.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:       #0a0a0f;
+  --surface:  #13131a;
+  --card:     #1a1a24;
+  --border:   #2a2a38;
+  --text:     #f0f0f8;
+  --text2:    #b0b0c8;
+  --muted:    #666680;
+  --gold:     #c9a84c;
+  --gold-dim: #c9a84c28;
+  --gold-hi:  #e8c96a;
+  --r:        12px;
+  --rl:       18px;
+}
+body { font-family:'Manrope',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100dvh; }
+a { color:inherit; text-decoration:none; }
+
+/* ── Nav ── */
+.nav { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:10; }
+.nav-brand { font-family:'Playfair Display',serif; font-size:20px; color:var(--gold-hi); letter-spacing:.02em; }
+.nav-brand span { color:var(--text2); font-size:11px; font-family:'Manrope',sans-serif; font-weight:600; letter-spacing:.12em; text-transform:uppercase; display:block; }
+.nav-lang { display:flex; gap:6px; }
+.lang-btn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:12px; font-weight:600; padding:4px 10px; cursor:pointer; font-family:inherit; transition:border-color .15s,color .15s; }
+.lang-btn.active { border-color:var(--gold); color:var(--gold-hi); }
+.nav-auth { display:flex; align-items:center; gap:10px; }
+.btn-login  { background:none; border:1px solid var(--border); border-radius:8px; color:var(--text2); font-size:13px; font-weight:600; padding:7px 16px; cursor:pointer; font-family:inherit; transition:.15s; }
+.btn-login:hover { border-color:var(--gold-dim); color:var(--gold-hi); }
+.btn-signup { background:var(--gold); border:none; border-radius:8px; color:#000; font-size:13px; font-weight:700; padding:7px 16px; cursor:pointer; font-family:inherit; transition:.15s; }
+.btn-signup:hover { background:var(--gold-hi); }
+.nav-user { font-size:13px; color:var(--text2); }
+.btn-logout { background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; font-family:inherit; text-decoration:underline; margin-left:8px; }
+
+/* ── Hero ── */
+.hero { text-align:center; padding:48px 24px 32px; }
+.hero-badge { display:inline-flex; align-items:center; gap:6px; background:var(--gold-dim); border:1px solid var(--gold); border-radius:99px; padding:5px 14px; font-size:11px; font-weight:700; color:var(--gold-hi); letter-spacing:.08em; text-transform:uppercase; margin-bottom:20px; }
+.hero-title { font-family:'Playfair Display',serif; font-size:clamp(28px,7vw,48px); color:var(--text); line-height:1.15; margin-bottom:12px; }
+.hero-title em { color:var(--gold-hi); font-style:normal; }
+.hero-sub { color:var(--text2); font-size:15px; line-height:1.6; max-width:480px; margin:0 auto 28px; }
+.hero-cta { display:inline-block; background:var(--gold); color:#000; font-weight:700; font-size:15px; border-radius:10px; padding:12px 28px; cursor:pointer; border:none; font-family:inherit; transition:.15s; }
+.hero-cta:hover { background:var(--gold-hi); }
+
+/* ── Section ── */
+.section { max-width:680px; margin:0 auto; padding:0 16px 40px; }
+.section-title { font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px; }
+
+/* ── Offers ── */
+.offers-grid { display:flex; flex-direction:column; gap:12px; }
+.offer-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:18px 20px; display:flex; align-items:center; gap:16px; }
+.offer-pct-badge { flex-shrink:0; width:56px; height:56px; background:var(--gold-dim); border:1.5px solid var(--gold); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:800; color:var(--gold-hi); }
+.offer-body { flex:1; min-width:0; }
+.offer-name { font-size:15px; font-weight:700; color:var(--text); margin-bottom:3px; }
+.offer-restaurant { font-size:12px; color:var(--muted); margin-bottom:6px; }
+.offer-meta { font-size:12px; color:var(--text2); }
+.offer-badge-member { display:inline-flex; align-items:center; gap:4px; background:var(--gold-dim); border:1px solid var(--gold); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold-hi); letter-spacing:.06em; margin-left:6px; }
+.offer-status-live { display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; margin-right:4px; }
+.offers-empty { text-align:center; color:var(--muted); padding:40px 20px; font-size:14px; }
+
+/* ── Auth modal ── */
+.modal-overlay { position:fixed; inset:0; background:#000a; display:flex; align-items:flex-end; justify-content:center; z-index:100; padding:0; }
+.modal-overlay.hidden { display:none; }
+.modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl) var(--rl) 0 0; padding:28px 24px 36px; width:100%; max-width:460px; }
+.modal-title { font-family:'Playfair Display',serif; font-size:22px; color:var(--gold-hi); margin-bottom:6px; }
+.modal-sub { font-size:13px; color:var(--text2); margin-bottom:22px; }
+.form-field { margin-bottom:14px; }
+.form-field label { display:block; font-size:12px; font-weight:600; color:var(--text2); margin-bottom:6px; letter-spacing:.04em; }
+.form-field input { width:100%; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:15px; font-family:inherit; padding:11px 14px; outline:none; transition:border-color .15s; }
+.form-field input:focus { border-color:var(--gold); }
+.btn-submit { width:100%; background:var(--gold); border:none; border-radius:10px; color:#000; font-size:15px; font-weight:700; padding:13px; cursor:pointer; font-family:inherit; transition:.15s; margin-top:6px; }
+.btn-submit:hover { background:var(--gold-hi); }
+.modal-err { color:#ef4444; font-size:13px; margin-bottom:10px; min-height:18px; }
+.modal-switch { font-size:13px; color:var(--text2); text-align:center; margin-top:16px; }
+.modal-switch button { background:none; border:none; color:var(--gold-hi); font-weight:700; cursor:pointer; font-family:inherit; font-size:13px; }
+.btn-modal-close { position:absolute; top:14px; right:18px; background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; line-height:1; }
+
+/* ── Member banner ── */
+.member-banner { background:linear-gradient(135deg,#1a1508,#1e1a08); border:1px solid var(--gold); border-radius:var(--rl); padding:18px 20px; margin-bottom:24px; display:flex; align-items:center; gap:14px; }
+.member-banner-icon { font-size:28px; flex-shrink:0; }
+.member-banner-body {}
+.member-banner-title { font-size:14px; font-weight:700; color:var(--gold-hi); margin-bottom:3px; }
+.member-banner-sub { font-size:12px; color:var(--text2); }
+.member-banner.hidden { display:none; }
+
+/* ── Toast ── */
+.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 20px; font-size:13px; color:var(--text); box-shadow:0 4px 24px #0008; z-index:200; opacity:0; transition:opacity .2s; pointer-events:none; white-space:nowrap; }
+.toast.show { opacity:1; }
+
+/* ── Spinner ── */
+.spinner { width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; vertical-align:middle; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+@media (min-width:460px) {
+  .modal-overlay { align-items:center; padding:20px; }
+  .modal { border-radius:var(--rl); position:relative; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Navigation ── -->
+<nav class="nav">
+  <div>
+    <div class="nav-brand">Club Eats <span>by nota.</span></div>
+  </div>
+  <div class="nav-lang">
+    <button class="lang-btn active" data-lang="ro">RO</button>
+    <button class="lang-btn" data-lang="ru">RU</button>
+  </div>
+  <div class="nav-auth" id="nav-auth">
+    <button class="btn-login" id="btn-nav-login">Autentificare</button>
+    <button class="btn-signup" id="btn-nav-signup">Alătură-te gratuit</button>
+  </div>
+</nav>
+
+<!-- ── Hero (shown when logged-out) ── -->
+<div id="hero-section" class="hero">
+  <div class="hero-badge">✨ Program gratuit de fidelitate</div>
+  <h1 class="hero-title">Reduceri exclusive<br><em>la restaurantele partenere</em></h1>
+  <p class="hero-sub" id="hero-sub-text">Devino membru Club Eats și beneficiază de reduceri automate la plata prin nota. — zero pași suplimentari.</p>
+  <button class="hero-cta" id="btn-hero-cta">Alătură-te gratuit</button>
+</div>
+
+<!-- ── Main content ── -->
+<main class="section">
+  <!-- Member welcome banner -->
+  <div class="member-banner hidden" id="member-banner">
+    <div class="member-banner-icon">✨</div>
+    <div class="member-banner-body">
+      <div class="member-banner-title" id="member-banner-title">Bun venit în Club Eats!</div>
+      <div class="member-banner-sub" id="member-banner-sub">Reducerile tale se aplică automat la scanarea mesei.</div>
+    </div>
+  </div>
+
+  <div class="section-title" id="offers-section-title">Oferte active</div>
+  <div class="offers-grid" id="offers-grid">
+    <div class="offers-empty"><span class="spinner"></span></div>
+  </div>
+</main>
+
+<!-- ── Auth modal ── -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal">
+    <button class="btn-modal-close" id="btn-modal-close">×</button>
+    <div class="modal-title" id="modal-title">Autentificare</div>
+    <div class="modal-sub" id="modal-sub">Intră în contul tău Club Eats.</div>
+    <div class="modal-err" id="modal-err"></div>
+    <div class="form-field">
+      <label id="lbl-email">Email</label>
+      <input type="email" id="inp-email" autocomplete="email" placeholder="adresa@email.com">
+    </div>
+    <div class="form-field">
+      <label id="lbl-password">Parolă</label>
+      <input type="password" id="inp-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="btn-submit" id="btn-submit">Intră în cont</button>
+    <div class="modal-switch" id="modal-switch">
+      Nu ai cont? <button id="btn-switch-mode">Înregistrează-te gratuit</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div class="toast" id="toast"></div>
+
+<script>
+'use strict';
+// ── i18n ──────────────────────────────────────────────────────────────────────
+const TRANS = {
+  ro: {
+    nav_login:      'Autentificare',
+    nav_signup:     'Alătură-te gratuit',
+    nav_logout:     'Ieșire',
+    hero_badge:     '✨ Program gratuit de fidelitate',
+    hero_title1:    'Reduceri exclusive',
+    hero_title2:    'la restaurantele partenere',
+    hero_sub:       'Devino membru Club Eats și beneficiezi de reduceri automate la plata prin nota. — zero pași suplimentari.',
+    hero_cta:       'Alătură-te gratuit',
+    offers_title:   'Oferte active',
+    member_banner_title:  'Bun venit în Club Eats!',
+    member_banner_sub:    'Reducerile tale se aplică automat când scanezi masa.',
+    modal_login_title:  'Autentificare',
+    modal_login_sub:    'Intră în contul tău Club Eats.',
+    modal_reg_title:    'Creează cont gratuit',
+    modal_reg_sub:      'Alătură-te Club Eats — reduceri automate la restaurantele partenere.',
+    lbl_email:      'Email',
+    lbl_password:   'Parolă',
+    btn_login:      'Intră în cont',
+    btn_register:   'Creează cont',
+    switch_to_reg:  'Nu ai cont?',
+    switch_to_reg_btn: 'Înregistrează-te gratuit',
+    switch_to_login:    'Ai deja cont?',
+    switch_to_login_btn: 'Autentifică-te',
+    offers_empty:   'Nicio ofertă activă momentan. Revino în curând!',
+    badge_member_only: '★ Membri',
+    badge_live:     'Activ acum',
+    days: ['Dum','Lun','Mar','Mie','Joi','Vin','Sâm'],
+  },
+  ru: {
+    nav_login:      'Войти',
+    nav_signup:     'Присоединиться бесплатно',
+    nav_logout:     'Выйти',
+    hero_badge:     '✨ Бесплатная программа лояльности',
+    hero_title1:    'Эксклюзивные скидки',
+    hero_title2:    'в ресторанах-партнёрах',
+    hero_sub:       'Станьте участником Club Eats и получайте автоматические скидки при оплате через nota. — без лишних шагов.',
+    hero_cta:       'Присоединиться бесплатно',
+    offers_title:   'Активные предложения',
+    member_banner_title:  'Добро пожаловать в Club Eats!',
+    member_banner_sub:    'Ваши скидки применяются автоматически при сканировании стола.',
+    modal_login_title:  'Войти',
+    modal_login_sub:    'Войдите в аккаунт Club Eats.',
+    modal_reg_title:    'Создать бесплатный аккаунт',
+    modal_reg_sub:      'Присоединяйтесь к Club Eats — автоматические скидки в ресторанах-партнёрах.',
+    lbl_email:      'Email',
+    lbl_password:   'Пароль',
+    btn_login:      'Войти',
+    btn_register:   'Создать аккаунт',
+    switch_to_reg:  'Нет аккаунта?',
+    switch_to_reg_btn: 'Зарегистрироваться бесплатно',
+    switch_to_login:    'Уже есть аккаунт?',
+    switch_to_login_btn: 'Войти',
+    offers_empty:   'Нет активных предложений. Загляните позже!',
+    badge_member_only: '★ Участники',
+    badge_live:     'Активно сейчас',
+    days: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
+  },
+};
+
+let lang = localStorage.getItem('nota_club_lang') || (navigator.language?.startsWith('ru') ? 'ru' : 'ro');
+let isLoginMode = true;
+let member = null;
+
+function t(k) { return TRANS[lang][k] || k; }
+
+function applyLang() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  document.getElementById('btn-nav-login').textContent  = t('nav_login');
+  document.getElementById('btn-nav-signup').textContent = t('nav_signup');
+  document.querySelector('.hero-badge').textContent = t('hero_badge');
+  document.querySelector('.hero-title').innerHTML = `${t('hero_title1')}<br><em>${t('hero_title2')}</em>`;
+  document.getElementById('hero-sub-text').textContent = t('hero_sub');
+  document.getElementById('btn-hero-cta').textContent  = t('hero_cta');
+  document.getElementById('offers-section-title').textContent = t('offers_title');
+  document.getElementById('member-banner-title').textContent  = t('member_banner_title');
+  document.getElementById('member-banner-sub').textContent    = t('member_banner_sub');
+  document.getElementById('lbl-email').textContent    = t('lbl_email');
+  document.getElementById('lbl-password').textContent = t('lbl_password');
+  refreshModalText();
+  renderOffers(lastOffers);
+  refreshNavAuth();
+}
+
+// ── Auth state ───────────────────────────────────────────────────────────────
+function getMemberToken() { return localStorage.getItem('nota_club_token'); }
+
+function setMember(tok, payload) {
+  if (tok) localStorage.setItem('nota_club_token', tok);
+  member = payload;
+  refreshNavAuth();
+  renderOffers(lastOffers);
+}
+
+function logout() {
+  localStorage.removeItem('nota_club_token');
+  member = null;
+  refreshNavAuth();
+  renderOffers(lastOffers);
+}
+
+function refreshNavAuth() {
+  const authEl = document.getElementById('nav-auth');
+  const heroEl = document.getElementById('hero-section');
+  const bannerEl = document.getElementById('member-banner');
+  if (member) {
+    authEl.innerHTML = `<span class="nav-user">${esc(member.email)}</span><button class="btn-logout" id="btn-logout-dyn">${t('nav_logout')}</button>`;
+    document.getElementById('btn-logout-dyn').addEventListener('click', logout);
+    heroEl.style.display = 'none';
+    bannerEl.classList.remove('hidden');
+  } else {
+    authEl.innerHTML = `<button class="btn-login" id="btn-nav-login-dyn">${t('nav_login')}</button><button class="btn-signup" id="btn-nav-signup-dyn">${t('nav_signup')}</button>`;
+    document.getElementById('btn-nav-login-dyn').addEventListener('click', () => openModal(true));
+    document.getElementById('btn-nav-signup-dyn').addEventListener('click', () => openModal(false));
+    heroEl.style.display = '';
+    bannerEl.classList.add('hidden');
+  }
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function openModal(loginMode) {
+  isLoginMode = loginMode;
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.getElementById('modal-err').textContent = '';
+  document.getElementById('inp-email').value = '';
+  document.getElementById('inp-password').value = '';
+  refreshModalText();
+  setTimeout(() => document.getElementById('inp-email').focus(), 80);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function refreshModalText() {
+  document.getElementById('modal-title').textContent = isLoginMode ? t('modal_login_title') : t('modal_reg_title');
+  document.getElementById('modal-sub').textContent   = isLoginMode ? t('modal_login_sub')   : t('modal_reg_sub');
+  document.getElementById('btn-submit').textContent  = isLoginMode ? t('btn_login')          : t('btn_register');
+  const sw = document.getElementById('modal-switch');
+  sw.innerHTML = isLoginMode
+    ? `${t('switch_to_reg')} <button id="btn-switch-mode-dyn">${t('switch_to_reg_btn')}</button>`
+    : `${t('switch_to_login')} <button id="btn-switch-mode-dyn">${t('switch_to_login_btn')}</button>`;
+  document.getElementById('btn-switch-mode-dyn').addEventListener('click', () => {
+    isLoginMode = !isLoginMode;
+    document.getElementById('modal-err').textContent = '';
+    refreshModalText();
+  });
+}
+
+async function submitAuth() {
+  const email    = document.getElementById('inp-email').value.trim();
+  const password = document.getElementById('inp-password').value;
+  const errEl    = document.getElementById('modal-err');
+  errEl.textContent = '';
+  if (!email || !password) { errEl.textContent = 'Completează toate câmpurile.'; return; }
+
+  const url = isLoginMode ? '/api/members/login' : '/api/members/register';
+  try {
+    document.getElementById('btn-submit').disabled = true;
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) { errEl.textContent = data.error || 'Eroare. Încearcă din nou.'; return; }
+    setMember(data.token, data.member);
+    closeModal();
+    showToast(isLoginMode ? '✓ Autentificat cu succes!' : '✓ Cont creat cu succes!');
+  } catch {
+    errEl.textContent = 'Eroare de rețea. Încearcă din nou.';
+  } finally {
+    document.getElementById('btn-submit').disabled = false;
+  }
+}
+
+// ── Offers ───────────────────────────────────────────────────────────────────
+let lastOffers = [];
+
+function fmtDays(daysArr) {
+  const days = t('days');
+  if (daysArr.length === 7) return lang === 'ro' ? 'Zilnic' : 'Ежедневно';
+  return daysArr.map(d => days[d]).join(', ');
+}
+
+function fmtTime(t) { return (t || '').slice(0,5); }
+
+function isOfferLiveNow(o) {
+  const now = new Date();
+  const dow = now.getDay();
+  const pad = n => String(n).padStart(2,'0');
+  const nowT = `${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+  return o.active && Array.isArray(o.days_of_week) && o.days_of_week.includes(dow)
+    && (o.start_time || '99') <= nowT && (o.end_time || '00') > nowT;
+}
+
+function renderOffers(offers) {
+  lastOffers = offers;
+  const grid = document.getElementById('offers-grid');
+  if (!offers.length) {
+    grid.innerHTML = `<div class="offers-empty">${t('offers_empty')}</div>`;
+    return;
+  }
+  grid.innerHTML = offers.map(o => {
+    const live = isOfferLiveNow(o);
+    const memberBadge = o.member_only
+      ? `<span class="offer-badge-member">★ ${t('badge_member_only')}</span>`
+      : '';
+    return `
+    <div class="offer-card">
+      <div class="offer-pct-badge">−${o.discount_pct}%</div>
+      <div class="offer-body">
+        <div class="offer-name">${esc(o.name)}${memberBadge}</div>
+        <div class="offer-restaurant">${esc(o.restaurant_name)}</div>
+        <div class="offer-meta">
+          ${live ? `<span class="offer-status-live"></span><strong style="color:#22c55e">${t('badge_live')}</strong> · ` : ''}
+          ${fmtTime(o.start_time)} – ${fmtTime(o.end_time)} · ${fmtDays(o.days_of_week || [])}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function loadOffers() {
+  try {
+    const resp = await fetch('/api/public/offers');
+    const data = await resp.json();
+    renderOffers(Array.isArray(data) ? data : []);
+  } catch {
+    document.getElementById('offers-grid').innerHTML = `<div class="offers-empty">Eroare la încărcare.</div>`;
+  }
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Utils ─────────────────────────────────────────────────────────────────────
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Event delegation ──────────────────────────────────────────────────────────
+document.addEventListener('click', e => {
+  // Language toggle
+  const langBtn = e.target.closest('.lang-btn');
+  if (langBtn) {
+    lang = langBtn.dataset.lang;
+    localStorage.setItem('nota_club_lang', lang);
+    applyLang();
+    return;
+  }
+  // Hero CTA
+  if (e.target.id === 'btn-hero-cta') { openModal(false); return; }
+  // Nav auth buttons (static — only present when logged-out initially)
+  if (e.target.id === 'btn-nav-login')  { openModal(true);  return; }
+  if (e.target.id === 'btn-nav-signup') { openModal(false); return; }
+  // Close modal backdrop
+  if (e.target.id === 'modal-overlay')  { closeModal(); return; }
+  if (e.target.id === 'btn-modal-close') { closeModal(); return; }
+  // Submit auth
+  if (e.target.id === 'btn-submit') { submitAuth(); return; }
+});
+
+// Submit on Enter in password field
+document.getElementById('inp-password').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitAuth();
+});
+document.getElementById('inp-email').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('inp-password').focus();
+});
+
+// ── Boot ─────────────────────────────────────────────────────────────────────
+(function boot() {
+  // Try to restore member from stored token
+  const tok = getMemberToken();
+  if (tok) {
+    try {
+      const payload = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+      if (payload.aud === 'member' && payload.exp * 1000 > Date.now()) {
+        member = payload;
+      } else {
+        localStorage.removeItem('nota_club_token');
+      }
+    } catch { localStorage.removeItem('nota_club_token'); }
+  }
+  applyLang();
+  loadOffers();
+})();
+</script>
+</body>
+</html>

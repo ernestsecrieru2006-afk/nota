@@ -605,7 +605,7 @@ html, body {
 .per-tab.active { background: var(--surface); color: var(--text); }
 .btn-add-offer { background: var(--em-bg2); border: 1px solid var(--em-dim); color: var(--em-hi); font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: var(--r); cursor: pointer; transition: all .15s; }
 .btn-add-offer:hover { background: var(--em-bg); }
-.ce-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.ce-kpi-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 20px; }
 .ce-kpi { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; }
 .ce-kpi-lbl { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
 .ce-kpi-val { font-size: 22px; font-weight: 700; color: var(--text); }
@@ -651,6 +651,8 @@ html, body {
 .attr-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text2); }
 .attr-table tr:last-child td { border-bottom: none; }
 .attr-table tr:hover td { background: var(--surface); }
+.export-csv-btn { background:transparent; border:1px solid var(--border); color:var(--muted); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
+.export-csv-btn:hover { border-color:var(--em); color:var(--em); }
 @media (max-width: 900px) {
   .ce-kpi-row { grid-template-columns: repeat(2, 1fr); }
   .offers-table-hd, .offer-row { grid-template-columns: 1fr 60px 100px 80px; }
@@ -755,7 +757,7 @@ html, body {
           <div class="main-date" id="main-date"></div>
         </div>
         <div style="display:flex;align-items:center;gap:10px">
-          <button id="export-btn" style="background:transparent;border:1px solid var(--border);color:var(--muted);padding:6px 12px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;transition:all .15s" onmouseover="this.style.borderColor='var(--em)';this.style.color='var(--em)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='var(--muted)'">↓ Export CSV</button>
+          <button id="export-btn" class="export-csv-btn">↓ Export CSV</button>
           <div class="live-pill">
             <div class="live-dot"></div>Live
           </div>
@@ -861,6 +863,14 @@ html, body {
             <div class="ce-kpi-val amb" id="ce-discount">— lei</div>
           </div>
           <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Membri noi</div>
+            <div class="ce-kpi-val em" id="ce-new-members">—</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Membri reveniti</div>
+            <div class="ce-kpi-val" id="ce-returning-members">—</div>
+          </div>
+          <div class="ce-kpi">
             <div class="ce-kpi-lbl">Clienți unici</div>
             <div class="ce-kpi-val" id="ce-devices">—</div>
           </div>
@@ -904,11 +914,20 @@ html, body {
               <button class="day-btn" data-d="0">Dum</button>
             </div>
           </div>
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:18px;margin-bottom:12px">
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
               <input type="checkbox" id="of-public" checked style="accent-color:var(--em)">
-              Vizibil pe pagina /oferte
+              Vizibil public (pagina Club)
             </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="of-member-only" checked style="accent-color:var(--em)">
+              Doar membri Club Eats
+            </label>
+          </div>
+          <!-- Quiet-hours suggestion -->
+          <div id="quiet-hours-hint" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px">
+            <div style="font-weight:600;margin-bottom:6px;color:var(--muted);letter-spacing:.04em">ORE LINIȘTITE (ultimele 30 zile)</div>
+            <div id="quiet-hours-list" style="display:flex;gap:8px;flex-wrap:wrap"></div>
           </div>
           <div class="offer-form-actions">
             <button class="btn-save-offer" id="btn-save-offer">Salvează oferta</button>
@@ -933,6 +952,7 @@ html, body {
                   <th>Reducere (lei)</th>
                   <th>Net (lei)</th>
                   <th>Clienți unici</th>
+                  <th>Membri Club</th>
                 </tr>
               </thead>
               <tbody id="ce-attr-body"></tbody>
@@ -1530,7 +1550,7 @@ async function loadClubEats(period) {
       api(`/api/dashboard/club-eats?period=${period}`),
       api('/api/dashboard/offers'),
     ]);
-    renderCeStats(ceData.totals || {});
+    renderCeStats(ceData.totals || {}, ceData.memberStats || null);
     renderOffers(offersData || []);
     renderCeAttr(ceData.offers || []);
   } catch (err) {
@@ -1538,11 +1558,15 @@ async function loadClubEats(period) {
   }
 }
 
-function renderCeStats(t) {
+function renderCeStats(t, memberStats) {
   document.getElementById('ce-net').textContent      = t.total_net     ? Math.round(Number(t.total_net))     + ' lei' : '— lei';
   document.getElementById('ce-discount').textContent = t.total_discount ? Math.round(Number(t.total_discount)) + ' lei' : '— lei';
   document.getElementById('ce-devices').textContent  = t.total_devices  != null ? t.total_devices  : '—';
   document.getElementById('ce-payments').textContent = t.total_payments != null ? t.total_payments : '—';
+  if (memberStats) {
+    document.getElementById('ce-new-members').textContent      = memberStats.new_members      != null ? memberStats.new_members      : '—';
+    document.getElementById('ce-returning-members').textContent = memberStats.returning_members != null ? memberStats.returning_members : '—';
+  }
 }
 
 function renderOffers(offers) {
@@ -1599,10 +1623,11 @@ function renderCeAttr(offers) {
       <td style="color:var(--amber-hi)">−${Math.round(Number(o.discount_total || 0))}</td>
       <td style="color:var(--em-hi)">${Math.round(Number(o.net_total || 0))}</td>
       <td>${o.unique_devices || 0}</td>
+      <td>${o.unique_members || 0}</td>
     </tr>`).join('');
 }
 
-function showOfferForm(offer = null) {
+async function showOfferForm(offer = null) {
   document.getElementById('offer-form-panel').style.display = '';
   document.getElementById('offer-form-title').textContent = offer ? 'Editează oferta' : 'Ofertă nouă';
   document.getElementById('offer-edit-id').value = offer ? offer.id : '';
@@ -1610,12 +1635,31 @@ function showOfferForm(offer = null) {
   document.getElementById('of-pct').value   = offer ? offer.discount_pct : 15;
   document.getElementById('of-start').value = offer ? (offer.start_time || '').slice(0,5) : '14:00';
   document.getElementById('of-end').value   = offer ? (offer.end_time   || '').slice(0,5) : '17:00';
-  document.getElementById('of-public').checked = offer ? !!offer.public_visible : true;
+  document.getElementById('of-public').checked      = offer ? !!offer.public_visible : true;
+  document.getElementById('of-member-only').checked = offer ? !!offer.member_only     : true;
   const selDays = offer ? offer.days_of_week : [1,2,3,4,5];
   document.querySelectorAll('#days-check .day-btn').forEach(btn => {
     btn.classList.toggle('sel', selDays.includes(Number(btn.dataset.d)));
   });
   document.getElementById('offer-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  // Load quiet-hours suggestion
+  try {
+    const windows = await api('/api/dashboard/quiet-hours');
+    const hint = document.getElementById('quiet-hours-hint');
+    const list = document.getElementById('quiet-hours-list');
+    if (windows && windows.length) {
+      list.innerHTML = windows.map(w => `
+        <button class="btn-quiet-hour" data-start="${w.start_time}" data-end="${w.end_time}"
+          style="background:var(--em-bg);border:1px solid var(--em-dim);border-radius:6px;padding:4px 10px;font-size:12px;cursor:pointer;color:var(--em-hi)">
+          ${w.start_time.slice(0,5)} – ${w.end_time.slice(0,5)}
+          <span style="color:var(--muted);margin-left:4px">${Math.round(Number(w.revenue))} lei</span>
+        </button>`).join('');
+      hint.style.display = '';
+    } else {
+      hint.style.display = 'none';
+    }
+  } catch { document.getElementById('quiet-hours-hint').style.display = 'none'; }
 }
 
 function hideOfferForm() {
@@ -1630,12 +1674,13 @@ async function saveOffer() {
   const start     = document.getElementById('of-start').value;
   const end       = document.getElementById('of-end').value;
   const pubVis    = document.getElementById('of-public').checked;
+  const memberOnly = document.getElementById('of-member-only').checked;
   const days      = [...document.querySelectorAll('#days-check .day-btn.sel')].map(b => Number(b.dataset.d));
   if (!name) return toast('Introdu o denumire pentru ofertă.');
   if (!pct || pct < 1 || pct > 50) return toast('Reducerea trebuie să fie între 1 și 50%.');
   if (!start || !end) return toast('Introdu orele de start și sfârșit.');
   if (!days.length) return toast('Selectează cel puțin o zi.');
-  const body = { name, discount_pct: pct, start_time: start + ':00', end_time: end + ':00', days_of_week: days, active: true, public_visible: pubVis };
+  const body = { name, discount_pct: pct, start_time: start + ':00', end_time: end + ':00', days_of_week: days, active: true, public_visible: pubVis, member_only: memberOnly };
   try {
     const res = id
       ? await apiMut('PUT',    `/api/dashboard/offers/${id}`, body)
@@ -1694,6 +1739,13 @@ document.getElementById('ce-section').addEventListener('click', e => {
   // Delete offer
   const delBtn = e.target.closest('[data-offer-del]');
   if (delBtn) { deleteOffer(Number(delBtn.dataset.offerDel)); return; }
+  // Quiet-hours prefill
+  const qhBtn = e.target.closest('.btn-quiet-hour');
+  if (qhBtn) {
+    document.getElementById('of-start').value = qhBtn.dataset.start.slice(0,5);
+    document.getElementById('of-end').value   = qhBtn.dataset.end.slice(0,5);
+    return;
+  }
 });
 
 // Toggle active via change event

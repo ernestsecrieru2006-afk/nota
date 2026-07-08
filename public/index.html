@@ -787,7 +787,8 @@
 
   socket.on('connect', () => {
     if (!token) return showScreen('error');
-    socket.emit('join-table', { token, paymentId: pendingPaymentId });
+    const memberToken = localStorage.getItem('nota_club_token') || undefined;
+    socket.emit('join-table', { token, paymentId: pendingPaymentId, memberToken });
   });
 
   socket.on('error', ({ message } = {}) => {
@@ -961,7 +962,11 @@
     const el = document.getElementById('offer-banner');
     const tx = document.getElementById('offer-banner-text');
     if (activeOffer) {
-      tx.textContent = `${activeOffer.name} −${activeOffer.discount_pct}% ${t('offer_auto')}`;
+      const isMember = !!localStorage.getItem('nota_club_token');
+      const label = isMember
+        ? `✨ Club Eats −${activeOffer.discount_pct}% ${t('offer_auto')}`
+        : `${activeOffer.name} −${activeOffer.discount_pct}% ${t('offer_auto')}`;
+      tx.textContent = label;
       el.style.display = '';
     } else {
       el.style.display = 'none';
