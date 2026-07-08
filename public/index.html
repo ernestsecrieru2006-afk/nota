@@ -269,6 +269,22 @@
     .m-tab, .t-card, .p-card, .g-btn { touch-action: manipulation; }
 
     .item-card { transition: border-color 0.15s, background 0.15s, transform 100ms ease-out; }
+    /* ── Offer banner ──────────────────────────────────── */
+    .offer-banner {
+      display: flex; align-items: center; gap: 8px;
+      background: linear-gradient(135deg, rgba(197,160,89,0.12), rgba(197,160,89,0.06));
+      border: 1px solid rgba(197,160,89,0.35);
+      border-radius: 10px; padding: 10px 14px;
+      font-size: 13px; font-weight: 600; color: var(--secondary);
+      margin-bottom: 12px;
+    }
+
+    /* ── Success savings ───────────────────────────────── */
+    .suc-saving {
+      margin-top: 8px; font-size: 14px; font-weight: 600;
+      color: var(--green); letter-spacing: 0.02em;
+    }
+
     .item-card:active:not(.paid):not(.rsv):not(.readonly) { transform: scale(0.97); }
 
     .btn-primary { transition: background 0.18s, box-shadow 0.18s, transform 100ms ease-out; }
@@ -338,6 +354,11 @@
 
     <div class="mode-info" id="mode-info"></div>
 
+    <div class="offer-banner" id="offer-banner" style="display:none">
+      <span class="msym" style="font-size:15px;color:var(--brass)">auto_awesome</span>
+      <span id="offer-banner-text"></span>
+    </div>
+
     <div class="items-hdr" data-i18n="comanda_ta">Comanda Ta</div>
     <div id="bill-skel"><div class="sk"></div><div class="sk"></div><div class="sk"></div></div>
     <div class="empty-msg" id="empty-msg" data-i18n="empty_order">Nu sunt preparate la această masă.</div>
@@ -373,6 +394,10 @@
       <div class="sum-row">
         <span class="lbl" data-i18n="sum_subtotal">Subtotal</span>
         <span class="val" id="t-base">0.00 MDL</span>
+      </div>
+      <div class="sum-row" id="t-discount-row" style="display:none">
+        <span class="lbl" id="t-offer-lbl" style="color:var(--green)"></span>
+        <span class="val" id="t-discount" style="color:var(--green)"></span>
       </div>
       <div class="sum-row">
         <span class="lbl"><span data-i18n="sum_bacsis">Bacșiș</span> (<span id="t-pct-lbl">10</span>%)</span>
@@ -518,6 +543,10 @@
         <div class="suc-icon">✓</div>
         <div class="suc-ttl" data-i18n="suc_title">Plată confirmată!</div>
         <div class="suc-amt" id="suc-amt">0 MDL</div>
+        <div class="suc-saving" id="suc-saving" style="display:none">
+          <span data-i18n="offer_saving">Ai economisit</span>
+          <strong id="suc-saving-amt">0 MDL</strong> ✨
+        </div>
       </div>
       <div class="receipt">
         <div class="rcpt-hdr" data-i18n="receipt_hdr">Bon Fiscal Electronic</div>
@@ -600,6 +629,9 @@
       waiter_confirmed: 'Ospătarul a fost anunțat ✓',
       toast_paid_pre: 'Cineva a plătit ',
       toast_paid_suf: ' lei ✓',
+      offer_auto: 'aplicat automat',
+      offer_discount_lbl: 'Reducere',
+      offer_saving: 'Ai economisit',
     },
     ru: {
       table_word: 'Стол',
@@ -663,8 +695,20 @@
       waiter_confirmed: 'Официант уведомлён ✓',
       toast_paid_pre: 'Кто-то оплатил ',
       toast_paid_suf: ' лей ✓',
+      offer_auto: 'применено автоматически',
+      offer_discount_lbl: 'Скидка',
+      offer_saving: 'Вы сэкономили',
     },
   };
+
+  // Device ID — anonymous, persistent, generated once per browser
+  (function() {
+    if (!localStorage.getItem('nota_device_id')) {
+      try {
+        localStorage.setItem('nota_device_id', crypto.randomUUID());
+      } catch (_) {}
+    }
+  })();
 
   let lang = localStorage.getItem('nota_lang') || 'ro';
   const t = key => TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
@@ -732,6 +776,7 @@
   let payMethod        = 'mia';
   let confirming       = false;
   let pendingPaymentId = null;
+  let activeOffer      = null; // { id, name, discount_pct } | null
 
   // Waiter call cooldown
   let waiterCooldown = false;
@@ -751,6 +796,7 @@
   });
 
   socket.on('order-update', incoming => {
+    activeOffer = incoming.activeOffer || null;
     order = incoming;
     if (!resolvedTable && order?.table_number) {
       resolvedTable = order.table_number;
@@ -763,6 +809,7 @@
         }
       }
     }
+    refreshOfferBanner();
     render();
   });
 
@@ -806,7 +853,7 @@
     schedulePatch(patches.map(p => p.id));
   });
 
-  socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [] }) => {
+  socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [], savingLei }) => {
     confirming       = false;
     pendingPaymentId = null;
     document.getElementById('ov-mia').classList.remove('show');
@@ -841,6 +888,17 @@
       <div class="rcpt-line rcpt-tot"><span>${t('rcpt_total')}</span><span>${fmtMDL(total)}</span></div>
       <div class="rcpt-tva">${t('rcpt_tva_prefix')} ${fmtMDL(tva)}</div>
     `;
+
+    const savings = Number(savingLei) || 0;
+    const savEl   = document.getElementById('suc-saving');
+    if (savEl) {
+      if (savings > 0) {
+        document.getElementById('suc-saving-amt').textContent = fmtMDL(savings);
+        savEl.style.display = '';
+      } else {
+        savEl.style.display = 'none';
+      }
+    }
 
     mySelected = new Set();
     document.getElementById('ov-suc').classList.add('show');
@@ -899,9 +957,22 @@
   }
   function goToScreen(name) { showScreen(name); }
 
+  function refreshOfferBanner() {
+    const el = document.getElementById('offer-banner');
+    const tx = document.getElementById('offer-banner-text');
+    if (activeOffer) {
+      tx.textContent = `${activeOffer.name} −${activeOffer.discount_pct}% ${t('offer_auto')}`;
+      el.style.display = '';
+    } else {
+      el.style.display = 'none';
+    }
+  }
+
   function goToTip() {
-    payBase = calcShare();
-    if (payBase <= 0) return;
+    const gross = calcShare();
+    if (gross <= 0) return;
+    const disLei = activeOffer ? roundLei(gross * activeOffer.discount_pct / 100) : 0;
+    payBase = gross - disLei;
     refreshTip();
     showScreen('tip');
   }
@@ -1101,11 +1172,22 @@
   }
 
   function refreshTip() {
-    const base = calcShare();
-    const tip  = roundLei(base * tipPercent / 100);
-    document.getElementById('t-base').textContent    = fmtMDL(base);
+    const gross  = calcShare();
+    const disLei = activeOffer ? roundLei(gross * activeOffer.discount_pct / 100) : 0;
+    const net    = gross - disLei;
+    const tip    = roundLei(net * tipPercent / 100);
+    const discRow = document.getElementById('t-discount-row');
+
+    document.getElementById('t-base').textContent = fmtMDL(gross);
+    if (activeOffer && disLei > 0) {
+      document.getElementById('t-offer-lbl').textContent = `${activeOffer.name} −${activeOffer.discount_pct}%`;
+      document.getElementById('t-discount').textContent  = '−' + fmtMDL(disLei);
+      discRow.style.display = '';
+    } else {
+      discRow.style.display = 'none';
+    }
     document.getElementById('t-tip').textContent     = fmtMDL(tip);
-    document.getElementById('t-tot').textContent     = fmtMDL(base + tip);
+    document.getElementById('t-tot').textContent     = fmtMDL(net + tip);
     document.getElementById('t-pct-lbl').textContent = tipPercent;
   }
 
@@ -1119,10 +1201,15 @@
     if (confirming || payMethod !== 'mia') return;
     confirming = true;
 
-    payTipLei = roundLei(calcShare() * tipPercent / 100);
-    payTotal  = calcShare() + payTipLei;
+    const gross  = calcShare();
+    const disLei = activeOffer ? roundLei(gross * activeOffer.discount_pct / 100) : 0;
+    const net    = gross - disLei;
+    payTipLei = roundLei(net * tipPercent / 100);
+    payTotal  = net + payTipLei;
 
     document.getElementById('ov-mia').classList.add('show');
+
+    const deviceId = localStorage.getItem('nota_device_id') || null;
 
     const onAck = (ack = {}) => {
       if (ack.error) {
@@ -1136,9 +1223,9 @@
     };
 
     if (splitMode === 'mine') {
-      socket.emit('pay-claimed', { tipLei: payTipLei, tableNumber: resolvedTable, orderId: order?.id }, onAck);
+      socket.emit('pay-claimed', { tipLei: payTipLei, deviceId }, onAck);
     } else {
-      socket.emit('pay-flat', { amountLei: calcShare(), tipLei: payTipLei, mode: splitMode, tableNumber: resolvedTable, orderId: order?.id }, onAck);
+      socket.emit('pay-flat', { amountLei: gross, tipLei: payTipLei, mode: splitMode, deviceId }, onAck);
     }
   }
 

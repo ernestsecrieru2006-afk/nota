@@ -42,6 +42,8 @@ const DEV_API_KEY = process.env.DEV_API_KEY || null;
 const MIA_LIVE    = !!(process.env.MIA_MERCHANT_ID && process.env.MIA_SECRET);
 const IIKO_LIVE   = !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID);
 
+const roundLei = v => Math.round(Number(v) * 100) / 100;
+
 // Canonical hostname — used for the production 301 redirect.
 // Derived from APP_URL so no second variable needs to be set.
 let _canonicalHost = null;
@@ -338,9 +340,11 @@ app.get('/api/dashboard/export', requireAuth, async (req, res) => {
     const validDate = date && /^\d{4}-\d{2}-\d{2}$/.test(date) ? date : null;
 
     const { rows } = await pool.query(`
-      SELECT p.paid_at, o.table_number, p.amount_lei, p.tip_lei,
-             (p.amount_lei + p.tip_lei) AS total_lei, p.mia_payment_id
-      FROM payments p JOIN orders o ON o.id = p.order_id
+      SELECT p.paid_at, o.table_number, p.gross_lei, p.discount_lei, p.amount_lei, p.tip_lei,
+             (p.amount_lei + p.tip_lei) AS total_lei, p.mia_payment_id, of.name AS offer_name
+      FROM payments p
+      JOIN orders o ON o.id = p.order_id
+      LEFT JOIN offers of ON of.id = p.offer_id
       WHERE p.restaurant_id = $1 AND p.status = 'paid'
         ${validDate ? 'AND p.paid_at::date = $2::date' : 'AND p.paid_at >= CURRENT_DATE'}
       ORDER BY p.paid_at
@@ -351,16 +355,207 @@ app.get('/api/dashboard/export', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="nota-${csvDate}.csv"`);
 
     const lines = [
-      'Ora,Masa,Suma (lei),Bacsis (lei),Total (lei),MIA ID',
+      'Ora,Masa,Brut (lei),Reducere (lei),Net (lei),Bacsis (lei),Total (lei),Oferta,MIA ID',
       ...rows.map(r => {
         const time = new Date(r.paid_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
-        return [time, r.table_number, r.amount_lei, r.tip_lei, r.total_lei, r.mia_payment_id || ''].join(',');
+        const gross = r.gross_lei ?? r.amount_lei;
+        return [time, r.table_number, gross, r.discount_lei || 0, r.amount_lei, r.tip_lei,
+                r.total_lei, r.offer_name || '', r.mia_payment_id || ''].join(',');
       }),
     ];
     res.send(lines.join('\n'));
   } catch (err) {
     console.error('[export]', err);
     res.status(500).json({ error: 'Eroare la export' });
+  }
+});
+
+// ─── Club Eats: offer CRUD (authenticated, tenant-scoped) ────────────────────
+
+app.get('/api/dashboard/offers', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM offers WHERE restaurant_id=$1 ORDER BY created_at DESC`,
+      [req.restaurant.restaurantId]
+    );
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/offers', requireAuth, async (req, res) => {
+  const { name, discount_pct, days_of_week, start_time, end_time, active = true, public_visible = true } = req.body;
+  if (!name || typeof name !== 'string' || name.length > 120) return res.status(400).json({ error: 'Invalid name' });
+  const pct = Number(discount_pct);
+  if (!Number.isInteger(pct) || pct < 1 || pct > 50) return res.status(400).json({ error: 'discount_pct must be 1–50' });
+  const days = Array.isArray(days_of_week) ? days_of_week : [0,1,2,3,4,5,6];
+  if (!days.every(d => Number.isInteger(d) && d >= 0 && d <= 6)) return res.status(400).json({ error: 'Invalid days_of_week' });
+  if (!start_time || !end_time) return res.status(400).json({ error: 'start_time and end_time required' });
+  try {
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO offers (restaurant_id, name, discount_pct, days_of_week, start_time, end_time, active, public_visible)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.restaurant.restaurantId, name.trim(), pct, days, start_time, end_time, !!active, !!public_visible]
+    );
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/offers/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  const { name, discount_pct, days_of_week, start_time, end_time, active, public_visible } = req.body;
+  if (!name || typeof name !== 'string' || name.length > 120) return res.status(400).json({ error: 'Invalid name' });
+  const pct = Number(discount_pct);
+  if (!Number.isInteger(pct) || pct < 1 || pct > 50) return res.status(400).json({ error: 'discount_pct must be 1–50' });
+  const days = Array.isArray(days_of_week) ? days_of_week : [0,1,2,3,4,5,6];
+  try {
+    const { rows: [row] } = await pool.query(
+      `UPDATE offers SET name=$1,discount_pct=$2,days_of_week=$3,start_time=$4,end_time=$5,active=$6,public_visible=$7
+       WHERE id=$8 AND restaurant_id=$9 RETURNING *`,
+      [name.trim(), pct, days, start_time, end_time, !!active, !!public_visible, id, req.restaurant.restaurantId]
+    );
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/dashboard/offers/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    await pool.query(`DELETE FROM offers WHERE id=$1 AND restaurant_id=$2`, [id, req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Club Eats: attribution stats ─────────────────────────────────────────────
+
+app.get('/api/dashboard/club-eats', requireAuth, async (req, res) => {
+  const periodMap = { today: `NOW()::date`, '7d': `NOW() - INTERVAL '7 days'`, '30d': `NOW() - INTERVAL '30 days'` };
+  const since = periodMap[req.query.period] || periodMap['7d'];
+  try {
+    const [{ rows: byOffer }, { rows: [totals] }] = await Promise.all([
+      pool.query(`
+        SELECT o.id, o.name AS offer_name, o.discount_pct,
+               COUNT(p.id)::int                                                          AS payment_count,
+               COALESCE(SUM(p.gross_lei), 0)::numeric(10,2)                             AS gross_total,
+               COALESCE(SUM(p.discount_lei), 0)::numeric(10,2)                          AS discount_total,
+               COALESCE(SUM(p.amount_lei), 0)::numeric(10,2)                            AS net_total,
+               COUNT(DISTINCT p.device_id) FILTER (WHERE p.device_id IS NOT NULL)::int  AS unique_devices
+        FROM offers o
+        LEFT JOIN payments p ON p.offer_id = o.id AND p.status = 'paid' AND p.paid_at >= ${since}
+        WHERE o.restaurant_id = $1
+        GROUP BY o.id, o.name, o.discount_pct
+        ORDER BY discount_total DESC NULLS LAST
+      `, [req.restaurant.restaurantId]),
+      pool.query(`
+        SELECT
+          COALESCE(SUM(p.gross_lei), 0)::numeric(10,2)    AS total_gross,
+          COALESCE(SUM(p.discount_lei), 0)::numeric(10,2) AS total_discount,
+          COALESCE(SUM(p.amount_lei), 0)::numeric(10,2)   AS total_net,
+          COUNT(p.id)::int                                 AS total_payments,
+          COUNT(DISTINCT p.device_id) FILTER (WHERE p.device_id IS NOT NULL)::int AS total_devices
+        FROM payments p
+        JOIN orders ord ON ord.id = p.order_id
+        WHERE ord.restaurant_id = $1 AND p.status = 'paid' AND p.paid_at >= ${since} AND p.offer_id IS NOT NULL
+      `, [req.restaurant.restaurantId]),
+    ]);
+    res.json({ period: req.query.period || '7d', offers: byOffer, totals });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Club Eats: public offers JSON ────────────────────────────────────────────
+
+app.get('/api/public/offers', async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT r.name AS restaurant_name, o.name, o.discount_pct,
+             o.days_of_week, o.start_time, o.end_time, o.active
+      FROM offers o JOIN restaurants r ON r.id = o.restaurant_id
+      WHERE o.public_visible = true
+      ORDER BY o.discount_pct DESC, r.name
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── /oferte public discovery page ───────────────────────────────────────────
+
+app.get('/oferte', async (_req, res) => {
+  const DAY_RO = ['Dum','Lun','Mar','Mie','Joi','Vin','Sâm'];
+  const DAY_RU = ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'];
+  try {
+    const now = new Date();
+    const dow = now.getDay();
+    const pad = n => String(n).padStart(2,'0');
+    const nowTime = `${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+    const { rows } = await pool.query(`
+      SELECT r.name AS restaurant_name, o.id, o.name, o.discount_pct,
+             o.days_of_week, o.start_time::text, o.end_time::text, o.active
+      FROM offers o JOIN restaurants r ON r.id = o.restaurant_id
+      WHERE o.public_visible = true ORDER BY o.discount_pct DESC, r.name
+    `);
+    const isActive = o =>
+      o.active && o.days_of_week.includes(dow) &&
+      o.start_time <= nowTime && o.end_time > nowTime;
+    const fmt = t => t?.slice(0,5) ?? '';
+    const cards = rows.map(o => {
+      const live = isActive(o);
+      const days = o.days_of_week.map(d => DAY_RO[d]).join(',');
+      return `
+      <div class="offer-card${live ? ' live' : ''}">
+        ${live ? '<div class="badge-live">ACTIV ACUM</div>' : ''}
+        <div class="oc-pct">−${o.discount_pct}%</div>
+        <div class="oc-name">${esc(o.name)}</div>
+        <div class="oc-rest">${esc(o.restaurant_name)}</div>
+        <div class="oc-time">${fmt(o.start_time)} – ${fmt(o.end_time)}</div>
+        <div class="oc-days">${days}</div>
+      </div>`;
+    }).join('');
+    function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+    res.setHeader('Content-Type','text/html; charset=utf-8');
+    res.send(`<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>nota. — Oferte ore liniștite</title>
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Manrope',sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}
+.hdr{padding:28px 20px 20px;text-align:center;border-bottom:1px solid rgba(197,160,89,.15)}
+.brand{font-family:'Playfair Display',serif;font-size:28px;color:#C5A059;letter-spacing:.08em}
+.hdr-sub{font-size:13px;color:#8b949e;margin-top:6px}
+.container{max-width:720px;margin:0 auto;padding:28px 16px 60px}
+.section-title{font-size:15px;font-weight:700;color:#8b949e;letter-spacing:.1em;text-transform:uppercase;margin-bottom:18px}
+.offer-card{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:20px 18px;margin-bottom:14px;position:relative;transition:border-color .15s}
+.offer-card.live{border-color:#C5A059;background:linear-gradient(135deg,#161b22 60%,rgba(197,160,89,.06))}
+.badge-live{position:absolute;top:14px;right:14px;background:#C5A059;color:#0d1117;font-size:10px;font-weight:700;letter-spacing:.12em;padding:3px 8px;border-radius:20px}
+.oc-pct{font-family:'Playfair Display',serif;font-size:32px;color:#C5A059;font-weight:700;line-height:1;margin-bottom:6px}
+.oc-name{font-size:16px;font-weight:700;margin-bottom:4px}
+.oc-rest{font-size:13px;color:#8b949e;margin-bottom:8px}
+.oc-time{font-size:12px;font-weight:600;color:#e6edf3;opacity:.7;margin-bottom:2px}
+.oc-days{font-size:11px;color:#8b949e}
+.empty{text-align:center;padding:60px 0;color:#8b949e}
+.footer{text-align:center;padding:32px 16px;font-size:11px;color:#8b949e;border-top:1px solid #21262d;margin-top:40px}
+.footer a{color:#C5A059;text-decoration:none}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="brand">nota.</div>
+  <div class="hdr-sub">Oferte ore liniștite — descoperă discounturile active</div>
+</div>
+<div class="container">
+  <div class="section-title">Oferte disponibile</div>
+  ${cards || '<div class="empty">Nicio ofertă activă momentan.</div>'}
+</div>
+<div class="footer">
+  Un serviciu <a href="${APP_URL}">nota.</a> — plată instant la restaurant, fără coadă.
+</div>
+</body></html>`);
+  } catch (err) {
+    res.status(500).send('Eroare internă');
   }
 });
 
@@ -719,8 +914,11 @@ io.on('connection', socket => {
       currentTable = resolvedNumber;
       currentRestaurantId = resolvedRestaurantId;
       socket.join(`table-${resolvedRestaurantId}-${resolvedNumber}`);
-      const order = await getOpenOrder(resolvedNumber, currentRestaurantId);
-      socket.emit('order-update', order);
+      const [order, activeOffer] = await Promise.all([
+        getOpenOrder(resolvedNumber, currentRestaurantId),
+        getActiveOffer(resolvedRestaurantId),
+      ]);
+      socket.emit('order-update', { ...order, activeOffer: activeOffer || null });
 
       // Payment recovery on reconnect: re-emit confirmed/failed based on DB state
       if (paymentId && typeof paymentId === 'string' && paymentId.length < 128) {
@@ -841,23 +1039,33 @@ io.on('connection', socket => {
   });
 
   // ── pay-claimed: item-level payment (splitMode = 'mine') ──────────────────
-  socket.on('pay-claimed', async ({ tipLei }, ack) => {
+  socket.on('pay-claimed', async ({ tipLei, deviceId }, ack) => {
     if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
     if (!currentTable) return ack?.({ error: 'Not joined to a table' });
     const tip = Number(tipLei) || 0;
     if (!Number.isFinite(tip) || tip < 0) return ack?.({ error: 'Invalid tip' });
+    const dId = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
     try {
       const tbl   = currentTable;
-      const order = await getOpenOrder(tbl, currentRestaurantId);
+      const [order, offer] = await Promise.all([
+        getOpenOrder(tbl, currentRestaurantId),
+        getActiveOffer(currentRestaurantId),
+      ]);
       const mine  = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
       if (!mine.length) return ack?.({ error: 'No claimed items' });
 
-      const amountLei = mine.reduce((s, it) => s + Number(it.price), 0);
-      const dbPmtId   = await createPendingPayment({ orderId: order.id, amountLei, tipLei: tip, socketId: socket.id, mode: 'claimed' });
+      const gross      = mine.reduce((s, it) => s + Number(it.price), 0);
+      const discountLei = offer ? roundLei(gross * offer.discount_pct / 100) : 0;
+      const netAmount  = roundLei(gross - discountLei);
+      const dbPmtId    = await createPendingPayment({
+        orderId: order.id, amountLei: netAmount, tipLei: tip,
+        socketId: socket.id, mode: 'claimed',
+        offerId: offer?.id ?? null, discountLei, grossLei: gross, deviceId: dId,
+      });
 
       let payment;
       try {
-        payment = await requestPayment({ amountLei, tipLei: tip, orderId: order.id, tableNumber: tbl });
+        payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
@@ -865,7 +1073,12 @@ io.on('connection', socket => {
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
 
-      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, restaurantId: currentRestaurantId, orderId: order.id, amountLei, tipLei: tip, mode: 'claimed', itemIds: mine.map(i => i.id) };
+      const meta = {
+        dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl,
+        restaurantId: currentRestaurantId, orderId: order.id,
+        amountLei: netAmount, tipLei: tip, grossLei: gross, discountLei,
+        mode: 'claimed', itemIds: mine.map(i => i.id),
+      };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
@@ -886,7 +1099,7 @@ io.on('connection', socket => {
   });
 
   // ── pay-flat: flat-amount payment (splitMode = 'equal' or 'rest') ─────────
-  socket.on('pay-flat', async ({ amountLei, tipLei = 0, mode }, ack) => {
+  socket.on('pay-flat', async ({ amountLei, tipLei = 0, mode, deviceId }, ack) => {
     if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
     if (!currentTable) return ack?.({ error: 'Not joined to a table' });
     if (!['equal', 'rest'].includes(mode)) return ack?.({ error: 'Invalid mode' });
@@ -896,9 +1109,13 @@ io.on('connection', socket => {
       const amt = Number(amountLei);
       if (!Number.isFinite(amt) || amt <= 0) return ack?.({ error: 'Invalid amount' });
     }
+    const dId = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
     try {
       const tbl   = currentTable;
-      const order = await getOpenOrder(tbl, currentRestaurantId);
+      const [order, offer] = await Promise.all([
+        getOpenOrder(tbl, currentRestaurantId),
+        getActiveOffer(currentRestaurantId),
+      ]);
       if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
 
       const remaining = order.items
@@ -906,19 +1123,26 @@ io.on('connection', socket => {
         .reduce((s, it) => s + Number(it.price), 0);
 
       // Server is authoritative: 'rest' uses full remaining; 'equal' caps at remaining
-      let chargeAmount;
+      let grossAmount;
       if (mode === 'rest') {
-        chargeAmount = remaining;
+        grossAmount = remaining;
       } else {
-        chargeAmount = Math.min(Number(amountLei), remaining);
+        grossAmount = Math.min(Number(amountLei), remaining);
       }
-      if (chargeAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
+      if (grossAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
 
-      const dbPmtId = await createPendingPayment({ orderId: order.id, amountLei: chargeAmount, tipLei: tip, socketId: socket.id, mode: 'flat' });
+      const discountLei = offer ? roundLei(grossAmount * offer.discount_pct / 100) : 0;
+      const netAmount   = roundLei(grossAmount - discountLei);
+
+      const dbPmtId = await createPendingPayment({
+        orderId: order.id, amountLei: netAmount, tipLei: tip,
+        socketId: socket.id, mode: 'flat',
+        offerId: offer?.id ?? null, discountLei, grossLei: grossAmount, deviceId: dId,
+      });
 
       let payment;
       try {
-        payment = await requestPayment({ amountLei: chargeAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
+        payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
@@ -926,11 +1150,16 @@ io.on('connection', socket => {
 
       await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
 
-      const meta = { dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl, restaurantId: currentRestaurantId, orderId: order.id, amountLei: chargeAmount, tipLei: tip, mode: 'flat' };
+      const meta = {
+        dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl,
+        restaurantId: currentRestaurantId, orderId: order.id,
+        amountLei: netAmount, tipLei: tip, grossLei: grossAmount, discountLei,
+        mode: 'flat',
+      };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
-      ack?.({ success: true, chargeAmount, ...payment });
+      ack?.({ success: true, chargeAmount: netAmount, ...payment });
 
       if (payment._mock) {
         const timer = setTimeout(() => {
@@ -986,13 +1215,34 @@ io.on('connection', socket => {
 // Payment settlement helpers (idempotent — safe to call multiple times)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-async function createPendingPayment({ orderId, amountLei, tipLei, socketId, mode }) {
+async function getActiveOffer(restaurantId, atTime = new Date()) {
+  if (!restaurantId) return null;
+  const dow = atTime.getDay();
+  const pad = n => String(n).padStart(2, '0');
+  const t   = `${pad(atTime.getHours())}:${pad(atTime.getMinutes())}:00`;
+  const { rows } = await pool.query(`
+    SELECT id, name, discount_pct
+    FROM   offers
+    WHERE  restaurant_id = $1
+      AND  active = true
+      AND  $2 = ANY(days_of_week)
+      AND  start_time <= $3::time
+      AND  end_time   >  $3::time
+    ORDER BY discount_pct DESC LIMIT 1
+  `, [restaurantId, dow, t]);
+  return rows[0] || null;
+}
+
+async function createPendingPayment({ orderId, amountLei, tipLei, socketId, mode,
+  offerId = null, discountLei = 0, grossLei = null, deviceId = null }) {
   const { rows: [pmt] } = await pool.query(
-    `INSERT INTO payments (order_id, restaurant_id, amount_lei, tip_lei, status, socket_id, mode)
-     SELECT $1, o.restaurant_id, $2, $3, 'pending', $4, $5
+    `INSERT INTO payments (order_id, restaurant_id, amount_lei, tip_lei, status, socket_id, mode,
+                           offer_id, discount_lei, gross_lei, device_id)
+     SELECT $1, o.restaurant_id, $2, $3, 'pending', $4, $5, $6, $7, $8, $9
      FROM orders o WHERE o.id = $1
      RETURNING id`,
-    [orderId, amountLei, tipLei, socketId, mode]
+    [orderId, amountLei, tipLei, socketId, mode, offerId, discountLei,
+     grossLei ?? amountLei, deviceId]
   );
   return pmt.id;
 }
@@ -1002,7 +1252,8 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
   if (!meta) {
     // Server restart: recover from DB
     const { rows: [pmt] } = await pool.query(
-      `SELECT p.id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id, o.table_number, o.restaurant_id
+      `SELECT p.id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
+              p.gross_lei, p.discount_lei, o.table_number, o.restaurant_id
        FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
       [miaPaymentId]
@@ -1011,7 +1262,8 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
     return;
   }
 
-  const { dbPaymentId, socketId, tableNumber, restaurantId, orderId, amountLei, tipLei, mode, itemIds, timer } = meta;
+  const { dbPaymentId, socketId, tableNumber, restaurantId, orderId, amountLei, tipLei,
+          grossLei, discountLei = 0, mode, itemIds, timer } = meta;
   if (timer) clearTimeout(timer);
 
   const client = await pool.connect();
@@ -1067,10 +1319,19 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
 
     // Emit confirmed to the guest's socket
     const s = io.sockets.sockets.get(socketId);
-    if (s) s.emit('payment-confirmed', { amountLei, tipLei, total: Number(amountLei) + Number(tipLei), mode, itemIds: itemIds || [] });
+    if (s) s.emit('payment-confirmed', {
+      amountLei, tipLei, total: Number(amountLei) + Number(tipLei),
+      mode, itemIds: itemIds || [],
+      grossLei: grossLei ?? amountLei,
+      discountLei,
+      savingLei: discountLei,
+    });
 
-    const order = await getOpenOrder(tableNumber, restaurantId);
-    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', order);
+    const [order, activeOffer] = await Promise.all([
+      getOpenOrder(tableNumber, restaurantId),
+      getActiveOffer(restaurantId),
+    ]);
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
     io.to(`table-${restaurantId}-${tableNumber}`).emit('table-payment', {
       amountLei, total: Number(amountLei) + Number(tipLei),
     });
@@ -1134,8 +1395,11 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     const s = io.sockets.sockets.get(socketId);
     if (s) s.emit('payment-failed', { reason });
 
-    const order = await getOpenOrder(tableNumber, restaurantId);
-    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', order);
+    const [order, activeOffer] = await Promise.all([
+      getOpenOrder(tableNumber, restaurantId),
+      getActiveOffer(restaurantId),
+    ]);
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
 
     cleanupMeta(miaPaymentId, socketId);
   } catch (err) {
@@ -1183,8 +1447,22 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
     );
     await client.query('COMMIT');
 
-    const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
-    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', order);
+    const discLei = Number(pmt.discount_lei || 0);
+    const s = io.sockets.sockets.get(pmt.socket_id);
+    if (s) s.emit('payment-confirmed', {
+      amountLei: pmt.amount_lei, tipLei: pmt.tip_lei,
+      total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
+      mode: pmt.mode, itemIds: [],
+      grossLei: pmt.gross_lei ?? pmt.amount_lei,
+      discountLei: discLei,
+      savingLei: discLei,
+    });
+
+    const [order, activeOffer] = await Promise.all([
+      getOpenOrder(pmt.table_number, pmt.restaurant_id),
+      getActiveOffer(pmt.restaurant_id),
+    ]);
+    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
     io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('table-payment', {
       amountLei: pmt.amount_lei, total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
     });
@@ -1219,8 +1497,11 @@ async function releaseFromDB(pmt, reason = '') {
     }
     await client.query('COMMIT');
 
-    const order = await getOpenOrder(pmt.table_number, pmt.restaurant_id);
-    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', order);
+    const [order, activeOffer] = await Promise.all([
+      getOpenOrder(pmt.table_number, pmt.restaurant_id),
+      getActiveOffer(pmt.restaurant_id),
+    ]);
+    io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[releaseFromDB]', err);
@@ -1241,7 +1522,7 @@ async function reconcilePendingPayments() {
   try {
     const { rows: pending } = await pool.query(`
       SELECT p.id, p.mia_payment_id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
-             o.table_number, o.restaurant_id, o.created_at
+             p.gross_lei, p.discount_lei, o.table_number, o.restaurant_id, o.created_at
       FROM payments p
       JOIN orders o ON o.id = p.order_id
       WHERE p.status = 'pending'

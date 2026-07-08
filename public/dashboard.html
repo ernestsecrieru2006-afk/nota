@@ -596,6 +596,67 @@ html, body {
   .cs-grid     { grid-template-columns: 1fr; }
   .main        { padding: 18px; }
 }
+
+/* ── CLUB EATS PANEL ────────────────────────────────────── */
+.ce-section { margin-top: 36px; }
+.ce-header  { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.period-tabs { display: flex; gap: 4px; background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 3px; }
+.per-tab { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer; padding: 4px 12px; border-radius: 6px; transition: all .15s; }
+.per-tab.active { background: var(--surface); color: var(--text); }
+.btn-add-offer { background: var(--em-bg2); border: 1px solid var(--em-dim); color: var(--em-hi); font-family: inherit; font-size: 12px; font-weight: 600; padding: 6px 14px; border-radius: var(--r); cursor: pointer; transition: all .15s; }
+.btn-add-offer:hover { background: var(--em-bg); }
+.ce-kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.ce-kpi { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); padding: 14px 16px; }
+.ce-kpi-lbl { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+.ce-kpi-val { font-size: 22px; font-weight: 700; color: var(--text); }
+.ce-kpi-val.em  { color: var(--em-hi); }
+.ce-kpi-val.amb { color: var(--amber-hi); }
+.offers-table { background: var(--card); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; margin-bottom: 20px; }
+.offers-table-hd { display: grid; grid-template-columns: 1fr 70px 130px 90px 80px 80px; padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.offer-row { display: grid; grid-template-columns: 1fr 70px 130px 90px 80px 80px; padding: 12px 16px; border-bottom: 1px solid var(--border); align-items: center; transition: background .12s; }
+.offer-row:last-child { border-bottom: none; }
+.offer-row:hover { background: var(--surface); }
+.offer-name { font-weight: 600; font-size: 13px; }
+.offer-pct  { font-size: 16px; font-weight: 700; color: var(--amber-hi); }
+.offer-time { font-size: 12px; color: var(--text2); }
+.offer-active-toggle { display: flex; align-items: center; gap: 6px; }
+.toggle-sw { position: relative; width: 32px; height: 18px; cursor: pointer; }
+.toggle-sw input { opacity: 0; width: 0; height: 0; }
+.toggle-sw .knob { position: absolute; inset: 0; background: var(--border2); border-radius: 9px; transition: background .2s; }
+.toggle-sw .knob::after { content: ''; position: absolute; left: 3px; top: 3px; width: 12px; height: 12px; background: #fff; border-radius: 50%; transition: transform .2s; }
+.toggle-sw input:checked + .knob { background: var(--em); }
+.toggle-sw input:checked + .knob::after { transform: translateX(14px); }
+.offer-actions { display: flex; gap: 6px; }
+.btn-offer-edit { background: none; border: 1px solid var(--border); color: var(--text2); font-family: inherit; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+.btn-offer-edit:hover { border-color: var(--text2); color: var(--text); }
+.btn-offer-del  { background: none; border: 1px solid transparent; color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+.btn-offer-del:hover  { border-color: var(--red); color: var(--red); }
+.offers-empty { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
+/* Offer form */
+.offer-form-panel { background: var(--card); border: 1px solid var(--em-dim); border-radius: var(--rl); padding: 20px; margin-bottom: 20px; }
+.offer-form-title { font-size: 14px; font-weight: 700; margin-bottom: 16px; }
+.offer-form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+.offer-field label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; margin-bottom: 5px; }
+.offer-field input, .offer-field select { width: 100%; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 13px; padding: 7px 10px; outline: none; transition: border-color .15s; }
+.offer-field input:focus, .offer-field select:focus { border-color: var(--em); }
+.days-check { display: flex; gap: 6px; flex-wrap: wrap; }
+.day-btn { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text2); font-family: inherit; font-size: 11px; font-weight: 600; padding: 4px 10px; cursor: pointer; transition: all .15s; }
+.day-btn.sel { background: var(--em-bg2); border-color: var(--em-dim); color: var(--em-hi); }
+.offer-form-actions { display: flex; gap: 10px; }
+.btn-save-offer { background: var(--em); border: none; color: #000; font-family: inherit; font-size: 13px; font-weight: 700; padding: 8px 20px; border-radius: var(--r); cursor: pointer; }
+.btn-cancel-offer { background: none; border: 1px solid var(--border); color: var(--text2); font-family: inherit; font-size: 13px; font-weight: 600; padding: 8px 16px; border-radius: var(--r); cursor: pointer; }
+/* Attribution table */
+.attr-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.attr-table th { padding: 8px 12px; text-align: left; font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .05em; text-transform: uppercase; border-bottom: 1px solid var(--border); }
+.attr-table td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text2); }
+.attr-table tr:last-child td { border-bottom: none; }
+.attr-table tr:hover td { background: var(--surface); }
+@media (max-width: 900px) {
+  .ce-kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .offers-table-hd, .offer-row { grid-template-columns: 1fr 60px 100px 80px; }
+  .offers-table-hd > :nth-child(5), .offer-row > :nth-child(5),
+  .offers-table-hd > :nth-child(6), .offer-row > :nth-child(6) { display: none; }
+}
 </style>
 </head>
 <body>
@@ -772,6 +833,114 @@ html, body {
         </div>
       </div>
 
+      <!-- ══ CLUB EATS SECTION ══════════════════════════════ -->
+      <div class="ce-section" id="ce-section">
+        <div class="ce-header">
+          <div>
+            <div class="section-title" style="margin-bottom:2px">Club Eats</div>
+            <div style="font-size:12px;color:var(--muted)">Oferte ore liniștite & atribuire venituri</div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div class="period-tabs">
+              <button class="per-tab active" data-period="today">Azi</button>
+              <button class="per-tab" data-period="7d">7 zile</button>
+              <button class="per-tab" data-period="30d">30 zile</button>
+            </div>
+            <button class="btn-add-offer" id="btn-add-offer">+ Ofertă nouă</button>
+          </div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="ce-kpi-row">
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Venit adus de nota.</div>
+            <div class="ce-kpi-val em" id="ce-net">— lei</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Reduceri acordate</div>
+            <div class="ce-kpi-val amb" id="ce-discount">— lei</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Clienți unici</div>
+            <div class="ce-kpi-val" id="ce-devices">—</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Plăți cu ofertă</div>
+            <div class="ce-kpi-val" id="ce-payments">—</div>
+          </div>
+        </div>
+
+        <!-- Offer form (hidden) -->
+        <div class="offer-form-panel" id="offer-form-panel" style="display:none">
+          <div class="offer-form-title" id="offer-form-title">Ofertă nouă</div>
+          <input type="hidden" id="offer-edit-id">
+          <div class="offer-form-grid">
+            <div class="offer-field">
+              <label>Denumire ofertă</label>
+              <input type="text" id="of-name" placeholder="ex: Ore liniștite de luni">
+            </div>
+            <div class="offer-field">
+              <label>Reducere (%)</label>
+              <input type="number" id="of-pct" min="1" max="50" value="15" placeholder="1–50">
+            </div>
+            <div class="offer-field">
+              <label>Ora start</label>
+              <input type="time" id="of-start" value="14:00">
+            </div>
+            <div class="offer-field">
+              <label>Ora sfârșit</label>
+              <input type="time" id="of-end" value="17:00">
+            </div>
+          </div>
+          <div class="offer-field" style="margin-bottom:16px">
+            <label>Zile săptămână</label>
+            <div class="days-check" id="days-check">
+              <button class="day-btn sel" data-d="1">Lun</button>
+              <button class="day-btn sel" data-d="2">Mar</button>
+              <button class="day-btn sel" data-d="3">Mie</button>
+              <button class="day-btn sel" data-d="4">Joi</button>
+              <button class="day-btn sel" data-d="5">Vin</button>
+              <button class="day-btn" data-d="6">Sâm</button>
+              <button class="day-btn" data-d="0">Dum</button>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="of-public" checked style="accent-color:var(--em)">
+              Vizibil pe pagina /oferte
+            </label>
+          </div>
+          <div class="offer-form-actions">
+            <button class="btn-save-offer" id="btn-save-offer">Salvează oferta</button>
+            <button class="btn-cancel-offer" id="btn-cancel-offer">Anulează</button>
+          </div>
+        </div>
+
+        <!-- Offers list -->
+        <div id="offers-list"></div>
+
+        <!-- Per-offer attribution -->
+        <div id="ce-attr-wrap" style="display:none">
+          <div class="section-title" style="font-size:13px;margin-bottom:12px">Atribuire per ofertă</div>
+          <div class="offers-table">
+            <table class="attr-table" id="ce-attr-table">
+              <thead>
+                <tr>
+                  <th>Ofertă</th>
+                  <th>Reducere %</th>
+                  <th>Plăți</th>
+                  <th>Brut (lei)</th>
+                  <th>Reducere (lei)</th>
+                  <th>Net (lei)</th>
+                  <th>Clienți unici</th>
+                </tr>
+              </thead>
+              <tbody id="ce-attr-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
       <!-- Coming soon — prominent product previews -->
       <div>
         <div class="cs-section-hd">
@@ -780,24 +949,25 @@ html, body {
         </div>
         <div class="cs-grid">
 
-          <!-- Club Eats -->
-          <div class="cs-card ce">
+          <!-- Club Eats — live -->
+          <div class="cs-card ce" style="cursor:pointer" id="ce-card-shortcut">
             <div class="cs-glow"></div>
-            <div class="cs-badge">
-              <span class="cs-badge-dot"></span>În curând
+            <div class="cs-badge" style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#4EDEA3">
+              <span style="width:6px;height:6px;background:#10B981;border-radius:50%;display:inline-block;animation:pulse-dot 2s infinite"></span>
+              Activ
             </div>
             <span class="cs-icon">🍴</span>
             <div class="cs-name">Club Eats</div>
-            <div class="cs-tagline">Loialitate & marketing — clienți fideli pe termen lung</div>
+            <div class="cs-tagline">Oferte ore liniștite, automat aplicate la plată</div>
             <div class="cs-desc">
-              Transformă fiecare masă într-o relație. Membership, puncte și campanii
-              automate care aduc oaspeții înapoi — fără efort din partea ta.
+              Creează oferte pentru orele mai liniștite și atrage oaspeți cu discounturi
+              aplicate automat — fără coduri, fără login din partea clienților.
             </div>
             <div class="cs-features">
-              <div class="cs-feat"><div class="cs-feat-dot"></div>Program de puncte & recompense</div>
-              <div class="cs-feat"><div class="cs-feat-dot"></div>Campanii SMS/email segmentate</div>
-              <div class="cs-feat"><div class="cs-feat-dot"></div>Carduri de membership digitale</div>
-              <div class="cs-feat"><div class="cs-feat-dot"></div>Promoții automate pentru ocazii speciale</div>
+              <div class="cs-feat"><div class="cs-feat-dot" style="background:var(--em)"></div>Oferte configurabile pe ore & zile</div>
+              <div class="cs-feat"><div class="cs-feat-dot" style="background:var(--em)"></div>Aplicare automată la plată, zero fricțiune</div>
+              <div class="cs-feat"><div class="cs-feat-dot" style="background:var(--em)"></div>Pagina publică /oferte pentru descoperire</div>
+              <div class="cs-feat"><div class="cs-feat-dot" style="background:var(--em)"></div>Atribuire venituri & clienți unici anonimizați</div>
             </div>
           </div>
 
@@ -964,12 +1134,21 @@ function showDashboard() {
 }
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats()]);
 }
 
 // ── API Helper ────────────────────────────────────────────────────────────────
 async function api(path) {
   const res = await fetch(path, { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401) { localStorage.clear(); location.reload(); }
+  return res.json();
+}
+async function apiMut(method, path, body) {
+  const res = await fetch(path, {
+    method,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify(body),
+  });
   if (res.status === 401) { localStorage.clear(); location.reload(); }
   return res.json();
 }
@@ -1338,6 +1517,194 @@ document.getElementById('export-btn').addEventListener('click', () => {
       setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
     })
     .catch(() => toast('Eroare la export CSV.'));
+});
+
+// ── Club Eats ─────────────────────────────────────────────────────────────────
+let ceCurrentPeriod = 'today';
+
+async function loadClubEats(period) {
+  period = period || ceCurrentPeriod;
+  ceCurrentPeriod = period;
+  try {
+    const [ceData, offersData] = await Promise.all([
+      api(`/api/dashboard/club-eats?period=${period}`),
+      api('/api/dashboard/offers'),
+    ]);
+    renderCeStats(ceData.totals || {});
+    renderOffers(offersData || []);
+    renderCeAttr(ceData.offers || []);
+  } catch (err) {
+    console.error('[club-eats]', err);
+  }
+}
+
+function renderCeStats(t) {
+  document.getElementById('ce-net').textContent      = t.total_net     ? Math.round(Number(t.total_net))     + ' lei' : '— lei';
+  document.getElementById('ce-discount').textContent = t.total_discount ? Math.round(Number(t.total_discount)) + ' lei' : '— lei';
+  document.getElementById('ce-devices').textContent  = t.total_devices  != null ? t.total_devices  : '—';
+  document.getElementById('ce-payments').textContent = t.total_payments != null ? t.total_payments : '—';
+}
+
+function renderOffers(offers) {
+  const el = document.getElementById('offers-list');
+  if (!offers.length) {
+    el.innerHTML = `<div class="offers-table"><div class="offers-empty">Nicio ofertă creată încă. Apasă "+ Ofertă nouă" pentru a începe.</div></div>`;
+    return;
+  }
+  const DAY = ['D','L','M','M','J','V','S'];
+  const rows = offers.map(o => {
+    const days = o.days_of_week.map(d => DAY[d]).join(' ');
+    const start = (o.start_time || '').slice(0,5);
+    const end   = (o.end_time   || '').slice(0,5);
+    return `
+    <div class="offer-row">
+      <div class="offer-name">${esc(o.name)}</div>
+      <div class="offer-pct">−${o.discount_pct}%</div>
+      <div class="offer-time">${start} – ${end}<br><span style="font-size:11px;color:var(--muted)">${days}</span></div>
+      <div class="offer-active-toggle">
+        <label class="toggle-sw" title="${o.active ? 'Activ' : 'Inactiv'}">
+          <input type="checkbox" ${o.active ? 'checked' : ''} data-offer-toggle="${o.id}">
+          <span class="knob"></span>
+        </label>
+        <span style="font-size:11px;color:${o.active ? 'var(--em)' : 'var(--muted)'}">${o.active ? 'Activ' : 'Inactiv'}</span>
+      </div>
+      <div class="offer-actions">
+        <button class="btn-offer-edit" data-offer-edit='${JSON.stringify(o)}'>Edit</button>
+      </div>
+      <div class="offer-actions">
+        <button class="btn-offer-del" data-offer-del="${o.id}">Șterge</button>
+      </div>
+    </div>`;
+  }).join('');
+  el.innerHTML = `
+  <div class="offers-table">
+    <div class="offers-table-hd">
+      <div>Denumire</div><div>Reducere</div><div>Interval orar</div><div>Status</div><div>Edit</div><div>Șterge</div>
+    </div>
+    ${rows}
+  </div>`;
+}
+
+function renderCeAttr(offers) {
+  const wrap = document.getElementById('ce-attr-wrap');
+  const body = document.getElementById('ce-attr-body');
+  if (!offers.length) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  body.innerHTML = offers.map(o => `
+    <tr>
+      <td style="color:var(--text);font-weight:600">${esc(o.offer_name || '—')}</td>
+      <td>−${o.discount_pct}%</td>
+      <td>${o.payment_count || 0}</td>
+      <td>${Math.round(Number(o.gross_total || 0))}</td>
+      <td style="color:var(--amber-hi)">−${Math.round(Number(o.discount_total || 0))}</td>
+      <td style="color:var(--em-hi)">${Math.round(Number(o.net_total || 0))}</td>
+      <td>${o.unique_devices || 0}</td>
+    </tr>`).join('');
+}
+
+function showOfferForm(offer = null) {
+  document.getElementById('offer-form-panel').style.display = '';
+  document.getElementById('offer-form-title').textContent = offer ? 'Editează oferta' : 'Ofertă nouă';
+  document.getElementById('offer-edit-id').value = offer ? offer.id : '';
+  document.getElementById('of-name').value  = offer ? offer.name        : '';
+  document.getElementById('of-pct').value   = offer ? offer.discount_pct : 15;
+  document.getElementById('of-start').value = offer ? (offer.start_time || '').slice(0,5) : '14:00';
+  document.getElementById('of-end').value   = offer ? (offer.end_time   || '').slice(0,5) : '17:00';
+  document.getElementById('of-public').checked = offer ? !!offer.public_visible : true;
+  const selDays = offer ? offer.days_of_week : [1,2,3,4,5];
+  document.querySelectorAll('#days-check .day-btn').forEach(btn => {
+    btn.classList.toggle('sel', selDays.includes(Number(btn.dataset.d)));
+  });
+  document.getElementById('offer-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function hideOfferForm() {
+  document.getElementById('offer-form-panel').style.display = 'none';
+  document.getElementById('offer-edit-id').value = '';
+}
+
+async function saveOffer() {
+  const id        = document.getElementById('offer-edit-id').value;
+  const name      = document.getElementById('of-name').value.trim();
+  const pct       = Number(document.getElementById('of-pct').value);
+  const start     = document.getElementById('of-start').value;
+  const end       = document.getElementById('of-end').value;
+  const pubVis    = document.getElementById('of-public').checked;
+  const days      = [...document.querySelectorAll('#days-check .day-btn.sel')].map(b => Number(b.dataset.d));
+  if (!name) return toast('Introdu o denumire pentru ofertă.');
+  if (!pct || pct < 1 || pct > 50) return toast('Reducerea trebuie să fie între 1 și 50%.');
+  if (!start || !end) return toast('Introdu orele de start și sfârșit.');
+  if (!days.length) return toast('Selectează cel puțin o zi.');
+  const body = { name, discount_pct: pct, start_time: start + ':00', end_time: end + ':00', days_of_week: days, active: true, public_visible: pubVis };
+  try {
+    const res = id
+      ? await apiMut('PUT',    `/api/dashboard/offers/${id}`, body)
+      : await apiMut('POST',   '/api/dashboard/offers',       body);
+    if (res.error) return toast('Eroare: ' + res.error);
+    hideOfferForm();
+    await loadClubEats();
+    toast(id ? 'Ofertă actualizată.' : 'Ofertă creată!', 'success');
+  } catch { toast('Eroare la salvarea ofertei.'); }
+}
+
+async function deleteOffer(id) {
+  if (!confirm('Ștergi această ofertă?')) return;
+  try {
+    await apiMut('DELETE', `/api/dashboard/offers/${id}`, {});
+    await loadClubEats();
+    toast('Ofertă ștearsă.', 'success');
+  } catch { toast('Eroare la ștergere.'); }
+}
+
+async function toggleOfferActive(id, active) {
+  const offers = await api('/api/dashboard/offers');
+  const offer  = offers.find(o => o.id === id);
+  if (!offer) return;
+  await apiMut('PUT', `/api/dashboard/offers/${id}`, { ...offer, active });
+  await loadClubEats();
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// Club Eats event delegation
+document.getElementById('ce-section').addEventListener('click', e => {
+  // Period tabs
+  const per = e.target.closest('.per-tab');
+  if (per) {
+    document.querySelectorAll('.per-tab').forEach(t => t.classList.remove('active'));
+    per.classList.add('active');
+    loadClubEats(per.dataset.period);
+    return;
+  }
+  // Day toggle in form
+  const day = e.target.closest('.day-btn');
+  if (day) { day.classList.toggle('sel'); return; }
+  // Add offer button
+  if (e.target.closest('#btn-add-offer')) { showOfferForm(); return; }
+  // Save offer
+  if (e.target.closest('#btn-save-offer')) { saveOffer(); return; }
+  // Cancel form
+  if (e.target.closest('#btn-cancel-offer')) { hideOfferForm(); return; }
+  // Edit offer
+  const editBtn = e.target.closest('[data-offer-edit]');
+  if (editBtn) {
+    try { showOfferForm(JSON.parse(editBtn.dataset.offerEdit)); } catch {}
+    return;
+  }
+  // Delete offer
+  const delBtn = e.target.closest('[data-offer-del]');
+  if (delBtn) { deleteOffer(Number(delBtn.dataset.offerDel)); return; }
+});
+
+// Toggle active via change event
+document.getElementById('ce-section').addEventListener('change', e => {
+  const tog = e.target.closest('[data-offer-toggle]');
+  if (tog) toggleOfferActive(Number(tog.dataset.offerToggle), tog.checked);
+});
+
+// Club Eats card in "coming soon" scrolls to section
+document.getElementById('ce-card-shortcut')?.addEventListener('click', () => {
+  document.getElementById('ce-section').scrollIntoView({ behavior: 'smooth' });
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

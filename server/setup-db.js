@@ -138,6 +138,30 @@ async function setup() {
       // columns may already exist — fine
     }
 
+    // ── Club Eats v1: offers + payment attribution ────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS offers (
+        id             SERIAL       PRIMARY KEY,
+        restaurant_id  INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        name           TEXT         NOT NULL,
+        discount_pct   SMALLINT     NOT NULL CHECK (discount_pct BETWEEN 1 AND 50),
+        days_of_week   SMALLINT[]   NOT NULL DEFAULT '{0,1,2,3,4,5,6}',
+        start_time     TIME         NOT NULL,
+        end_time       TIME         NOT NULL,
+        active         BOOLEAN      NOT NULL DEFAULT true,
+        public_visible BOOLEAN      NOT NULL DEFAULT true,
+        created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    try {
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS offer_id     INT REFERENCES offers(id)`);
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS gross_lei    NUMERIC(8,2)`);
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS discount_lei NUMERIC(8,2) NOT NULL DEFAULT 0`);
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS device_id    TEXT`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_offers_restaurant ON offers(restaurant_id, active)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_device   ON payments(restaurant_id, device_id) WHERE device_id IS NOT NULL`);
+    } catch { /* columns/indexes may already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 
