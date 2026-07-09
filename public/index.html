@@ -285,6 +285,34 @@
       color: var(--green); letter-spacing: 0.02em;
     }
 
+    /* ── Feedback widget ───────────────────────────────── */
+    .fb-card {
+      background: rgba(255,255,255,.92); border: 1px solid var(--glass-bd);
+      border-radius: var(--radius); padding: 18px 16px; margin-top: 14px;
+    }
+    .fb-question { font-size: 15px; font-weight: 700; color: var(--primary); text-align: center; margin-bottom: 14px; }
+    .fb-stars { display: flex; justify-content: center; gap: 8px; margin-bottom: 0; }
+    .fb-star { font-size: 32px; cursor: pointer; transition: transform .1s, opacity .15s; opacity: .35; background: none; border: none; padding: 0; line-height: 1; }
+    .fb-star.active { opacity: 1; transform: scale(1.15); }
+    .fb-star:hover { opacity: .75; }
+    .fb-followup { margin-top: 14px; animation: fadein .2s; }
+    .fb-textarea { width: 100%; border: 1px solid rgba(197,160,89,.3); border-radius: 8px; padding: 9px 12px; font-family: inherit; font-size: 13px; resize: none; outline: none; background: rgba(255,255,255,.8); color: var(--primary); }
+    .fb-textarea:focus { border-color: var(--secondary); }
+    .fb-submit-btn { width: 100%; margin-top: 8px; background: var(--secondary); color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .fb-google-btn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin-top: 8px; background: #fff; border: 1.5px solid #4285f4; color: #4285f4; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; text-decoration: none; }
+    .fb-google-btn:hover { background: #f0f4ff; }
+    .fb-skip { display: block; text-align: center; margin-top: 10px; font-size: 12px; color: var(--on-sv); cursor: pointer; background: none; border: none; font-family: inherit; }
+    .fb-thank { text-align: center; color: var(--secondary); font-size: 14px; font-weight: 700; padding: 8px 0; }
+    .fb-divider { border: none; border-top: 1px dashed rgba(197,160,89,.25); margin: 14px 0; }
+    .fb-club-prompt { margin-top: 4px; }
+    .fb-club-title { font-size: 13px; font-weight: 700; color: var(--primary); margin-bottom: 10px; text-align: center; }
+    .fb-inp { width: 100%; border: 1px solid rgba(197,160,89,.3); border-radius: 8px; padding: 9px 12px; font-family: inherit; font-size: 13px; margin-bottom: 8px; outline: none; background: rgba(255,255,255,.8); color: var(--primary); }
+    .fb-inp:focus { border-color: var(--secondary); }
+    .fb-club-btn { width: 100%; background: linear-gradient(135deg, var(--secondary), #b8912e); color: #fff; border: none; border-radius: 8px; padding: 10px; font-size: 14px; font-weight: 700; cursor: pointer; font-family: inherit; }
+    .fb-club-err { color: #c0392b; font-size: 12px; margin-bottom: 6px; min-height: 16px; }
+    .fb-member-ok { text-align: center; font-size: 13px; color: var(--secondary); font-weight: 600; }
+    @keyframes fadein { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
     .item-card:active:not(.paid):not(.rsv):not(.readonly) { transform: scale(0.97); }
 
     .btn-primary { transition: background 0.18s, box-shadow 0.18s, transform 100ms ease-out; }
@@ -556,6 +584,56 @@
         <span class="msym" style="font-size:16px">receipt_long</span>
         <span data-i18n="iiko_tag">BON FISCAL ELECTRONIC emis prin iiko</span>
       </div>
+
+      <!-- ── Post-payment feedback widget ── -->
+      <div class="fb-card" id="fb-card" style="display:none">
+        <div id="fb-rating-phase">
+          <div class="fb-question" id="fb-question">Cum a fost?</div>
+          <div class="fb-stars" id="fb-stars">
+            <button class="fb-star" data-rating="1" aria-label="1 stea">★</button>
+            <button class="fb-star" data-rating="2" aria-label="2 stele">★</button>
+            <button class="fb-star" data-rating="3" aria-label="3 stele">★</button>
+            <button class="fb-star" data-rating="4" aria-label="4 stele">★</button>
+            <button class="fb-star" data-rating="5" aria-label="5 stele">★</button>
+          </div>
+        </div>
+
+        <!-- low-rating: private comment -->
+        <div id="fb-critical-phase" class="fb-followup" style="display:none">
+          <div class="fb-question" id="fb-sorry-title">Ne pare rău să auzim asta.</div>
+          <textarea class="fb-textarea" id="fb-comment" rows="3" placeholder="Spune-ne ce putem îmbunătăți…"></textarea>
+          <button class="fb-submit-btn" id="fb-submit-critical">Trimite feedback</button>
+          <button class="fb-skip" id="fb-skip-critical">Omit</button>
+        </div>
+
+        <!-- high-rating: Google nudge -->
+        <div id="fb-google-phase" class="fb-followup" style="display:none">
+          <div class="fb-question" id="fb-happy-title">Ne-ai bucurat! 🎉</div>
+          <a class="fb-google-btn" id="fb-google-btn" href="#" target="_blank" rel="noopener noreferrer">
+            <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.3 30.3 0 24 0 14.7 0 6.9 5.4 3 13.3l7.9 6.1C12.9 13.2 17.9 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 2.9-2.3 5.3-4.8 6.9l7.4 5.7c4.3-4 6.8-9.9 6.8-16.6z"/><path fill="#FBBC05" d="M10.9 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6L2.4 13.3A24 24 0 0 0 0 24c0 3.8.9 7.4 2.4 10.7l8.5-6.1z"/><path fill="#34A853" d="M24 48c6.3 0 11.6-2.1 15.5-5.7l-7.4-5.7c-2.1 1.4-4.8 2.2-8.1 2.2-6.1 0-11.1-3.7-13.1-8.9l-7.9 6.1C6.9 42.6 14.7 48 24 48z"/></svg>
+            Lasă o recenzie pe Google
+          </a>
+          <button class="fb-skip" id="fb-skip-google">Mai târziu</button>
+        </div>
+
+        <!-- thank you state -->
+        <div id="fb-thanks-phase" class="fb-followup" style="display:none">
+          <div class="fb-thank" id="fb-thanks-msg">Mulțumim pentru feedback! ✓</div>
+        </div>
+
+        <!-- Club Eats signup (shown after rating, if not already member) -->
+        <div id="fb-club-section" style="display:none">
+          <hr class="fb-divider">
+          <div class="fb-club-prompt" id="fb-club-prompt">
+            <div class="fb-club-title" id="fb-club-title">Vrei reduceri la următoarea vizită?</div>
+            <div class="fb-club-err" id="fb-club-err"></div>
+            <input type="email" class="fb-inp" id="fb-club-email" placeholder="Email" autocomplete="email">
+            <input type="password" class="fb-inp" id="fb-club-pw" placeholder="Parolă (min. 8 caractere)" autocomplete="new-password">
+            <button class="fb-club-btn" id="fb-club-btn">Alătură-te Club Eats gratuit</button>
+          </div>
+          <div id="fb-member-ok-msg" class="fb-member-ok" style="display:none">✨ Ești deja membru Club Eats</div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -632,6 +710,19 @@
       offer_auto: 'aplicat automat',
       offer_discount_lbl: 'Reducere',
       offer_saving: 'Ai economisit',
+      fb_question: 'Cum a fost?',
+      fb_sorry: 'Ne pare rău să auzim asta.',
+      fb_happy: 'Ne-ai bucurat! 🎉',
+      fb_comment_ph: 'Spune-ne ce putem îmbunătăți…',
+      fb_submit: 'Trimite feedback',
+      fb_skip: 'Omit',
+      fb_google: 'Lasă o recenzie pe Google',
+      fb_later: 'Mai târziu',
+      fb_thanks: 'Mulțumim pentru feedback! ✓',
+      fb_club_title: 'Vrei reduceri la următoarea vizită?',
+      fb_club_btn: 'Alătură-te Club Eats gratuit',
+      fb_club_member_ok: '✨ Ești deja membru Club Eats',
+      fb_club_err_short: 'Email și parolă (min. 8 car.) sunt obligatorii.',
     },
     ru: {
       table_word: 'Стол',
@@ -698,6 +789,19 @@
       offer_auto: 'применено автоматически',
       offer_discount_lbl: 'Скидка',
       offer_saving: 'Вы сэкономили',
+      fb_question: 'Как вам всё понравилось?',
+      fb_sorry: 'Нам жаль это слышать.',
+      fb_happy: 'Нам приятно! 🎉',
+      fb_comment_ph: 'Расскажите, что мы можем улучшить…',
+      fb_submit: 'Отправить отзыв',
+      fb_skip: 'Пропустить',
+      fb_google: 'Оставить отзыв на Google',
+      fb_later: 'Позже',
+      fb_thanks: 'Спасибо за отзыв! ✓',
+      fb_club_title: 'Хотите скидку при следующем визите?',
+      fb_club_btn: 'Присоединиться к Club Eats бесплатно',
+      fb_club_member_ok: '✨ Вы уже участник Club Eats',
+      fb_club_err_short: 'Email и пароль (мин. 8 симв.) обязательны.',
     },
   };
 
@@ -854,7 +958,8 @@
     schedulePatch(patches.map(p => p.id));
   });
 
-  socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [], savingLei }) => {
+  socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [], savingLei,
+                                    dbPaymentId, orderId, restaurantId: confirmedRestaurantId, googleReviewUrl }) => {
     confirming       = false;
     pendingPaymentId = null;
     document.getElementById('ov-mia').classList.remove('show');
@@ -903,6 +1008,11 @@
 
     mySelected = new Set();
     document.getElementById('ov-suc').classList.add('show');
+
+    // Show post-payment feedback widget
+    initFeedbackWidget({
+      dbPaymentId, restaurantId: confirmedRestaurantId, googleReviewUrl,
+    });
   });
 
   socket.on('payment-failed', ({ reason } = {}) => {
@@ -1247,6 +1357,163 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  // ── Post-payment feedback widget ──────────────────────────────────────────────
+  let fbState = { paymentId: null, restaurantId: null, googleReviewUrl: null,
+                  chosenRating: null, nudgeShown: false };
+
+  function initFeedbackWidget({ dbPaymentId, restaurantId, googleReviewUrl }) {
+    fbState = { paymentId: dbPaymentId, restaurantId, googleReviewUrl,
+                chosenRating: null, nudgeShown: false };
+
+    // Reset all phases
+    document.getElementById('fb-rating-phase').style.display   = '';
+    document.getElementById('fb-critical-phase').style.display  = 'none';
+    document.getElementById('fb-google-phase').style.display    = 'none';
+    document.getElementById('fb-thanks-phase').style.display    = 'none';
+    document.getElementById('fb-club-section').style.display    = 'none';
+    document.getElementById('fb-club-err').textContent          = '';
+    document.getElementById('fb-club-email').value              = '';
+    document.getElementById('fb-club-pw').value                 = '';
+    document.getElementById('fb-comment').value                 = '';
+
+    // Apply i18n
+    document.getElementById('fb-question').textContent    = t('fb_question');
+    document.getElementById('fb-sorry-title').textContent = t('fb_sorry');
+    document.getElementById('fb-happy-title').textContent = t('fb_happy');
+    document.getElementById('fb-comment').placeholder     = t('fb_comment_ph');
+    document.getElementById('fb-submit-critical').textContent = t('fb_submit');
+    document.getElementById('fb-skip-critical').textContent   = t('fb_skip');
+    document.getElementById('fb-skip-google').textContent     = t('fb_later');
+    document.getElementById('fb-club-title').textContent      = t('fb_club_title');
+    document.getElementById('fb-club-btn').textContent        = t('fb_club_btn');
+    document.getElementById('fb-member-ok-msg').textContent   = t('fb_club_member_ok');
+
+    // Reset star states
+    document.querySelectorAll('.fb-star').forEach(s => s.classList.remove('active'));
+
+    document.getElementById('fb-card').style.display = '';
+  }
+
+  function fbSelectRating(rating) {
+    fbState.chosenRating = rating;
+    document.querySelectorAll('.fb-star').forEach(s => {
+      s.classList.toggle('active', Number(s.dataset.rating) <= rating);
+    });
+    document.getElementById('fb-rating-phase').style.display = 'none';
+
+    const isMember = !!localStorage.getItem('nota_club_token');
+
+    if (rating >= 4) {
+      if (fbState.googleReviewUrl) {
+        document.getElementById('fb-google-btn').href = fbState.googleReviewUrl;
+        document.getElementById('fb-google-phase').style.display = '';
+        fbState.nudgeShown = true;
+        postFeedback({ rating, nudgeShown: true, nudgeTapped: false });
+      } else {
+        document.getElementById('fb-thanks-phase').style.display = '';
+        document.getElementById('fb-thanks-phase').querySelector('#fb-thanks-msg').textContent = t('fb_thanks');
+        postFeedback({ rating });
+      }
+    } else {
+      document.getElementById('fb-critical-phase').style.display = '';
+    }
+
+    showClubSection(isMember);
+  }
+
+  function showClubSection(isMember) {
+    const sec = document.getElementById('fb-club-section');
+    sec.style.display = '';
+    if (isMember) {
+      document.getElementById('fb-club-prompt').style.display  = 'none';
+      document.getElementById('fb-member-ok-msg').style.display = '';
+    } else {
+      document.getElementById('fb-club-prompt').style.display  = '';
+      document.getElementById('fb-member-ok-msg').style.display = 'none';
+    }
+  }
+
+  async function postFeedback({ rating, comment, nudgeShown = false, nudgeTapped = false }) {
+    try {
+      const memberToken = localStorage.getItem('nota_club_token') || undefined;
+      const deviceId    = localStorage.getItem('nota_device_id') || undefined;
+      await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          restaurantId: fbState.restaurantId,
+          paymentId: fbState.paymentId,
+          rating, comment, deviceId, nudgeShown, nudgeTapped, memberToken,
+        }),
+      });
+    } catch { /* non-blocking */ }
+  }
+
+  async function fbSubmitCritical() {
+    const comment = document.getElementById('fb-comment').value.trim();
+    await postFeedback({ rating: fbState.chosenRating, comment, nudgeShown: false });
+    document.getElementById('fb-critical-phase').style.display = 'none';
+    document.getElementById('fb-thanks-phase').style.display   = '';
+    document.getElementById('fb-thanks-msg').textContent       = t('fb_thanks');
+  }
+
+  function fbGoogleTapped() {
+    postFeedback({ rating: fbState.chosenRating, nudgeShown: true, nudgeTapped: true });
+    // link stays default — opens Google in new tab via the <a> href
+    setTimeout(() => {
+      document.getElementById('fb-google-phase').style.display = 'none';
+      document.getElementById('fb-thanks-phase').style.display = '';
+      document.getElementById('fb-thanks-msg').textContent     = t('fb_thanks');
+    }, 300);
+  }
+
+  function fbSkipGoogle() {
+    document.getElementById('fb-google-phase').style.display = 'none';
+    document.getElementById('fb-thanks-phase').style.display = '';
+    document.getElementById('fb-thanks-msg').textContent     = t('fb_thanks');
+  }
+
+  async function fbClubSignup() {
+    const email    = document.getElementById('fb-club-email').value.trim();
+    const password = document.getElementById('fb-club-pw').value;
+    const errEl    = document.getElementById('fb-club-err');
+    errEl.textContent = '';
+    if (!email || !password || password.length < 8) {
+      errEl.textContent = t('fb_club_err_short');
+      return;
+    }
+    try {
+      document.getElementById('fb-club-btn').disabled = true;
+      const resp = await fetch('/api/members/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        errEl.textContent = data.error || 'Eroare la înregistrare.';
+        return;
+      }
+      localStorage.setItem('nota_club_token', data.token);
+      // Retroactively link this payment to the new member
+      if (fbState.paymentId) {
+        const deviceId = localStorage.getItem('nota_device_id') || undefined;
+        fetch('/api/feedback/link-payment', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${data.token}` },
+          body: JSON.stringify({ paymentId: fbState.paymentId, deviceId }),
+        }).catch(() => {});
+      }
+      document.getElementById('fb-club-prompt').style.display  = 'none';
+      document.getElementById('fb-member-ok-msg').style.display = '';
+      document.getElementById('fb-member-ok-msg').textContent  = t('fb_club_member_ok');
+    } catch {
+      errEl.textContent = 'Eroare de rețea.';
+    } finally {
+      document.getElementById('fb-club-btn').disabled = false;
+    }
+  }
+
   // Apply initial language on load
   applyLang();
 
@@ -1290,6 +1557,29 @@
     if (!card) return;
     const id = Number(card.dataset.itemId);
     if (id) toggleItem(id);
+  });
+
+  // Feedback widget — delegated (CSP-safe, no inline handlers)
+  document.getElementById('fb-card').addEventListener('click', e => {
+    // Star tap
+    const star = e.target.closest('.fb-star');
+    if (star) { fbSelectRating(Number(star.dataset.rating)); return; }
+    // Submit critical feedback
+    if (e.target.id === 'fb-submit-critical') { fbSubmitCritical(); return; }
+    // Skip critical
+    if (e.target.id === 'fb-skip-critical') {
+      postFeedback({ rating: fbState.chosenRating });
+      document.getElementById('fb-critical-phase').style.display = 'none';
+      document.getElementById('fb-thanks-phase').style.display   = '';
+      document.getElementById('fb-thanks-msg').textContent       = t('fb_thanks');
+      return;
+    }
+    // Google nudge tap (the <a> handles navigation; we just record it)
+    if (e.target.closest('#fb-google-btn')) { fbGoogleTapped(); return; }
+    // Skip Google nudge
+    if (e.target.id === 'fb-skip-google') { fbSkipGoogle(); return; }
+    // Club Eats signup
+    if (e.target.id === 'fb-club-btn') { fbClubSignup(); return; }
   });
 </script>
 </body>

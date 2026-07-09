@@ -961,6 +961,63 @@ html, body {
         </div>
       </div>
 
+      <!-- ── Feedback & Reviews ────────────────────────────────────────── -->
+      <div id="feedback-section" style="margin-top:36px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="section-title" style="margin-bottom:2px">Feedback & Recenzii</div>
+            <div style="font-size:12px;color:var(--muted)">Feedback-ul oaspeților și conversia spre Google Reviews</div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="per-tab active" data-fb-period="today">Azi</button>
+            <button class="per-tab" data-fb-period="7d">7 zile</button>
+            <button class="per-tab" data-fb-period="30d">30 zile</button>
+          </div>
+        </div>
+
+        <!-- KPI row -->
+        <div class="ce-kpi-row" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Rating mediu</div>
+            <div class="ce-kpi-val em" id="fb-avg-rating">—</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Total recenzii</div>
+            <div class="ce-kpi-val" id="fb-total-count">—</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Nudge Google afișat</div>
+            <div class="ce-kpi-val" id="fb-nudge-shown">—</div>
+          </div>
+          <div class="ce-kpi">
+            <div class="ce-kpi-lbl">Tap → Google</div>
+            <div class="ce-kpi-val em" id="fb-nudge-tapped">—</div>
+          </div>
+        </div>
+
+        <!-- Star distribution -->
+        <div id="fb-distribution" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px;display:none">
+          <div class="section-title" style="font-size:12px;margin-bottom:12px">Distribuție stele</div>
+          <div id="fb-dist-bars"></div>
+        </div>
+
+        <!-- Recent critical feedback -->
+        <div id="fb-critical-wrap" style="display:none;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Comentarii ce necesită atenție (1–3 ★)</div>
+          <div id="fb-critical-list" style="display:flex;flex-direction:column;gap:8px"></div>
+        </div>
+
+        <!-- Google Review URL setting -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Link Google Reviews</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="url" id="google-url-inp" placeholder="https://g.page/r/..." style="flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;font-family:inherit">
+            <button id="google-url-save" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer;font-family:inherit;white-space:nowrap">Salvează</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:6px">Oaspeții fericiți (4-5★) vor vedea un buton direct spre această pagină.</div>
+        </div>
+      </div>
+
       <!-- Coming soon — prominent product previews -->
       <div>
         <div class="cs-section-hd">
@@ -1154,7 +1211,7 @@ function showDashboard() {
 }
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings()]);
 }
 
 // ── API Helper ────────────────────────────────────────────────────────────────
@@ -1451,6 +1508,13 @@ function connectSocket() {
   });
 
   socket.on('order-update', () => { loadTables(); });
+
+  socket.on('feedback-received', fb => {
+    loadFeedback(fbCurrentPeriod);
+    const stars = '★'.repeat(fb.rating) + '☆'.repeat(5 - fb.rating);
+    const emoji = fb.rating >= 4 ? '😊' : fb.rating === 3 ? '😐' : '😟';
+    toast(`${emoji} Feedback nou: ${stars}`);
+  });
 
   socket.on('waiter-called', ({ tableNumber }) => {
     waitercalls.add(Number(tableNumber));
@@ -1757,6 +1821,97 @@ document.getElementById('ce-section').addEventListener('change', e => {
 // Club Eats card in "coming soon" scrolls to section
 document.getElementById('ce-card-shortcut')?.addEventListener('click', () => {
   document.getElementById('ce-section').scrollIntoView({ behavior: 'smooth' });
+});
+
+// ── Feedback & Recenzii ───────────────────────────────────────────────────────
+let fbCurrentPeriod = 'today';
+
+async function loadFeedback(period) {
+  period = period || fbCurrentPeriod;
+  fbCurrentPeriod = period;
+  try {
+    const data = await api(`/api/dashboard/feedback?period=${period}`);
+    renderFeedbackStats(data);
+  } catch (err) { console.error('[feedback]', err); }
+}
+
+function renderFeedbackStats(data) {
+  const totals = data.totals || {};
+  const avg = totals.avg_rating != null ? Number(totals.avg_rating).toFixed(1) : '—';
+  const stars = avg !== '—' ? ' ★' : '';
+  document.getElementById('fb-avg-rating').textContent   = avg + stars;
+  document.getElementById('fb-total-count').textContent  = totals.total_count != null ? totals.total_count : '—';
+  const nudge = data.nudge || {};
+  document.getElementById('fb-nudge-shown').textContent  = nudge.shown  != null ? nudge.shown  : '—';
+  document.getElementById('fb-nudge-tapped').textContent = nudge.tapped != null ? nudge.tapped : '—';
+
+  // Distribution bars
+  const distEl = document.getElementById('fb-distribution');
+  if ((data.distribution || []).length) {
+    const max = Math.max(...data.distribution.map(d => d.count), 1);
+    const distMap = {};
+    (data.distribution || []).forEach(d => { distMap[d.rating] = d.count; });
+    document.getElementById('fb-dist-bars').innerHTML = [5,4,3,2,1].map(r => {
+      const cnt = distMap[r] || 0;
+      const pct = Math.round(cnt / max * 100);
+      const col = r >= 4 ? '#22c55e' : r === 3 ? '#f59e0b' : '#ef4444';
+      return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:12px">
+        <span style="width:18px;text-align:right;color:var(--muted)">${r}★</span>
+        <div style="flex:1;background:var(--surface);border-radius:4px;height:8px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${col};border-radius:4px;transition:width .3s"></div>
+        </div>
+        <span style="width:24px;color:var(--text2)">${cnt}</span>
+      </div>`;
+    }).join('');
+    distEl.style.display = '';
+  } else {
+    distEl.style.display = 'none';
+  }
+
+  // Critical comments
+  const critWrap = document.getElementById('fb-critical-wrap');
+  const critList = document.getElementById('fb-critical-list');
+  if ((data.recentCritical || []).length) {
+    critList.innerHTML = data.recentCritical.map(fb => `
+      <div style="background:var(--card);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:12px 14px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="color:#ef4444;font-weight:700">${'★'.repeat(fb.rating)}${'☆'.repeat(5-fb.rating)}</span>
+          <span style="font-size:11px;color:var(--muted)">${timeAgo(fb.created_at)}</span>
+        </div>
+        <div style="font-size:13px;color:var(--text2)">${esc(fb.comment)}</div>
+      </div>`).join('');
+    critWrap.style.display = '';
+  } else {
+    critWrap.style.display = 'none';
+  }
+}
+
+async function loadSettings() {
+  try {
+    const data = await api('/api/dashboard/settings');
+    document.getElementById('google-url-inp').value = data.google_review_url || '';
+  } catch { /* non-critical */ }
+}
+
+async function saveGoogleUrl() {
+  const url = document.getElementById('google-url-inp').value.trim();
+  try {
+    const res = await apiMut('PUT', '/api/dashboard/settings', { google_review_url: url || null });
+    if (res.error) return toast('Eroare: ' + res.error);
+    toast('Link salvat!', 'success');
+  } catch { toast('Eroare la salvare.'); }
+}
+
+// Feedback section event delegation
+document.getElementById('feedback-section').addEventListener('click', e => {
+  const per = e.target.closest('[data-fb-period]');
+  if (per) {
+    document.querySelectorAll('[data-fb-period]').forEach(b => b.classList.remove('active'));
+    per.classList.add('active');
+    loadFeedback(per.dataset.fbPeriod);
+    return;
+  }
+  if (e.target.id === 'google-url-save') { saveGoogleUrl(); return; }
 });
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

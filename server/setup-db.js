@@ -179,6 +179,27 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_members_email   ON members(email)`);
     } catch { /* already exist */ }
 
+    // ── Post-payment intelligence: feedback + Google-review nudge ─────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id            SERIAL       PRIMARY KEY,
+        restaurant_id INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        order_id      INT          REFERENCES orders(id),
+        payment_id    INT          REFERENCES payments(id),
+        rating        SMALLINT     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+        comment       TEXT,
+        nudge_shown   BOOLEAN      NOT NULL DEFAULT false,
+        nudge_tapped  BOOLEAN      NOT NULL DEFAULT false,
+        member_id     INT          REFERENCES members(id),
+        device_id     TEXT,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS google_review_url TEXT`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_feedback_restaurant ON feedback(restaurant_id, created_at)`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

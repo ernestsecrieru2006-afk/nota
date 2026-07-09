@@ -355,10 +355,13 @@ app.get('/api/dashboard/export', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT p.paid_at, o.table_number, p.gross_lei, p.discount_lei, p.amount_lei, p.tip_lei,
              (p.amount_lei + p.tip_lei) AS total_lei, p.mia_payment_id, of.name AS offer_name,
-             p.member_id
+             p.member_id, fb.rating
       FROM payments p
       JOIN orders o ON o.id = p.order_id
       LEFT JOIN offers of ON of.id = p.offer_id
+      LEFT JOIN LATERAL (
+        SELECT rating FROM feedback WHERE payment_id = p.id ORDER BY created_at LIMIT 1
+      ) fb ON true
       WHERE p.restaurant_id = $1 AND p.status = 'paid'
         ${validDate ? 'AND p.paid_at::date = $2::date' : 'AND p.paid_at >= CURRENT_DATE'}
       ORDER BY p.paid_at
@@ -369,13 +372,13 @@ app.get('/api/dashboard/export', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="nota-${csvDate}.csv"`);
 
     const lines = [
-      'Ora,Masa,Brut (lei),Reducere (lei),Net (lei),Bacsis (lei),Total (lei),Oferta,Membru Club,MIA ID',
+      'Ora,Masa,Brut (lei),Reducere (lei),Net (lei),Bacsis (lei),Total (lei),Oferta,Membru Club,Rating,MIA ID',
       ...rows.map(r => {
         const time = new Date(r.paid_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
         const gross = r.gross_lei ?? r.amount_lei;
         return [time, r.table_number, gross, r.discount_lei || 0, r.amount_lei, r.tip_lei,
                 r.total_lei, r.offer_name || '', r.member_id ? 'da' : 'nu',
-                r.mia_payment_id || ''].join(',');
+                r.rating || '', r.mia_payment_id || ''].join(',');
       }),
     ];
     res.send(lines.join('\n'));
@@ -554,6 +557,147 @@ app.get('/api/dashboard/quiet-hours', requireAuth, async (req, res) => {
     }
     windows.sort((a, b) => a.revenue - b.revenue);
     res.json(windows.slice(0, 3));
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Dashboard settings (Google review URL, etc.) ────────────────────────────
+
+app.get('/api/dashboard/settings', requireAuth, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query(
+      'SELECT google_review_url FROM restaurants WHERE id=$1',
+      [req.restaurant.restaurantId]
+    );
+    res.json({ google_review_url: r?.google_review_url || null });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/settings', requireAuth, async (req, res) => {
+  const { google_review_url } = req.body;
+  const url = typeof google_review_url === 'string' ? google_review_url.trim() : null;
+  if (url && url.length > 500) return res.status(400).json({ error: 'URL too long' });
+  if (url && !/^https?:\/\//i.test(url)) return res.status(400).json({ error: 'URL must start with http(s)' });
+  try {
+    await pool.query('UPDATE restaurants SET google_review_url=$1 WHERE id=$2',
+      [url || null, req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Feedback: submit (public, rate-limited) ──────────────────────────────────
+
+app.post('/api/feedback', limiterAuth, async (req, res) => {
+  const { restaurantId, paymentId, rating, comment, deviceId,
+          nudgeShown = false, nudgeTapped = false, memberToken } = req.body;
+  const rId = parseInt(restaurantId);
+  const pId = parseInt(paymentId);
+  const r   = parseInt(rating);
+  if (!rId || !r || r < 1 || r > 5) return res.status(400).json({ error: 'Invalid params' });
+
+  const membPayload = memberToken ? (await import('./members.js').then(m => m.verifyMemberJWT(memberToken))) : null;
+  const memberId    = membPayload?.memberId ?? null;
+  const dId         = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
+  const cmt         = (typeof comment === 'string' && comment.trim()) ? comment.trim().slice(0, 1000) : null;
+
+  try {
+    // Verify restaurantId exists (also get order_id from payment if provided)
+    const { rows: [rest] } = await pool.query(
+      'SELECT id, google_review_url FROM restaurants WHERE id=$1', [rId]
+    );
+    if (!rest) return res.status(404).json({ error: 'Restaurant not found' });
+
+    let orderId = null;
+    if (pId) {
+      const { rows: [p] } = await pool.query(
+        'SELECT order_id FROM payments WHERE id=$1 AND restaurant_id=$2', [pId, rId]
+      );
+      orderId = p?.order_id ?? null;
+    }
+
+    const { rows: [fb] } = await pool.query(
+      `INSERT INTO feedback (restaurant_id, order_id, payment_id, rating, comment,
+                             nudge_shown, nudge_tapped, member_id, device_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, created_at`,
+      [rId, orderId, pId || null, r, cmt, !!nudgeShown, !!nudgeTapped, memberId, dId]
+    );
+
+    // Push live to dashboard
+    io.to(`dashboard-${rId}`).emit('feedback-received', {
+      id: fb.id, rating: r, comment: cmt, created_at: fb.created_at,
+      nudge_shown: !!nudgeShown, nudge_tapped: !!nudgeTapped,
+    });
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[feedback]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// ─── Feedback: retroactively link payment to a new member ────────────────────
+
+app.put('/api/feedback/link-payment', requireMemberAuth, async (req, res) => {
+  const { paymentId, deviceId } = req.body;
+  const pId = parseInt(paymentId);
+  if (!pId) return res.status(400).json({ error: 'Invalid paymentId' });
+  try {
+    await pool.query(
+      `UPDATE payments SET member_id=$1
+       WHERE id=$2 AND member_id IS NULL AND status='paid'`,
+      [req.member.memberId, pId]
+    );
+    // Also link any feedback from this session
+    if (deviceId) {
+      await pool.query(
+        `UPDATE feedback SET member_id=$1
+         WHERE device_id=$2 AND member_id IS NULL AND created_at > NOW() - INTERVAL '1 hour'`,
+        [req.member.memberId, deviceId]
+      );
+    }
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Feedback: dashboard stats ────────────────────────────────────────────────
+
+app.get('/api/dashboard/feedback', requireAuth, async (req, res) => {
+  const periodMap = { today: `NOW()::date`, '7d': `NOW() - INTERVAL '7 days'`, '30d': `NOW() - INTERVAL '30 days'` };
+  const since = periodMap[req.query.period] || periodMap['7d'];
+  const rId = req.restaurant.restaurantId;
+  try {
+    const [{ rows: [totals] }, { rows: dist }, { rows: recent }, { rows: [nudge] }] = await Promise.all([
+      pool.query(`
+        SELECT
+          COUNT(*)::int                                               AS total_count,
+          ROUND(AVG(rating)::numeric, 1)::float                      AS avg_rating,
+          COUNT(*) FILTER (WHERE rating >= 4)::int                   AS positive_count,
+          COUNT(*) FILTER (WHERE rating <= 3)::int                   AS critical_count,
+          COUNT(*) FILTER (WHERE member_id IS NOT NULL)::int         AS member_count
+        FROM feedback
+        WHERE restaurant_id = $1 AND created_at >= ${since}
+      `, [rId]),
+      pool.query(`
+        SELECT rating, COUNT(*)::int AS count
+        FROM feedback
+        WHERE restaurant_id = $1 AND created_at >= ${since}
+        GROUP BY rating ORDER BY rating DESC
+      `, [rId]),
+      pool.query(`
+        SELECT rating, comment, created_at
+        FROM feedback
+        WHERE restaurant_id = $1 AND rating <= 3 AND comment IS NOT NULL
+          AND created_at >= ${since}
+        ORDER BY created_at DESC LIMIT 20
+      `, [rId]),
+      pool.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE nudge_shown)::int  AS shown,
+          COUNT(*) FILTER (WHERE nudge_tapped)::int AS tapped
+        FROM feedback
+        WHERE restaurant_id = $1 AND created_at >= ${since}
+      `, [rId]),
+    ]);
+    res.json({ period: req.query.period || '7d', totals, distribution: dist, recentCritical: recent, nudge });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1404,14 +1548,23 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
 
     // Emit confirmed to the guest's socket
     const s = io.sockets.sockets.get(socketId);
-    if (s) s.emit('payment-confirmed', {
-      amountLei, tipLei, total: Number(amountLei) + Number(tipLei),
-      mode, itemIds: itemIds || [],
-      grossLei: grossLei ?? amountLei,
-      discountLei,
-      savingLei: discountLei,
-      memberId,
-    });
+    if (s) {
+      const { rows: [rest] } = await pool.query(
+        'SELECT google_review_url FROM restaurants WHERE id=$1', [restaurantId]
+      );
+      s.emit('payment-confirmed', {
+        amountLei, tipLei, total: Number(amountLei) + Number(tipLei),
+        mode, itemIds: itemIds || [],
+        grossLei: grossLei ?? amountLei,
+        discountLei,
+        savingLei: discountLei,
+        memberId,
+        dbPaymentId,
+        orderId,
+        restaurantId,
+        googleReviewUrl: rest?.google_review_url || null,
+      });
+    }
 
     const [order, activeOffer] = await Promise.all([
       getOpenOrder(tableNumber, restaurantId),
@@ -1535,15 +1688,24 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
 
     const discLei = Number(pmt.discount_lei || 0);
     const s = io.sockets.sockets.get(pmt.socket_id);
-    if (s) s.emit('payment-confirmed', {
-      amountLei: pmt.amount_lei, tipLei: pmt.tip_lei,
-      total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
-      mode: pmt.mode, itemIds: [],
-      grossLei: pmt.gross_lei ?? pmt.amount_lei,
-      discountLei: discLei,
-      savingLei: discLei,
-      memberId: pmt.member_id ?? null,
-    });
+    if (s) {
+      const { rows: [rest] } = await pool.query(
+        'SELECT google_review_url FROM restaurants WHERE id=$1', [pmt.restaurant_id]
+      );
+      s.emit('payment-confirmed', {
+        amountLei: pmt.amount_lei, tipLei: pmt.tip_lei,
+        total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
+        mode: pmt.mode, itemIds: [],
+        grossLei: pmt.gross_lei ?? pmt.amount_lei,
+        discountLei: discLei,
+        savingLei: discLei,
+        memberId: pmt.member_id ?? null,
+        dbPaymentId: pmt.id,
+        orderId: pmt.order_id,
+        restaurantId: pmt.restaurant_id,
+        googleReviewUrl: rest?.google_review_url || null,
+      });
+    }
 
     const [order, activeOffer] = await Promise.all([
       getOpenOrder(pmt.table_number, pmt.restaurant_id),
