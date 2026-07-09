@@ -179,6 +179,50 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_members_email   ON members(email)`);
     } catch { /* already exist */ }
 
+    // ── Growth: referral loop ─────────────────────────────────────────────────
+    try {
+      await client.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS referral_code VARCHAR(8) UNIQUE`);
+      await client.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS referred_by   INT REFERENCES members(id)`);
+      await client.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS bonus_pct     SMALLINT NOT NULL DEFAULT 0`);
+      await client.query(`ALTER TABLE members ADD COLUMN IF NOT EXISTS bonus_expires TIMESTAMPTZ`);
+    } catch { /* already exist */ }
+
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS referrals (
+        id           SERIAL       PRIMARY KEY,
+        referrer_id  INT          NOT NULL REFERENCES members(id),
+        referred_id  INT          NOT NULL REFERENCES members(id) UNIQUE,
+        created_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        converted    BOOLEAN      NOT NULL DEFAULT false,
+        converted_at TIMESTAMPTZ
+      )
+    `);
+
+    // ── Growth: AI promo-kit generator ────────────────────────────────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS promo_kit_cache (
+        offer_id      INT          PRIMARY KEY REFERENCES offers(id) ON DELETE CASCADE,
+        restaurant_id INT          NOT NULL REFERENCES restaurants(id),
+        ro_caption    TEXT         NOT NULL,
+        ru_caption    TEXT         NOT NULL,
+        ro_short      TEXT         NOT NULL,
+        ru_short      TEXT         NOT NULL,
+        ai_used       BOOLEAN      NOT NULL DEFAULT false,
+        generated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS promo_kit_log (
+        id            SERIAL       PRIMARY KEY,
+        restaurant_id INT          NOT NULL REFERENCES restaurants(id),
+        offer_id      INT          REFERENCES offers(id),
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    try {
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_promo_kit_log_rest_date ON promo_kit_log(restaurant_id, created_at)`);
+    } catch {}
+
     // ── Post-payment intelligence: feedback + Google-review nudge ─────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS feedback (
@@ -211,6 +255,22 @@ async function setup() {
       await client.query('UPDATE tables SET token = $1 WHERE id = $2', [token, tbl.id]);
     }
     if (noToken.length) console.log(`✅ Generated tokens for ${noToken.length} table(s).`);
+
+    // ── backfill referral_codes for members that don't have one yet ──────────
+    const REFERRAL_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    function genRefCode() {
+      const bytes = crypto.randomBytes(6);
+      return Array.from(bytes).map(b => REFERRAL_CHARS[b % REFERRAL_CHARS.length]).join('');
+    }
+    const { rows: noCode } = await client.query('SELECT id FROM members WHERE referral_code IS NULL');
+    for (const m of noCode) {
+      let code, attempt = 0;
+      do { code = genRefCode(); attempt++; } while (attempt < 10);
+      try {
+        await client.query('UPDATE members SET referral_code=$1 WHERE id=$2', [code, m.id]);
+      } catch { /* collision — will retry on next run */ }
+    }
+    if (noCode.length) console.log(`✅ Generated referral codes for ${noCode.length} member(s).`);
 
     // ── seed a demo restaurant if none exist ─────────────────────────────────
     const { rows } = await client.query('SELECT COUNT(*) AS n FROM restaurants');

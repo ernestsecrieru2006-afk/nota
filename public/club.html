@@ -99,6 +99,23 @@ a { color:inherit; text-decoration:none; }
 .spinner { width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; vertical-align:middle; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
+/* ── Referral section ── */
+.referral-section { background:linear-gradient(135deg,#1a1508,#161620); border:1px solid var(--gold); border-radius:var(--rl); padding:22px 20px; margin-bottom:24px; }
+.referral-section.hidden { display:none; }
+.referral-title { font-size:15px; font-weight:700; color:var(--gold-hi); margin-bottom:4px; }
+.referral-sub   { font-size:12px; color:var(--text2); margin-bottom:16px; }
+.referral-link-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
+.referral-link-box { flex:1; min-width:0; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:12px; color:var(--gold-hi); font-family:'Manrope',monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.btn-share-referral { background:var(--gold); border:none; border-radius:8px; color:#000; font-size:13px; font-weight:700; padding:9px 16px; cursor:pointer; font-family:inherit; transition:.15s; white-space:nowrap; }
+.btn-share-referral:hover { background:var(--gold-hi); }
+.btn-copy-referral  { background:none; border:1px solid var(--border); border-radius:8px; color:var(--text2); font-size:12px; font-weight:600; padding:9px 14px; cursor:pointer; font-family:inherit; transition:.15s; white-space:nowrap; }
+.btn-copy-referral:hover { border-color:var(--gold); color:var(--gold-hi); }
+.referral-stats { display:flex; gap:20px; font-size:12px; color:var(--text2); flex-wrap:wrap; }
+.referral-stat  { display:flex; flex-direction:column; gap:2px; }
+.referral-stat strong { font-size:20px; font-weight:700; color:var(--text); }
+.bonus-badge { display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.05)); border:1px solid var(--gold); border-radius:10px; padding:10px 14px; font-size:13px; color:var(--gold-hi); font-weight:600; margin-top:12px; }
+.bonus-badge.hidden { display:none; }
+
 @media (min-width:460px) {
   .modal-overlay { align-items:center; padding:20px; }
   .modal { border-radius:var(--rl); position:relative; }
@@ -138,6 +155,30 @@ a { color:inherit; text-decoration:none; }
     <div class="member-banner-body">
       <div class="member-banner-title" id="member-banner-title">Bun venit în Club Eats!</div>
       <div class="member-banner-sub" id="member-banner-sub">Reducerile tale se aplică automat la scanarea mesei.</div>
+    </div>
+  </div>
+
+  <!-- ── Referral section (logged-in only) ── -->
+  <div class="referral-section hidden" id="referral-section">
+    <div class="referral-title" id="ref-title">Invită prietenii</div>
+    <div class="referral-sub" id="ref-sub">Când prietenul tău face prima plată, amândoi primiți +5% bonus la următoarea comandă.</div>
+    <div class="referral-link-row">
+      <div class="referral-link-box" id="ref-link-box">—</div>
+      <button class="btn-share-referral" id="btn-share-ref">Distribuie</button>
+      <button class="btn-copy-referral" id="btn-copy-ref">Copiază</button>
+    </div>
+    <div class="referral-stats">
+      <div class="referral-stat">
+        <strong id="ref-invited">—</strong>
+        <span id="ref-invited-lbl">prieteni invitați</span>
+      </div>
+      <div class="referral-stat">
+        <strong id="ref-converted">—</strong>
+        <span id="ref-converted-lbl">au plătit prima dată</span>
+      </div>
+    </div>
+    <div class="bonus-badge hidden" id="bonus-badge">
+      ✨ <span id="bonus-badge-text">Ai un bonus de 5% activ!</span>
     </div>
   </div>
 
@@ -204,6 +245,16 @@ const TRANS = {
     badge_member_only: '★ Membri',
     badge_live:     'Activ acum',
     days: ['Dum','Lun','Mar','Mie','Joi','Vin','Sâm'],
+    ref_title:      'Invită prietenii',
+    ref_sub:        'Când prietenul tău face prima plată prin nota., amândoi primiți +5% bonus la următoarea comandă.',
+    ref_invited_lbl:   'prieteni invitați',
+    ref_converted_lbl: 'au plătit prima dată',
+    ref_share:      'Distribuie',
+    ref_copy:       'Copiază',
+    ref_copied:     'Copiat ✓',
+    ref_bonus:      'Ai un bonus de 5% activ la următoarea comandă!',
+    ref_share_title: 'Club Eats — nota.',
+    ref_share_text:  'Alătură-te Club Eats și primești reduceri automate la restaurante. Folosește linkul meu:',
   },
   ru: {
     nav_login:      'Войти',
@@ -233,6 +284,16 @@ const TRANS = {
     badge_member_only: '★ Участники',
     badge_live:     'Активно сейчас',
     days: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
+    ref_title:      'Пригласи друзей',
+    ref_sub:        'Когда твой друг сделает первый платёж через nota., вы оба получите +5% бонус к следующему заказу.',
+    ref_invited_lbl:   'приглашённых друзей',
+    ref_converted_lbl: 'сделали первый платёж',
+    ref_share:      'Поделиться',
+    ref_copy:       'Копировать',
+    ref_copied:     'Скопировано ✓',
+    ref_bonus:      'У тебя есть бонус 5% на следующий заказ!',
+    ref_share_title: 'Club Eats — nota.',
+    ref_share_text:  'Присоединяйся к Club Eats и получай скидки в ресторанах автоматически. Используй мою ссылку:',
   },
 };
 
@@ -256,6 +317,13 @@ function applyLang() {
   document.getElementById('member-banner-sub').textContent    = t('member_banner_sub');
   document.getElementById('lbl-email').textContent    = t('lbl_email');
   document.getElementById('lbl-password').textContent = t('lbl_password');
+  // Referral section
+  document.getElementById('ref-title').textContent         = t('ref_title');
+  document.getElementById('ref-sub').textContent           = t('ref_sub');
+  document.getElementById('ref-invited-lbl').textContent   = t('ref_invited_lbl');
+  document.getElementById('ref-converted-lbl').textContent = t('ref_converted_lbl');
+  document.getElementById('btn-share-ref').textContent     = t('ref_share');
+  document.getElementById('btn-copy-ref').textContent      = t('ref_copy');
   refreshModalText();
   renderOffers(lastOffers);
   refreshNavAuth();
@@ -278,22 +346,72 @@ function logout() {
   renderOffers(lastOffers);
 }
 
+function shareReferral() {
+  const link = document.getElementById('ref-link-box').textContent;
+  if (navigator.share) {
+    navigator.share({
+      title: t('ref_share_title'),
+      text:  t('ref_share_text'),
+      url:   link,
+    }).catch(() => {});
+  } else {
+    copyReferralLink();
+  }
+}
+
+function copyReferralLink() {
+  const link = document.getElementById('ref-link-box').textContent;
+  const btn  = document.getElementById('btn-copy-ref');
+  if (!link || link === '—') return;
+  navigator.clipboard.writeText(link).then(() => {
+    btn.textContent = t('ref_copied');
+    setTimeout(() => { btn.textContent = t('ref_copy'); }, 2000);
+  }).catch(() => showToast('Copierea nu a funcționat.'));
+}
+
 function refreshNavAuth() {
-  const authEl = document.getElementById('nav-auth');
-  const heroEl = document.getElementById('hero-section');
+  const authEl   = document.getElementById('nav-auth');
+  const heroEl   = document.getElementById('hero-section');
   const bannerEl = document.getElementById('member-banner');
+  const refEl    = document.getElementById('referral-section');
   if (member) {
     authEl.innerHTML = `<span class="nav-user">${esc(member.email)}</span><button class="btn-logout" id="btn-logout-dyn">${t('nav_logout')}</button>`;
     document.getElementById('btn-logout-dyn').addEventListener('click', logout);
     heroEl.style.display = 'none';
     bannerEl.classList.remove('hidden');
+    refEl.classList.remove('hidden');
+    loadReferralData();
   } else {
     authEl.innerHTML = `<button class="btn-login" id="btn-nav-login-dyn">${t('nav_login')}</button><button class="btn-signup" id="btn-nav-signup-dyn">${t('nav_signup')}</button>`;
     document.getElementById('btn-nav-login-dyn').addEventListener('click', () => openModal(true));
     document.getElementById('btn-nav-signup-dyn').addEventListener('click', () => openModal(false));
     heroEl.style.display = '';
     bannerEl.classList.add('hidden');
+    refEl.classList.add('hidden');
   }
+}
+
+async function loadReferralData() {
+  const tok = getMemberToken();
+  if (!tok || !member) return;
+  try {
+    const resp = await fetch('/api/members/referral', { headers: { Authorization: `Bearer ${tok}` } });
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const appUrl = window.location.origin;
+    const refLink = `${appUrl}/club?ref=${data.referral_code}`;
+    document.getElementById('ref-link-box').textContent = refLink;
+    document.getElementById('ref-invited').textContent   = data.total_invited   ?? 0;
+    document.getElementById('ref-converted').textContent = data.total_converted ?? 0;
+    // Bonus badge
+    const badgeEl = document.getElementById('bonus-badge');
+    if (data.bonus_pct > 0 && data.bonus_expires) {
+      document.getElementById('bonus-badge-text').textContent = t('ref_bonus');
+      badgeEl.classList.remove('hidden');
+    } else {
+      badgeEl.classList.add('hidden');
+    }
+  } catch { /* non-critical */ }
 }
 
 // ── Modal ────────────────────────────────────────────────────────────────────
@@ -334,15 +452,23 @@ async function submitAuth() {
   if (!email || !password) { errEl.textContent = 'Completează toate câmpurile.'; return; }
 
   const url = isLoginMode ? '/api/members/login' : '/api/members/register';
+  const body = { email, password };
+  // Pass referral code on registration
+  if (!isLoginMode) {
+    const refCode = localStorage.getItem('nota_ref_code');
+    if (refCode) body.refCode = refCode;
+  }
   try {
     document.getElementById('btn-submit').disabled = true;
     const resp = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify(body),
     });
     const data = await resp.json();
     if (!resp.ok) { errEl.textContent = data.error || 'Eroare. Încearcă din nou.'; return; }
+    // Clear referral code after successful registration
+    if (!isLoginMode) localStorage.removeItem('nota_ref_code');
     setMember(data.token, data.member);
     closeModal();
     showToast(isLoginMode ? '✓ Autentificat cu succes!' : '✓ Cont creat cu succes!');
@@ -443,6 +569,9 @@ document.addEventListener('click', e => {
   if (e.target.id === 'btn-modal-close') { closeModal(); return; }
   // Submit auth
   if (e.target.id === 'btn-submit') { submitAuth(); return; }
+  // Referral share / copy
+  if (e.target.id === 'btn-share-ref') { shareReferral(); return; }
+  if (e.target.id === 'btn-copy-ref')  { copyReferralLink(); return; }
 });
 
 // Submit on Enter in password field
@@ -455,6 +584,15 @@ document.getElementById('inp-email').addEventListener('keydown', e => {
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 (function boot() {
+  // Stash ?ref= referral code in localStorage for later registration
+  const urlRef = new URLSearchParams(window.location.search).get('ref');
+  if (urlRef && /^[A-Z2-9]{6}$/i.test(urlRef)) {
+    localStorage.setItem('nota_ref_code', urlRef.toUpperCase());
+    // Clean URL without reload
+    const clean = window.location.pathname + window.location.hash;
+    history.replaceState(null, '', clean);
+  }
+
   // Try to restore member from stored token
   const tok = getMemberToken();
   if (tok) {

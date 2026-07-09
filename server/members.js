@@ -112,10 +112,30 @@ export function requireMemberAuth(req, res, next) {
   next();
 }
 
+// ─── referral code generator ──────────────────────────────────────────────────
+
+const REFERRAL_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function genReferralCode() {
+  const bytes = crypto.randomBytes(6);
+  return Array.from(bytes).map(b => REFERRAL_CHARS[b % REFERRAL_CHARS.length]).join('');
+}
+
+// ─── exported helpers for payment flow ────────────────────────────────────────
+
+export async function getActiveMemberBonus(memberId) {
+  if (!memberId) return null;
+  const { rows: [m] } = await pool.query(
+    `SELECT bonus_pct, bonus_expires FROM members
+     WHERE id=$1 AND bonus_pct > 0 AND bonus_expires > NOW()`,
+    [memberId]
+  );
+  return m || null;
+}
+
 // ─── route handlers ───────────────────────────────────────────────────────────
 
 export async function memberRegister(req, res) {
-  const { email, password } = req.body || {};
+  const { email, password, refCode } = req.body || {};
   if (!email || !password) return res.status(400).json({ error: 'email and password required' });
   if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email))
     return res.status(400).json({ error: 'Email invalid' });
@@ -128,16 +148,48 @@ export async function memberRegister(req, res) {
     );
     if (existing.length) return res.status(409).json({ error: 'Email deja înregistrat' });
 
+    // Resolve referrer if a code was provided
+    let referrerId = null;
+    if (refCode && typeof refCode === 'string' && /^[A-Z2-9]{6}$/.test(refCode.toUpperCase())) {
+      const { rows: [ref] } = await pool.query(
+        'SELECT id FROM members WHERE referral_code=$1',
+        [refCode.toUpperCase()]
+      );
+      if (ref) referrerId = ref.id;
+    }
+
+    // Generate a unique referral code for the new member
+    let newCode = null;
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const candidate = genReferralCode();
+      const { rows: clash } = await pool.query(
+        'SELECT id FROM members WHERE referral_code=$1', [candidate]
+      );
+      if (!clash.length) { newCode = candidate; break; }
+    }
+
     const hash = await hashPassword(password);
     const { rows: [m] } = await pool.query(
-      `INSERT INTO members (email, password_hash) VALUES ($1, $2) RETURNING id, email, plan, created_at`,
-      [email.toLowerCase(), hash]
+      `INSERT INTO members (email, password_hash, referral_code, referred_by)
+       VALUES ($1, $2, $3, $4) RETURNING id, email, plan`,
+      [email.toLowerCase(), hash, newCode, referrerId]
     );
+
+    // Create referral row if applicable (self-referral is impossible: different IDs)
+    if (referrerId && referrerId !== m.id) {
+      try {
+        await pool.query(
+          `INSERT INTO referrals (referrer_id, referred_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
+          [referrerId, m.id]
+        );
+      } catch { /* duplicate or constraint — ignore */ }
+    }
+
     const token = signMemberJWT({
       memberId: m.id, email: m.email, plan: m.plan,
       exp: Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60, // 90 days
     });
-    res.status(201).json({ token, member: { id: m.id, email: m.email, plan: m.plan } });
+    res.status(201).json({ token, member: { id: m.id, email: m.email, plan: m.plan, referral_code: newCode } });
   } catch (err) {
     console.error('[members] register:', err);
     res.status(500).json({ error: 'Înregistrare eșuată' });
@@ -185,11 +237,42 @@ export async function memberLogin(req, res) {
 export async function memberMe(req, res) {
   try {
     const { rows: [m] } = await pool.query(
-      'SELECT id, email, plan, created_at FROM members WHERE id=$1',
+      `SELECT id, email, plan, referral_code, bonus_pct, bonus_expires, created_at
+       FROM members WHERE id=$1`,
       [req.member.memberId]
     );
     if (!m) return res.status(404).json({ error: 'Member not found' });
     res.json(m);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
+export async function memberReferral(req, res) {
+  const memberId = req.member.memberId;
+  try {
+    const [{ rows: [m] }, { rows: stats }] = await Promise.all([
+      pool.query(
+        `SELECT referral_code, bonus_pct, bonus_expires
+         FROM members WHERE id=$1`, [memberId]
+      ),
+      pool.query(
+        `SELECT
+           COUNT(*)::int                                          AS total_invited,
+           COUNT(*) FILTER (WHERE r.converted)::int              AS total_converted
+         FROM referrals r WHERE r.referrer_id=$1`,
+        [memberId]
+      ),
+    ]);
+    if (!m) return res.status(404).json({ error: 'Member not found' });
+    const bonusActive = m.bonus_pct > 0 && m.bonus_expires && new Date(m.bonus_expires) > new Date();
+    res.json({
+      referral_code: m.referral_code,
+      total_invited:   stats[0]?.total_invited   || 0,
+      total_converted: stats[0]?.total_converted || 0,
+      bonus_pct:     bonusActive ? m.bonus_pct : 0,
+      bonus_expires: bonusActive ? m.bonus_expires : null,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

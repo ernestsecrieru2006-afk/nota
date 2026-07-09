@@ -31,7 +31,10 @@ import { pool } from './db.js';
 import { getOpenOrder, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, verifyWebhookSignature, parseWebhookPayload, setMockFailNext } from './mia.js';
 import { register, login, me, requireAuth, verifyJWT } from './auth.js';
-import { memberRegister, memberLogin, memberMe, requireMemberAuth, verifyMemberJWT } from './members.js';
+import { memberRegister, memberLogin, memberMe, memberReferral, getActiveMemberBonus,
+         requireMemberAuth, verifyMemberJWT } from './members.js';
+
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app       = express();
@@ -164,9 +167,10 @@ app.get( '/api/auth/me',       requireAuth, me);
 
 // ─── Club Eats member routes ──────────────────────────────────────────────────
 
-app.post('/api/members/register', limiterAuth, memberRegister);
-app.post('/api/members/login',    limiterAuth, memberLogin);
-app.get( '/api/members/me',       requireMemberAuth, memberMe);
+app.post('/api/members/register',  limiterAuth,       memberRegister);
+app.post('/api/members/login',     limiterAuth,       memberLogin);
+app.get( '/api/members/me',        requireMemberAuth, memberMe);
+app.get( '/api/members/referral',  requireMemberAuth, memberReferral);
 
 // ─── /club — Club Eats member web app ────────────────────────────────────────
 
@@ -447,6 +451,221 @@ app.delete('/api/dashboard/offers/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── AI Promo-Kit Generator ───────────────────────────────────────────────────
+
+function escSVG(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .slice(0, 60);
+}
+
+function generatePromoSVG(restaurantName, offer, variant) {
+  const isStory = variant === 'story';
+  const W = isStory ? 608 : 1080;
+  const H = 1080;
+  const rName  = escSVG(restaurantName);
+  const oName  = escSVG(offer.name);
+  const pct    = Number(offer.discount_pct);
+  const start  = String(offer.start_time || '').slice(0,5);
+  const end    = String(offer.end_time   || '').slice(0,5);
+  const timeW  = `${start} – ${end}`;
+  const bigY   = isStory ? 430 : 490;
+  const subY   = bigY + (isStory ? 110 : 120);
+  const nameY  = subY + (isStory ? 80 : 80);
+  const timeY  = nameY + (isStory ? 56 : 56);
+  const logoY  = H - (isStory ? 90 : 90);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&amp;family=Manrope:wght@400;700&amp;display=swap');
+    </style>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#0A0A0F"/>
+      <stop offset="100%" stop-color="#141420"/>
+    </linearGradient>
+    <linearGradient id="glow" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"   stop-color="#C9A84C" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#C9A84C" stop-opacity="0"/>
+    </linearGradient>
+    <clipPath id="clip"><rect width="${W}" height="${H}"/></clipPath>
+  </defs>
+
+  <rect width="${W}" height="${H}" fill="url(#bg)"/>
+  <ellipse cx="${W/2}" cy="${H*0.38}" rx="${W*0.65}" ry="${H*0.28}" fill="url(#glow)"/>
+
+  <!-- Border frame -->
+  <rect x="24" y="24" width="${W-48}" height="${H-48}" rx="28" fill="none" stroke="#C9A84C" stroke-width="1.5" stroke-opacity="0.35"/>
+
+  <!-- Club Eats badge -->
+  <rect x="${W/2 - 80}" y="68" width="160" height="34" rx="17" fill="#C9A84C" fill-opacity="0.12" stroke="#C9A84C" stroke-width="1" stroke-opacity="0.5"/>
+  <text x="${W/2}" y="90" font-family="Manrope,Arial,sans-serif" font-size="13" font-weight="700" fill="#C9A84C" text-anchor="middle" letter-spacing="2">CLUB EATS</text>
+
+  <!-- Big discount -->
+  <text x="${W/2}" y="${bigY}" font-family="'Playfair Display',Georgia,serif" font-size="${isStory ? 160 : 200}" font-weight="700" fill="#C9A84C" text-anchor="middle" dominant-baseline="auto">−${pct}%</text>
+
+  <!-- Offer name -->
+  <text x="${W/2}" y="${subY}" font-family="Manrope,Arial,sans-serif" font-size="${isStory ? 28 : 32}" font-weight="700" fill="#F0F0F0" text-anchor="middle" opacity="0.9">${oName}</text>
+
+  <!-- Restaurant name -->
+  <text x="${W/2}" y="${nameY}" font-family="Manrope,Arial,sans-serif" font-size="${isStory ? 22 : 26}" fill="#B0B0C8" text-anchor="middle" opacity="0.75">${rName}</text>
+
+  <!-- Time window -->
+  <text x="${W/2}" y="${timeY}" font-family="Manrope,Arial,sans-serif" font-size="${isStory ? 20 : 22}" fill="#C9A84C" text-anchor="middle" opacity="0.85">${timeW}</text>
+
+  <!-- nota. brand -->
+  <text x="${W/2}" y="${logoY}" font-family="'Playfair Display',Georgia,serif" font-size="${isStory ? 30 : 36}" fill="#C9A84C" text-anchor="middle" opacity="0.6">nota.</text>
+
+  <!-- Decorative line -->
+  <line x1="${W/2 - 60}" y1="${subY - 36}" x2="${W/2 + 60}" y2="${subY - 36}" stroke="#C9A84C" stroke-width="1" stroke-opacity="0.3"/>
+</svg>`;
+}
+
+async function callAnthropicForKit(restaurantName, offer) {
+  const start = String(offer.start_time || '').slice(0,5);
+  const end   = String(offer.end_time   || '').slice(0,5);
+  const prompt = `You are a social media copywriter for Club Eats, a restaurant loyalty program in Moldova. Generate promotional copy for a quiet-hours discount offer.
+
+Restaurant: ${restaurantName}
+Offer: ${offer.name}
+Discount: −${offer.discount_pct}%
+Hours: ${start} – ${end}
+
+Output ONLY valid JSON (no markdown, no explanation, no code fences):
+{"ro_caption":"Romanian Instagram caption ~500 chars, warm local tone, mentions Club Eats and nota., 3-5 hashtags","ru_caption":"Russian Instagram caption ~500 chars same style","ro_short":"Romanian Telegram one-liner max 120 chars punchy","ru_short":"Russian Telegram one-liner max 120 chars punchy"}`;
+
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key':         ANTHROPIC_API_KEY,
+      'anthropic-version': '2023-06-01',
+      'content-type':      'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!resp.ok) throw new Error(`Anthropic ${resp.status}`);
+  const data = await resp.json();
+  const text = data.content?.[0]?.text || '';
+  const match = text.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error('No JSON in response');
+  return JSON.parse(match[0]);
+}
+
+function templateKit(restaurantName, offer) {
+  const start = String(offer.start_time || '').slice(0,5);
+  const end   = String(offer.end_time   || '').slice(0,5);
+  const timeW = `${start}–${end}`;
+  const slug  = restaurantName.replace(/\s+/g, '');
+  return {
+    ro_caption: `🍽 Ore liniștite la ${restaurantName}! Azi ${timeW} bucură-te de −${offer.discount_pct}% reducere la toate preparatele, prin Club Eats. Plătește cu nota. și economisești instant — zero pași în plus. 🌟 Nu rata oferta! #ClubEats #${slug} #Reduceri #nota #Moldova`,
+    ru_caption: `🍽 Тихие часы в ${restaurantName}! Сегодня ${timeW} скидка −${offer.discount_pct}% на всё меню через Club Eats. Оплачивай через nota. и экономь мгновенно — никаких лишних шагов. 🌟 #ClubEats #${slug} #Скидки #nota #Молдова`,
+    ro_short:   `−${offer.discount_pct}% la ${restaurantName} azi ${timeW} 🍽 Club Eats prin nota.`,
+    ru_short:   `−${offer.discount_pct}% в ${restaurantName} сегодня ${timeW} 🍽 Club Eats через nota.`,
+  };
+}
+
+app.post('/api/dashboard/offers/:id/promo-kit', requireAuth, async (req, res) => {
+  const offerId      = parseInt(req.params.id);
+  const restaurantId = req.restaurant.restaurantId;
+  const regenerate   = req.body?.regenerate === true;
+  if (!offerId) return res.status(400).json({ error: 'Invalid id' });
+
+  try {
+    // 1. Tenant-scoped offer lookup
+    const { rows: [offer] } = await pool.query(
+      `SELECT id, name, discount_pct, start_time::text, end_time::text
+       FROM offers WHERE id=$1 AND restaurant_id=$2`,
+      [offerId, restaurantId]
+    );
+    if (!offer) return res.status(404).json({ error: 'Oferta nu a fost găsită' });
+
+    const { rows: [rest] } = await pool.query(
+      'SELECT name FROM restaurants WHERE id=$1', [restaurantId]
+    );
+    const restaurantName = rest?.name || 'Restaurant';
+
+    // 2. Always generate fresh SVGs (deterministic, no AI cost)
+    const svg_square = generatePromoSVG(restaurantName, offer, 'square');
+    const svg_story  = generatePromoSVG(restaurantName, offer, 'story');
+
+    // 3. Check caption cache (skip if regenerate=true)
+    if (!regenerate) {
+      const { rows: [cached] } = await pool.query(
+        `SELECT ro_caption, ru_caption, ro_short, ru_short, ai_used FROM promo_kit_cache WHERE offer_id=$1`,
+        [offerId]
+      );
+      if (cached) {
+        return res.json({ ...cached, svg_square, svg_story, cached: true, rate_limit_remaining: null });
+      }
+    }
+
+    // 4. Rate limit: 10 AI generations per restaurant per day
+    const { rows: [rl] } = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM promo_kit_log
+       WHERE restaurant_id=$1 AND created_at >= CURRENT_DATE`,
+      [restaurantId]
+    );
+    const usedToday = rl.count;
+    if (usedToday >= 10) {
+      return res.status(429).json({
+        error: 'Limita de 10 generări/zi atinsă. Reîncearcă mâine.',
+        rate_limit_remaining: 0,
+        ai_unavailable: true,
+      });
+    }
+
+    // 5. AI generation or template fallback
+    let captions = null;
+    let ai_used  = false;
+    if (ANTHROPIC_API_KEY) {
+      try {
+        const json = await callAnthropicForKit(restaurantName, offer);
+        if (json.ro_caption && json.ru_caption && json.ro_short && json.ru_short) {
+          captions = json;
+          ai_used  = true;
+        }
+      } catch (err) {
+        console.warn('[promo-kit] AI error, falling back to template:', err.message);
+      }
+    }
+    if (!captions) captions = templateKit(restaurantName, offer);
+
+    const { ro_caption, ru_caption, ro_short, ru_short } = captions;
+
+    // 6. Cache captions
+    await pool.query(
+      `INSERT INTO promo_kit_cache (offer_id, restaurant_id, ro_caption, ru_caption, ro_short, ru_short, ai_used, generated_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+       ON CONFLICT (offer_id) DO UPDATE
+         SET ro_caption=$3, ru_caption=$4, ro_short=$5, ru_short=$6, ai_used=$7, generated_at=NOW()`,
+      [offerId, restaurantId, ro_caption, ru_caption, ro_short, ru_short, ai_used]
+    );
+
+    // 7. Log the generation
+    await pool.query(
+      'INSERT INTO promo_kit_log (restaurant_id, offer_id) VALUES ($1,$2)',
+      [restaurantId, offerId]
+    );
+
+    res.json({
+      ro_caption, ru_caption, ro_short, ru_short,
+      svg_square, svg_story,
+      ai_used, cached: false,
+      rate_limit_remaining: 10 - usedToday - 1,
+    });
+  } catch (err) {
+    console.error('[promo-kit]', err);
+    res.status(500).json({ error: 'Eroare la generarea kit-ului promo' });
+  }
+});
+
 // ─── Club Eats: attribution stats ─────────────────────────────────────────────
 
 app.get('/api/dashboard/club-eats', requireAuth, async (req, res) => {
@@ -454,7 +673,7 @@ app.get('/api/dashboard/club-eats', requireAuth, async (req, res) => {
   const since = periodMap[req.query.period] || periodMap['7d'];
   const rId = req.restaurant.restaurantId;
   try {
-    const [{ rows: byOffer }, { rows: [totals] }, { rows: [members] }] = await Promise.all([
+    const [{ rows: byOffer }, { rows: [totals] }, { rows: [members] }, { rows: [referralStats] }] = await Promise.all([
       pool.query(`
         SELECT o.id, o.name AS offer_name, o.discount_pct,
                COUNT(p.id)::int                                                          AS payment_count,
@@ -494,6 +713,16 @@ app.get('/api/dashboard/club-eats', requireAuth, async (req, res) => {
         FROM payments p
         WHERE p.restaurant_id = $1 AND p.status = 'paid' AND p.paid_at >= ${since}
       `, [rId]),
+      pool.query(`
+        SELECT
+          COUNT(DISTINCT m.id)::int                                        AS via_referral,
+          COUNT(DISTINCT r.id) FILTER (WHERE r.converted)::int            AS referral_converted
+        FROM payments p
+        JOIN members m ON m.id = p.member_id
+        LEFT JOIN referrals r ON r.referred_id = m.id
+        WHERE p.restaurant_id = $1 AND p.status = 'paid' AND p.paid_at >= ${since}
+          AND m.referred_by IS NOT NULL
+      `, [rId]),
     ]);
     const returningMembers = (members.total_members || 0) - (members.new_members || 0);
     res.json({
@@ -504,6 +733,10 @@ app.get('/api/dashboard/club-eats', requireAuth, async (req, res) => {
         new_members: members.new_members || 0,
         returning_members: Math.max(0, returningMembers),
         total_members: members.total_members || 0,
+      },
+      referralStats: {
+        via_referral:       referralStats?.via_referral       || 0,
+        referral_converted: referralStats?.referral_converted || 0,
       },
     });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -1140,11 +1373,12 @@ io.on('connection', socket => {
       const memberPayload = verifyMemberJWT(memberToken);
       currentMemberId = memberPayload?.memberId ?? null;
       socket.join(`table-${resolvedRestaurantId}-${resolvedNumber}`);
-      const [order, activeOffer] = await Promise.all([
+      const [order, activeOffer, memberBonus] = await Promise.all([
         getOpenOrder(resolvedNumber, currentRestaurantId),
         getActiveOffer(resolvedRestaurantId, { memberId: currentMemberId }),
+        getActiveMemberBonus(currentMemberId),
       ]);
-      socket.emit('order-update', { ...order, activeOffer: activeOffer || null });
+      socket.emit('order-update', { ...order, activeOffer: activeOffer || null, memberBonus: memberBonus || null });
 
       // Payment recovery on reconnect: re-emit confirmed/failed based on DB state
       if (paymentId && typeof paymentId === 'string' && paymentId.length < 128) {
@@ -1273,17 +1507,19 @@ io.on('connection', socket => {
     const dId = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
     try {
       const tbl   = currentTable;
-      const [order, offer] = await Promise.all([
+      const [order, offer, memberBonus] = await Promise.all([
         getOpenOrder(tbl, currentRestaurantId),
         getActiveOffer(currentRestaurantId, { memberId: currentMemberId }),
+        getActiveMemberBonus(currentMemberId),
       ]);
       const mine  = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
       if (!mine.length) return ack?.({ error: 'No claimed items' });
 
-      const gross      = mine.reduce((s, it) => s + Number(it.price), 0);
-      const discountLei = offer ? roundLei(gross * offer.discount_pct / 100) : 0;
-      const netAmount  = roundLei(gross - discountLei);
-      const dbPmtId    = await createPendingPayment({
+      const gross       = mine.reduce((s, it) => s + Number(it.price), 0);
+      const effectivePct = Math.min((offer?.discount_pct || 0) + (memberBonus?.bonus_pct || 0), 50);
+      const discountLei  = effectivePct > 0 ? roundLei(gross * effectivePct / 100) : 0;
+      const netAmount    = roundLei(gross - discountLei);
+      const dbPmtId      = await createPendingPayment({
         orderId: order.id, amountLei: netAmount, tipLei: tip,
         socketId: socket.id, mode: 'claimed',
         offerId: offer?.id ?? null, discountLei, grossLei: gross, deviceId: dId,
@@ -1305,6 +1541,9 @@ io.on('connection', socket => {
         restaurantId: currentRestaurantId, orderId: order.id,
         amountLei: netAmount, tipLei: tip, grossLei: gross, discountLei,
         mode: 'claimed', itemIds: mine.map(i => i.id), memberId: currentMemberId,
+        bonusApplied: !!(memberBonus && memberBonus.bonus_pct > 0),
+        bonusPct: memberBonus?.bonus_pct || 0,
+        bonusExpires: memberBonus?.bonus_expires || null,
       };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
@@ -1339,9 +1578,10 @@ io.on('connection', socket => {
     const dId = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
     try {
       const tbl   = currentTable;
-      const [order, offer] = await Promise.all([
+      const [order, offer, memberBonus] = await Promise.all([
         getOpenOrder(tbl, currentRestaurantId),
         getActiveOffer(currentRestaurantId, { memberId: currentMemberId }),
+        getActiveMemberBonus(currentMemberId),
       ]);
       if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
 
@@ -1358,8 +1598,9 @@ io.on('connection', socket => {
       }
       if (grossAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
 
-      const discountLei = offer ? roundLei(grossAmount * offer.discount_pct / 100) : 0;
-      const netAmount   = roundLei(grossAmount - discountLei);
+      const effectivePct = Math.min((offer?.discount_pct || 0) + (memberBonus?.bonus_pct || 0), 50);
+      const discountLei  = effectivePct > 0 ? roundLei(grossAmount * effectivePct / 100) : 0;
+      const netAmount    = roundLei(grossAmount - discountLei);
 
       const dbPmtId = await createPendingPayment({
         orderId: order.id, amountLei: netAmount, tipLei: tip,
@@ -1383,6 +1624,9 @@ io.on('connection', socket => {
         restaurantId: currentRestaurantId, orderId: order.id,
         amountLei: netAmount, tipLei: tip, grossLei: grossAmount, discountLei,
         mode: 'flat', memberId: currentMemberId,
+        bonusApplied: !!(memberBonus && memberBonus.bonus_pct > 0),
+        bonusPct: memberBonus?.bonus_pct || 0,
+        bonusExpires: memberBonus?.bonus_expires || null,
       };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
@@ -1476,6 +1720,42 @@ async function createPendingPayment({ orderId, amountLei, tipLei, socketId, mode
   return pmt.id;
 }
 
+async function checkReferralConversion(memberId) {
+  if (!memberId) return;
+  try {
+    // Is this the member's first ever confirmed payment?
+    const { rows: [{ count }] } = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM payments WHERE member_id=$1 AND status='paid'`,
+      [memberId]
+    );
+    if (Number(count) !== 1) return;
+
+    // Does this member have an unconverted referral?
+    const { rows: [ref] } = await pool.query(
+      `SELECT id, referrer_id FROM referrals WHERE referred_id=$1 AND converted=false`,
+      [memberId]
+    );
+    if (!ref) return;
+
+    await pool.query(`UPDATE referrals SET converted=true, converted_at=NOW() WHERE id=$1`, [ref.id]);
+    // Grant +5% bonus to referred member (only if they don't have one yet)
+    await pool.query(
+      `UPDATE members SET bonus_pct=5, bonus_expires=NOW() + INTERVAL '60 days'
+       WHERE id=$1 AND bonus_pct=0`,
+      [memberId]
+    );
+    // Grant +5% bonus to referrer (only if they don't have one yet)
+    await pool.query(
+      `UPDATE members SET bonus_pct=5, bonus_expires=NOW() + INTERVAL '60 days'
+       WHERE id=$1 AND bonus_pct=0`,
+      [ref.referrer_id]
+    );
+    console.log(`[referral] Converted: member ${memberId} referred by ${ref.referrer_id} — bonuses granted`);
+  } catch (err) {
+    console.error('[referral conversion]', err);
+  }
+}
+
 async function settlePayment(miaPaymentId, confirmedMiaId = null) {
   const meta = paymentMeta.get(miaPaymentId);
   if (!meta) {
@@ -1492,7 +1772,8 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
   }
 
   const { dbPaymentId, socketId, tableNumber, restaurantId, orderId, amountLei, tipLei,
-          grossLei, discountLei = 0, mode, itemIds, timer, memberId = null } = meta;
+          grossLei, discountLei = 0, mode, itemIds, timer, memberId = null,
+          bonusApplied = false, bonusPct = 0, bonusExpires = null } = meta;
   if (timer) clearTimeout(timer);
 
   const client = await pool.connect();
@@ -1544,7 +1825,19 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
       `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=$2 WHERE id=$1`,
       [dbPaymentId, confirmedMiaId || miaPaymentId]
     );
+
+    // Consume referral bonus atomically with the payment settlement
+    if (memberId && bonusApplied && bonusPct > 0) {
+      await client.query(
+        `UPDATE members SET bonus_pct=0, bonus_expires=NULL WHERE id=$1 AND bonus_pct > 0`,
+        [memberId]
+      );
+    }
+
     await client.query('COMMIT');
+
+    // After commit: check if this was the member's first payment → trigger referral conversion
+    if (memberId) await checkReferralConversion(memberId);
 
     // Emit confirmed to the guest's socket
     const s = io.sockets.sockets.get(socketId);
@@ -1558,6 +1851,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
         grossLei: grossLei ?? amountLei,
         discountLei,
         savingLei: discountLei,
+        bonusUsed: bonusApplied ? bonusPct : 0,
         memberId,
         dbPaymentId,
         orderId,
@@ -1570,7 +1864,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
       getOpenOrder(tableNumber, restaurantId),
       getActiveOffer(restaurantId),
     ]);
-    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
+    io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', { ...order, activeOffer: activeOffer || null, memberBonus: null });
     io.to(`table-${restaurantId}-${tableNumber}`).emit('table-payment', {
       amountLei, total: Number(amountLei) + Number(tipLei),
     });
@@ -1601,7 +1895,8 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     return;
   }
 
-  const { dbPaymentId, socketId, tableNumber, restaurantId, mode, timer } = meta;
+  const { dbPaymentId, socketId, tableNumber, restaurantId, mode, timer,
+          memberId = null, bonusApplied = false, bonusPct = 0, bonusExpires = null } = meta;
   if (timer) clearTimeout(timer);
 
   const newStatus = reason.toLowerCase().includes('expir') ? 'expired' : 'failed';
@@ -1628,6 +1923,10 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
       );
     }
     // flat mode: no items were claimed, nothing to release
+
+    // Restore referral bonus: the payment failed, so the bonus was never consumed
+    // (bonus is only consumed in settlePayment's COMMIT, which never ran)
+    // No restore needed — bonus is consumed at settle time, not at initiation
 
     await client.query('COMMIT');
 
@@ -1686,6 +1985,9 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
     );
     await client.query('COMMIT');
 
+    // After commit: referral conversion check (bonus in-memory state lost on restart — V1 accepted)
+    if (pmt.member_id) await checkReferralConversion(pmt.member_id);
+
     const discLei = Number(pmt.discount_lei || 0);
     const s = io.sockets.sockets.get(pmt.socket_id);
     if (s) {
@@ -1699,6 +2001,7 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
         grossLei: pmt.gross_lei ?? pmt.amount_lei,
         discountLei: discLei,
         savingLei: discLei,
+        bonusUsed: 0,
         memberId: pmt.member_id ?? null,
         dbPaymentId: pmt.id,
         orderId: pmt.order_id,

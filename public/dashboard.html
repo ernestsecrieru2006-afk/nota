@@ -653,11 +653,49 @@ html, body {
 .attr-table tr:hover td { background: var(--surface); }
 .export-csv-btn { background:transparent; border:1px solid var(--border); color:var(--muted); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
 .export-csv-btn:hover { border-color:var(--em); color:var(--em); }
+/* Offer table with kit column */
+.offers-table-hd { grid-template-columns: 1fr 70px 130px 90px 70px 70px 72px !important; }
+.offer-row       { grid-template-columns: 1fr 70px 130px 90px 70px 70px 72px !important; }
+.btn-offer-kit { background: none; border: 1px solid var(--amber); color: var(--amber-hi); font-family: inherit; font-size: 11px; font-weight: 700; padding: 4px 9px; border-radius: 6px; cursor: pointer; transition: all .15s; white-space: nowrap; }
+.btn-offer-kit:hover { background: var(--amber-bg); }
+/* Promo-kit modal */
+.pk-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; z-index: 200; padding: 16px; }
+.pk-overlay.hidden { display: none; }
+.pk-modal { background: var(--card); border: 1px solid var(--border2); border-radius: var(--rxl); width: 100%; max-width: 680px; max-height: 90vh; overflow-y: auto; padding: 28px; }
+.pk-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 20px; }
+.pk-title  { font-size: 16px; font-weight: 700; color: var(--text); }
+.pk-badge  { font-size: 11px; font-weight: 600; border-radius: 99px; padding: 2px 9px; margin-left: 8px; }
+.pk-badge.ai  { background: var(--em-bg2); color: var(--em-hi); border: 1px solid var(--em-dim); }
+.pk-badge.tpl { background: var(--amber-bg); color: var(--amber-hi); border: 1px solid var(--amber); }
+.pk-close  { background: none; border: none; color: var(--muted); font-size: 22px; cursor: pointer; line-height: 1; padding: 0; }
+.pk-tabs   { display: flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 3px; margin-bottom: 18px; width: fit-content; }
+.pk-tab    { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 700; padding: 4px 14px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+.pk-tab.active { background: var(--panel); color: var(--text); }
+.pk-caption-block { margin-bottom: 14px; }
+.pk-caption-lbl   { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: .06em; text-transform: uppercase; margin-bottom: 6px; }
+.pk-caption-text  { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-size: 13px; color: var(--text2); line-height: 1.6; white-space: pre-wrap; word-break: break-word; }
+.pk-copy-row { display: flex; align-items: center; justify-content: flex-end; margin-top: 6px; }
+.btn-pk-copy { background: none; border: 1px solid var(--border); color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+.btn-pk-copy:hover { border-color: var(--em); color: var(--em-hi); }
+.pk-svg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.pk-svg-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px; text-align: center; }
+.pk-svg-lbl  { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
+.pk-svg-preview { width: 100%; max-height: 180px; object-fit: contain; border-radius: 6px; background: #0a0a0f; }
+.btn-pk-dl { display: block; margin-top: 8px; background: var(--amber-bg); border: 1px solid var(--amber); color: var(--amber-hi); font-family: inherit; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all .15s; width: 100%; }
+.btn-pk-dl:hover { background: rgba(217,119,6,.15); }
+.pk-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.btn-pk-regen { background: var(--em-bg); border: 1px solid var(--em-dim); color: var(--em-hi); font-family: inherit; font-size: 12px; font-weight: 700; padding: 7px 18px; border-radius: var(--r); cursor: pointer; transition: all .15s; }
+.btn-pk-regen:hover { background: var(--em-bg2); }
+.btn-pk-regen:disabled { opacity: .4; cursor: not-allowed; }
+.pk-rl { font-size: 11px; color: var(--muted); }
+.pk-loading { text-align: center; padding: 40px; color: var(--muted); }
 @media (max-width: 900px) {
   .ce-kpi-row { grid-template-columns: repeat(2, 1fr); }
-  .offers-table-hd, .offer-row { grid-template-columns: 1fr 60px 100px 80px; }
+  .offers-table-hd, .offer-row { grid-template-columns: 1fr 60px 100px 80px !important; }
   .offers-table-hd > :nth-child(5), .offer-row > :nth-child(5),
-  .offers-table-hd > :nth-child(6), .offer-row > :nth-child(6) { display: none; }
+  .offers-table-hd > :nth-child(6), .offer-row > :nth-child(6),
+  .offers-table-hd > :nth-child(7), .offer-row > :nth-child(7) { display: none; }
+  .pk-svg-row { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -880,6 +918,18 @@ html, body {
           </div>
         </div>
 
+        <!-- Referral stats row -->
+        <div class="ce-kpi-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px" id="ce-referral-row">
+          <div class="ce-kpi" style="border-color:rgba(201,168,76,.25)">
+            <div class="ce-kpi-lbl" style="color:#c9a84c88">Membri via recomandare</div>
+            <div class="ce-kpi-val" id="ce-via-referral" style="color:#c9a84c">—</div>
+          </div>
+          <div class="ce-kpi" style="border-color:rgba(201,168,76,.25)">
+            <div class="ce-kpi-lbl" style="color:#c9a84c88">Recomandări convertite</div>
+            <div class="ce-kpi-val" id="ce-referral-conv" style="color:#c9a84c">—</div>
+          </div>
+        </div>
+
         <!-- Offer form (hidden) -->
         <div class="offer-form-panel" id="offer-form-panel" style="display:none">
           <div class="offer-form-title" id="offer-form-title">Ofertă nouă</div>
@@ -1097,6 +1147,74 @@ html, body {
 </div>
 
 <div id="toast"></div>
+
+<!-- ── Promo-Kit Modal ──────────────────────────────────── -->
+<div class="pk-overlay hidden" id="pk-overlay">
+  <div class="pk-modal">
+    <div class="pk-header">
+      <div>
+        <span class="pk-title" id="pk-offer-name">Kit Promo</span>
+        <span class="pk-badge" id="pk-badge" style="display:none"></span>
+      </div>
+      <button class="pk-close" id="pk-close">×</button>
+    </div>
+
+    <div id="pk-loading" class="pk-loading">Se generează kit-ul promo... <span style="display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--em);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span></div>
+
+    <div id="pk-content" style="display:none">
+      <div class="pk-tabs">
+        <button class="pk-tab active" data-pk-lang="ro">RO</button>
+        <button class="pk-tab" data-pk-lang="ru">RU</button>
+      </div>
+
+      <div id="pk-lang-ro">
+        <div class="pk-caption-block">
+          <div class="pk-caption-lbl">Caption Instagram (RO)</div>
+          <div class="pk-caption-text" id="pk-ro-caption"></div>
+          <div class="pk-copy-row"><button class="btn-pk-copy" data-pk-copy="ro-caption">Copiază</button></div>
+        </div>
+        <div class="pk-caption-block">
+          <div class="pk-caption-lbl">Telegram / Story (RO)</div>
+          <div class="pk-caption-text" id="pk-ro-short"></div>
+          <div class="pk-copy-row"><button class="btn-pk-copy" data-pk-copy="ro-short">Copiază</button></div>
+        </div>
+      </div>
+
+      <div id="pk-lang-ru" style="display:none">
+        <div class="pk-caption-block">
+          <div class="pk-caption-lbl">Caption Instagram (RU)</div>
+          <div class="pk-caption-text" id="pk-ru-caption"></div>
+          <div class="pk-copy-row"><button class="btn-pk-copy" data-pk-copy="ru-caption">Copiază</button></div>
+        </div>
+        <div class="pk-caption-block">
+          <div class="pk-caption-lbl">Telegram / Story (RU)</div>
+          <div class="pk-caption-text" id="pk-ru-short"></div>
+          <div class="pk-copy-row"><button class="btn-pk-copy" data-pk-copy="ru-short">Copiază</button></div>
+        </div>
+      </div>
+
+      <div class="pk-caption-lbl" style="margin-bottom:10px">Carduri vizuale</div>
+      <div class="pk-svg-row">
+        <div class="pk-svg-card">
+          <div class="pk-svg-lbl">Pătrat (1080×1080)</div>
+          <img class="pk-svg-preview" id="pk-svg-square-img" alt="Square promo card">
+          <button class="btn-pk-dl" id="btn-pk-dl-square">↓ Descarcă Square</button>
+        </div>
+        <div class="pk-svg-card">
+          <div class="pk-svg-lbl">Story (9:16)</div>
+          <img class="pk-svg-preview" id="pk-svg-story-img" alt="Story promo card">
+          <button class="btn-pk-dl" id="btn-pk-dl-story">↓ Descarcă Story</button>
+        </div>
+      </div>
+
+      <div class="pk-footer">
+        <button class="btn-pk-regen" id="btn-pk-regen">↺ Regenerează</button>
+        <span class="pk-rl" id="pk-rl-info"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="/socket.io/socket.io.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
@@ -1614,7 +1732,7 @@ async function loadClubEats(period) {
       api(`/api/dashboard/club-eats?period=${period}`),
       api('/api/dashboard/offers'),
     ]);
-    renderCeStats(ceData.totals || {}, ceData.memberStats || null);
+    renderCeStats(ceData.totals || {}, ceData.memberStats || null, ceData.referralStats || null);
     renderOffers(offersData || []);
     renderCeAttr(ceData.offers || []);
   } catch (err) {
@@ -1622,14 +1740,18 @@ async function loadClubEats(period) {
   }
 }
 
-function renderCeStats(t, memberStats) {
+function renderCeStats(t, memberStats, referralStats) {
   document.getElementById('ce-net').textContent      = t.total_net     ? Math.round(Number(t.total_net))     + ' lei' : '— lei';
   document.getElementById('ce-discount').textContent = t.total_discount ? Math.round(Number(t.total_discount)) + ' lei' : '— lei';
   document.getElementById('ce-devices').textContent  = t.total_devices  != null ? t.total_devices  : '—';
   document.getElementById('ce-payments').textContent = t.total_payments != null ? t.total_payments : '—';
   if (memberStats) {
-    document.getElementById('ce-new-members').textContent      = memberStats.new_members      != null ? memberStats.new_members      : '—';
-    document.getElementById('ce-returning-members').textContent = memberStats.returning_members != null ? memberStats.returning_members : '—';
+    document.getElementById('ce-new-members').textContent       = memberStats.new_members       != null ? memberStats.new_members       : '—';
+    document.getElementById('ce-returning-members').textContent = memberStats.returning_members  != null ? memberStats.returning_members  : '—';
+  }
+  if (referralStats) {
+    document.getElementById('ce-via-referral').textContent  = referralStats.via_referral       != null ? referralStats.via_referral       : '—';
+    document.getElementById('ce-referral-conv').textContent = referralStats.referral_converted  != null ? referralStats.referral_converted  : '—';
   }
 }
 
@@ -1662,12 +1784,15 @@ function renderOffers(offers) {
       <div class="offer-actions">
         <button class="btn-offer-del" data-offer-del="${o.id}">Șterge</button>
       </div>
+      <div class="offer-actions">
+        <button class="btn-offer-kit" data-offer-kit="${o.id}" data-offer-name="${esc(o.name)}">Kit promo</button>
+      </div>
     </div>`;
   }).join('');
   el.innerHTML = `
   <div class="offers-table">
     <div class="offers-table-hd">
-      <div>Denumire</div><div>Reducere</div><div>Interval orar</div><div>Status</div><div>Edit</div><div>Șterge</div>
+      <div>Denumire</div><div>Reducere</div><div>Interval orar</div><div>Status</div><div>Edit</div><div>Șterge</div><div>Kit</div>
     </div>
     ${rows}
   </div>`;
@@ -1774,6 +1899,145 @@ async function toggleOfferActive(id, active) {
 }
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── Promo-Kit ─────────────────────────────────────────────────────────────────
+let pkCurrentKit = null;
+let pkCurrentOfferId = null;
+let pkCurrentLang = 'ro';
+
+async function openPromoKit(offerId, offerName, regenerate = false) {
+  pkCurrentOfferId = offerId;
+  document.getElementById('pk-offer-name').textContent = `Kit promo — ${offerName}`;
+  document.getElementById('pk-badge').style.display = 'none';
+  document.getElementById('pk-loading').style.display = '';
+  document.getElementById('pk-content').style.display = 'none';
+  document.getElementById('pk-overlay').classList.remove('hidden');
+
+  try {
+    const data = await apiMut('POST', `/api/dashboard/offers/${offerId}/promo-kit`, { regenerate });
+    pkCurrentKit = data;
+    renderPromoKit(data);
+  } catch (err) {
+    document.getElementById('pk-loading').textContent = 'Eroare la generare. Încearcă din nou.';
+    console.error('[promo-kit]', err);
+  }
+}
+
+function renderPromoKit(kit) {
+  document.getElementById('pk-loading').style.display = 'none';
+  document.getElementById('pk-content').style.display = '';
+
+  // Badge
+  const badge = document.getElementById('pk-badge');
+  badge.textContent = kit.ai_used ? 'AI' : 'Template';
+  badge.className = 'pk-badge ' + (kit.ai_used ? 'ai' : 'tpl');
+  badge.style.display = '';
+  if (kit.cached) { badge.textContent += ' · cache'; }
+
+  // Captions
+  document.getElementById('pk-ro-caption').textContent = kit.ro_caption || '';
+  document.getElementById('pk-ro-short').textContent   = kit.ro_short   || '';
+  document.getElementById('pk-ru-caption').textContent = kit.ru_caption || '';
+  document.getElementById('pk-ru-short').textContent   = kit.ru_short   || '';
+
+  // SVG previews as data URLs
+  if (kit.svg_square) {
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(kit.svg_square);
+    document.getElementById('pk-svg-square-img').src = url;
+  }
+  if (kit.svg_story) {
+    const url = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(kit.svg_story);
+    document.getElementById('pk-svg-story-img').src = url;
+  }
+
+  // Rate limit
+  const rlEl = document.getElementById('pk-rl-info');
+  if (kit.rate_limit_remaining != null) {
+    rlEl.textContent = `${kit.rate_limit_remaining} generări rămase azi`;
+  } else {
+    rlEl.textContent = '';
+  }
+
+  // Regen button
+  const regenBtn = document.getElementById('btn-pk-regen');
+  regenBtn.disabled = false;
+
+  switchPkLang(pkCurrentLang);
+}
+
+function switchPkLang(lang) {
+  pkCurrentLang = lang;
+  document.querySelectorAll('.pk-tab').forEach(b => b.classList.toggle('active', b.dataset.pkLang === lang));
+  document.getElementById('pk-lang-ro').style.display = lang === 'ro' ? '' : 'none';
+  document.getElementById('pk-lang-ru').style.display = lang === 'ru' ? '' : 'none';
+}
+
+function closePkModal() {
+  document.getElementById('pk-overlay').classList.add('hidden');
+  pkCurrentKit = null;
+  pkCurrentOfferId = null;
+}
+
+function downloadSVG(svgString, filename) {
+  const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+}
+
+// Promo-kit event delegation (on document so it catches dynamic content)
+document.addEventListener('click', e => {
+  // Open kit modal
+  const kitBtn = e.target.closest('.btn-offer-kit');
+  if (kitBtn) {
+    openPromoKit(Number(kitBtn.dataset.offerKit), kitBtn.dataset.offerName, false);
+    return;
+  }
+  // Close kit modal
+  if (e.target.id === 'pk-close' || e.target.id === 'pk-overlay') { closePkModal(); return; }
+  // Lang tab
+  const pkTab = e.target.closest('.pk-tab');
+  if (pkTab && pkTab.dataset.pkLang) { switchPkLang(pkTab.dataset.pkLang); return; }
+  // Copy button
+  const copyBtn = e.target.closest('.btn-pk-copy');
+  if (copyBtn && pkCurrentKit) {
+    const key = copyBtn.dataset.pkCopy;
+    const fieldMap = {
+      'ro-caption': pkCurrentKit.ro_caption,
+      'ro-short':   pkCurrentKit.ro_short,
+      'ru-caption': pkCurrentKit.ru_caption,
+      'ru-short':   pkCurrentKit.ru_short,
+    };
+    const text = fieldMap[key] || '';
+    navigator.clipboard.writeText(text).then(() => {
+      copyBtn.textContent = 'Copiat ✓';
+      setTimeout(() => { copyBtn.textContent = 'Copiază'; }, 2000);
+    }).catch(() => toast('Copierea nu a funcționat.'));
+    return;
+  }
+  // SVG download
+  if (e.target.id === 'btn-pk-dl-square' && pkCurrentKit?.svg_square) {
+    downloadSVG(pkCurrentKit.svg_square, `nota-promo-square-${pkCurrentOfferId}.svg`);
+    return;
+  }
+  if (e.target.id === 'btn-pk-dl-story' && pkCurrentKit?.svg_story) {
+    downloadSVG(pkCurrentKit.svg_story, `nota-promo-story-${pkCurrentOfferId}.svg`);
+    return;
+  }
+  // Regenerate
+  if (e.target.id === 'btn-pk-regen') {
+    if (!pkCurrentOfferId) return;
+    const offerName = document.getElementById('pk-offer-name').textContent.replace('Kit promo — ', '');
+    e.target.disabled = true;
+    document.getElementById('pk-loading').style.display = '';
+    document.getElementById('pk-content').style.display = 'none';
+    openPromoKit(pkCurrentOfferId, offerName, true);
+    return;
+  }
+});
 
 // Club Eats event delegation
 document.getElementById('ce-section').addEventListener('click', e => {
