@@ -120,6 +120,26 @@ app.use(helmet({
 app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
 app.use(express.json({ limit: '100kb' }));
+
+// Bare-domain root: valid table token → guest app (unchanged); no/invalid token → company
+// landing page instead of the guest app's own dead-end "Masă invalidă" screen. The guest app's
+// client-side validation (GET /api/table/by-token/:token) is untouched and still runs exactly
+// as before whenever index.html is served — this route only decides which shell to send.
+app.get('/', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache'); // same as static HTML — deploys go live immediately
+  const token = req.query.t;
+  if (typeof token === 'string' && /^[0-9a-f]{16}$/.test(token)) {
+    try {
+      const { rows: [tbl] } = await pool.query('SELECT number FROM tables WHERE token = $1', [token]);
+      if (tbl) return res.sendFile(join(__dirname, '../public/index.html'));
+    } catch (err) {
+      console.error('[GET /] token lookup failed — defaulting to guest app', err.message);
+      return res.sendFile(join(__dirname, '../public/index.html')); // fail toward the working flow, not a dead end
+    }
+  }
+  res.sendFile(join(__dirname, '../public/home.html'));
+});
+
 app.use(express.static(join(__dirname, '../public'), {
   extensions: ['html'],
   setHeaders(res, filePath) {

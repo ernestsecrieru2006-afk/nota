@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>nota. — Plata la masă prin QR | Moldova</title>
+<meta name="description" content="nota. — plata la masă prin cod QR pentru restaurante din Moldova. Scanezi, alegi ce plătești, plătești instant prin MIA. Bani direct în contul restaurantului, comision sub 0.8%.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://paynota.com">
+<meta property="og:title" content="nota. — Plata la masă prin QR">
+<meta property="og:description" content="Scanezi codul QR de pe masă, alegi ce plătești, plătești instant prin MIA. Fără aplicație, fără așteptare.">
+<meta property="og:locale" content="ro_MD">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2300333c'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='700' fill='%23C5A059' text-anchor='middle'%3En.%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --primary:   #00333c;
+  --on-primary:#ffffff;
+  --secondary: #775a19;
+  --bg:        #f8f9fa;
+  --surface:   rgba(255,255,255,0.88);
+  --on-surface:#191c1d;
+  --on-sv:     #40484a;
+  --outline:   #70787b;
+  --brass:     #C5A059;
+  --radius:    0.75rem;
+  --safe-b:    env(safe-area-inset-bottom, 0px);
+  --safe-t:    env(safe-area-inset-top, 0px);
+}
+
+html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: var(--bg);
+  background-image: radial-gradient(ellipse at 18% 10%, rgba(0,51,60,0.06) 0%, transparent 55%),
+                     radial-gradient(ellipse at 85% 70%, rgba(197,160,89,0.09) 0%, transparent 55%);
+  color: var(--on-surface); -webkit-font-smoothing: antialiased; scroll-behavior: smooth; }
+
+a { color: inherit; }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 20px; }
+
+/* ── Header ─────────────────────────────────────── */
+#hdr { position: sticky; top: 0; z-index: 100;
+  background: rgba(248,249,250,0.92); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid rgba(197,160,89,0.22);
+  padding: calc(12px + var(--safe-t)) 0 12px; }
+.hdr-inner { max-width: 1080px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 10px; }
+.hdr-brand { font-family: 'Playfair Display', serif; font-size: 20px; font-weight: 700; color: var(--primary); }
+.hdr-brand span { color: var(--brass); }
+.lang-toggle {
+  margin-left: auto;
+  background: rgba(197,160,89,0.12); border: 1px solid rgba(197,160,89,0.3);
+  border-radius: 6px; padding: 5px 10px;
+  font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700;
+  color: var(--secondary); cursor: pointer; letter-spacing: 0.1em;
+  transition: background 0.15s;
+}
+.lang-toggle:hover { background: rgba(197,160,89,0.2); }
+
+/* ── Invalid-token notice ──────────────────────────── */
+#invalid-notice {
+  display: none;
+  background: #fff3e0; border-bottom: 1px solid rgba(197,160,89,0.35);
+  color: var(--secondary); font-size: 13px; font-weight: 600; text-align: center;
+  padding: 10px 20px;
+}
+#invalid-notice.show { display: block; }
+
+/* ── Sections ───────────────────────────────────────── */
+section { padding: 64px 0; }
+.sec-eyebrow { font-size: 12px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--brass); margin-bottom: 10px; }
+.sec-title { font-family: 'Playfair Display', serif; font-size: 30px; font-weight: 700; color: var(--primary);
+  margin-bottom: 14px; line-height: 1.2; }
+.sec-sub { font-size: 15px; color: var(--on-sv); max-width: 560px; line-height: 1.6; }
+
+/* ── Hero ───────────────────────────────────────────── */
+#hero { padding: 56px 0 48px; }
+.hero-grid { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center; }
+.hero-word { font-family: 'Playfair Display', serif; font-size: 40px; font-weight: 700; color: var(--primary); margin-bottom: 6px; }
+.hero-word span { color: var(--brass); }
+.hero-headline { font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 700; line-height: 1.25;
+  color: var(--on-surface); margin-bottom: 16px; }
+.hero-sub { font-size: 16px; color: var(--on-sv); line-height: 1.65; margin-bottom: 28px; max-width: 480px; }
+.cta-row { display: flex; flex-wrap: wrap; gap: 12px; }
+.btn-primary, .btn-secondary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px 22px; border-radius: var(--radius); font-family: 'Manrope', sans-serif;
+  font-size: 14.5px; font-weight: 700; text-decoration: none; cursor: pointer; border: none;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.btn-primary { background: var(--primary); color: #fff; box-shadow: 0 8px 20px rgba(0,51,60,0.18); }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 10px 24px rgba(0,51,60,0.24); }
+.btn-secondary { background: none; border: 1.5px solid rgba(197,160,89,0.5); color: var(--secondary); }
+.btn-secondary:hover { background: rgba(197,160,89,0.1); }
+
+/* ── Hero mockup (pure CSS/SVG, no images) ───────────── */
+.mock-wrap { display: flex; justify-content: center; }
+.phone { width: 220px; background: var(--primary); border-radius: 28px; padding: 14px;
+  box-shadow: 0 30px 60px rgba(0,51,60,0.28); }
+.phone-screen { background: var(--bg); border-radius: 18px; padding: 16px 14px; }
+.phone-brand { font-family: 'Playfair Display', serif; font-size: 13px; font-weight: 700; color: var(--primary);
+  text-align: center; margin-bottom: 10px; letter-spacing: 0.08em; text-transform: uppercase; }
+.phone-line { height: 9px; border-radius: 5px; background: rgba(0,51,60,0.1); margin-bottom: 8px; }
+.phone-line.sel { background: rgba(197,160,89,0.55); }
+.phone-line.w60 { width: 60%; } .phone-line.w80 { width: 80%; } .phone-line.w40 { width: 40%; }
+.phone-total { display: flex; justify-content: space-between; margin: 12px 0; font-weight: 700; color: var(--primary); font-size: 13px; }
+.phone-btn { background: var(--brass); color: #fff; text-align: center; border-radius: 10px; padding: 9px; font-size: 12px; font-weight: 700; }
+
+/* ── Steps ────────────────────────────────────────────── */
+.steps-grid { display: grid; grid-template-columns: 1fr; gap: 24px; margin-top: 32px; }
+.step-card { background: var(--surface); border: 1px solid rgba(197,160,89,0.2); border-radius: var(--radius);
+  padding: 24px; text-align: left; }
+.step-icon { width: 44px; height: 44px; border-radius: 12px; background: rgba(0,51,60,0.08);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 14px; color: var(--primary); }
+.step-num { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 13px; color: var(--brass); margin-bottom: 4px; }
+.step-title { font-weight: 700; font-size: 15.5px; color: var(--primary); margin-bottom: 6px; }
+.step-txt { font-size: 13.5px; color: var(--on-sv); line-height: 1.55; }
+.emphasis-row { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 10px 22px; }
+.emphasis-item { font-size: 13px; font-weight: 700; color: var(--secondary); display: flex; align-items: center; gap: 6px; }
+.emphasis-item svg { flex-shrink: 0; }
+
+/* ── Restaurant benefits ──────────────────────────────── */
+#restaurants { background: rgba(0,51,60,0.03); }
+.cards-grid { display: grid; grid-template-columns: 1fr; gap: 18px; margin-top: 32px; }
+.benefit-card { background: var(--surface); border: 1px solid rgba(197,160,89,0.2); border-radius: var(--radius);
+  padding: 22px; }
+.benefit-icon { width: 38px; height: 38px; border-radius: 10px; background: rgba(197,160,89,0.15);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 12px; color: var(--brass); }
+.benefit-title { font-weight: 700; font-size: 14.5px; color: var(--primary); margin-bottom: 6px; }
+.benefit-txt { font-size: 13.5px; color: var(--on-sv); line-height: 1.55; }
+.trust-note { margin-top: 28px; background: var(--primary); color: #fff; border-radius: var(--radius);
+  padding: 20px 22px; font-size: 13.5px; line-height: 1.6; display: flex; gap: 12px; align-items: flex-start; }
+.trust-note svg { flex-shrink: 0; margin-top: 2px; color: var(--brass); }
+
+/* ── Club Eats teaser ─────────────────────────────────── */
+#club-teaser { background: var(--primary); color: #fff; }
+#club-teaser .sec-eyebrow { color: var(--brass); }
+#club-teaser .sec-title { color: #fff; }
+#club-teaser .sec-sub { color: rgba(255,255,255,0.82); }
+#club-teaser .btn-secondary { border-color: rgba(197,160,89,0.6); color: #fff; }
+#club-teaser .btn-secondary:hover { background: rgba(255,255,255,0.08); }
+
+/* ── Footer ───────────────────────────────────────────── */
+footer { padding: 40px 0 calc(40px + var(--safe-b)); border-top: 1px solid rgba(197,160,89,0.2); }
+.foot-grid { display: flex; flex-direction: column; gap: 14px; align-items: flex-start; }
+.foot-brand { font-family: 'Playfair Display', serif; font-weight: 700; color: var(--primary); font-size: 16px; }
+.foot-txt { font-size: 12.5px; color: var(--outline); line-height: 1.6; }
+.foot-link { font-size: 12.5px; font-weight: 600; color: var(--secondary); text-decoration: none; }
+.foot-link:hover { text-decoration: underline; }
+
+@media (min-width: 760px) {
+  .hero-grid { grid-template-columns: 1.15fr 0.85fr; }
+  .hero-headline { font-size: 40px; }
+  .steps-grid { grid-template-columns: repeat(3, 1fr); }
+  .cards-grid { grid-template-columns: repeat(2, 1fr); }
+  .foot-grid { flex-direction: row; justify-content: space-between; align-items: center; }
+}
+@media (min-width: 1000px) {
+  .cards-grid { grid-template-columns: repeat(3, 1fr); }
+}
+</style>
+</head>
+<body>
+
+<header id="hdr">
+  <div class="hdr-inner">
+    <div class="hdr-brand">nota<span>.</span></div>
+    <button class="lang-toggle" id="lang-btn">RU</button>
+  </div>
+</header>
+
+<div id="invalid-notice"><span data-i18n="invalid_notice">Codul QR nu este valid — scanați din nou la masă.</span></div>
+
+<main>
+  <section id="hero">
+    <div class="wrap hero-grid">
+      <div>
+        <h1 class="hero-headline" data-i18n="hero_headline">Plata la masă, prin QR. Scanezi, alegi ce plătești, gata.</h1>
+        <p class="hero-sub" data-i18n="hero_sub">Plată instantanee prin MIA, direct din telefon — cu împărțire a notei pe poziții, egal sau tot restul. Fără aplicație de instalat, fără așteptarea ospătarului cu POS-ul.</p>
+        <div class="cta-row">
+          <a class="btn-primary" href="mailto:ernest@paynota.com?subject=Demo%20nota.%20pentru%20restaurant" data-i18n="cta_demo">Pentru restaurante — Solicită un demo</a>
+          <a class="btn-secondary" href="/club" data-i18n="cta_club">Club Eats pentru clienți</a>
+        </div>
+      </div>
+      <div class="mock-wrap">
+        <div class="phone">
+          <div class="phone-screen">
+            <div class="phone-brand">nota.</div>
+            <div class="phone-line w80 sel"></div>
+            <div class="phone-line w60"></div>
+            <div class="phone-line w40 sel"></div>
+            <div class="phone-total"><span data-i18n="mock_total">Total</span><span>184 MDL</span></div>
+            <div class="phone-btn" data-i18n="mock_pay">Plătește prin MIA</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="how">
+    <div class="wrap">
+      <div class="sec-eyebrow" data-i18n="how_eyebrow">Pentru clienți</div>
+      <h2 class="sec-title" data-i18n="how_title">Trei pași, fără aplicație</h2>
+      <div class="steps-grid">
+        <div class="step-card">
+          <div class="step-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM19 14v3M14 19h3"/></svg></div>
+          <div class="step-num" data-i18n="step1_num">01</div>
+          <div class="step-title" data-i18n="step1_title">Scanează QR-ul de pe masă</div>
+          <div class="step-txt" data-i18n="step1_txt">Fiecare masă are propriul cod — nota comenzii apare instant pe telefon.</div>
+        </div>
+        <div class="step-card">
+          <div class="step-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h7"/><circle cx="19" cy="18" r="2.5"/></svg></div>
+          <div class="step-num" data-i18n="step2_num">02</div>
+          <div class="step-title" data-i18n="step2_title">Alege ce plătești</div>
+          <div class="step-txt" data-i18n="step2_txt">Pozițiile tale, împărțire egală între toți, sau tot restul notei.</div>
+        </div>
+        <div class="step-card">
+          <div class="step-icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12a8 8 0 1 1-8-8"/><path d="M20 4 12 12"/><path d="M15 4h5v5"/></svg></div>
+          <div class="step-num" data-i18n="step3_num">03</div>
+          <div class="step-title" data-i18n="step3_title">Plătește instant prin MIA</div>
+          <div class="step-txt" data-i18n="step3_txt">Confirmare directă din bancă — bacșiș inclus, la un singur tap.</div>
+        </div>
+      </div>
+      <div class="emphasis-row">
+        <span class="emphasis-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg><span data-i18n="emph1">Fără aplicație</span></span>
+        <span class="emphasis-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg><span data-i18n="emph2">Fără așteptare</span></span>
+        <span class="emphasis-item"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 6 9 17l-5-5"/></svg><span data-i18n="emph3">Bacșiș la un tap</span></span>
+      </div>
+    </div>
+  </section>
+
+  <section id="restaurants">
+    <div class="wrap">
+      <div class="sec-eyebrow" data-i18n="rest_eyebrow">Pentru restaurante</div>
+      <h2 class="sec-title" data-i18n="rest_title">Mese eliberate mai repede, oaspeți mai mulțumiți</h2>
+      <p class="sec-sub" data-i18n="rest_sub">Plata durează secunde, nu minute — ospătarul nu mai așteaptă cu POS-ul, iar masa se eliberează imediat ce ultimul oaspete a plătit.</p>
+      <div class="cards-grid">
+        <div class="benefit-card">
+          <div class="benefit-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div>
+          <div class="benefit-title" data-i18n="bcard1_title">Mese eliberate mai repede</div>
+          <div class="benefit-txt" data-i18n="bcard1_txt">Fiecare oaspete plătește direct de pe telefon, fără să aștepte rândul la casă.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="benefit-title" data-i18n="bcard2_title">Bacșișuri mai mari</div>
+          <div class="benefit-txt" data-i18n="bcard2_txt">Alegerea bacșișului e parte firească a plății, la un singur tap.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19h16M7 19V9M12 19V5M17 19v-7"/></svg></div>
+          <div class="benefit-title" data-i18n="bcard3_title">Dashboard live</div>
+          <div class="benefit-txt" data-i18n="bcard3_txt">Vânzări în timp real, feluri de top și orele de vârf, dintr-un singur ecran.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M8 12l2.5 2.5L16 9"/></svg></div>
+          <div class="benefit-title" data-i18n="bcard4_title">Oferte „ore liniștite”</div>
+          <div class="benefit-txt" data-i18n="bcard4_txt">Reduceri programate care umplu mesele goale în orele mai puțin aglomerate.</div>
+        </div>
+        <div class="benefit-card">
+          <div class="benefit-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 17.3 6.2 21l1.5-6.6L2.5 9.8l6.7-.6L12 3l2.8 6.2 6.7.6-5.2 4.6L18 21z"/></svg></div>
+          <div class="benefit-title" data-i18n="bcard5_title">Recenzii Google</div>
+          <div class="benefit-txt" data-i18n="bcard5_txt">Clienții mulțumiți sunt invitați să lase o recenzie chiar după plată.</div>
+        </div>
+      </div>
+      <div class="trust-note">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="6" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/></svg>
+        <span data-i18n="trust_note">Banii merg direct în contul restaurantului prin MIA, comision sub 0.8%. Bonul fiscal rămâne pe casa restaurantului — zero risc.</span>
+      </div>
+    </div>
+  </section>
+
+  <section id="club-teaser">
+    <div class="wrap">
+      <div class="sec-eyebrow" data-i18n="club_eyebrow">Club Eats</div>
+      <h2 class="sec-title" data-i18n="club_title">Reduceri aplicate automat, la fiecare plată</h2>
+      <p class="sec-sub" data-i18n="club_sub">Membrii Club Eats descoperă ofertele active în restaurantele nota. și primesc reducerea direct la plată, fără coduri sau cupoane.</p>
+      <div class="cta-row" style="margin-top:20px">
+        <a class="btn-secondary" href="/club" data-i18n="club_cta">Vezi ofertele Club Eats</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot-grid">
+    <div>
+      <div class="foot-brand">nota.</div>
+      <div class="foot-txt" data-i18n="foot_pilot">În pilot cu restaurante din Chișinău.</div>
+      <div class="foot-txt">© <span id="foot-year"></span> nota. · paynota.com</div>
+    </div>
+    <a class="foot-link" href="mailto:ernest@paynota.com">ernest@paynota.com</a>
+  </div>
+</footer>
+
+<script>
+  const TRANS = {
+    ro: {
+      invalid_notice: 'Codul QR nu este valid — scanați din nou la masă.',
+      hero_headline: 'Plata la masă, prin QR. Scanezi, alegi ce plătești, gata.',
+      hero_sub: 'Plată instantanee prin MIA, direct din telefon — cu împărțire a notei pe poziții, egal sau tot restul. Fără aplicație de instalat, fără așteptarea ospătarului cu POS-ul.',
+      cta_demo: 'Pentru restaurante — Solicită un demo',
+      cta_club: 'Club Eats pentru clienți',
+      mock_total: 'Total',
+      mock_pay: 'Plătește prin MIA',
+      how_eyebrow: 'Pentru clienți',
+      how_title: 'Trei pași, fără aplicație',
+      step1_num: '01', step1_title: 'Scanează QR-ul de pe masă', step1_txt: 'Fiecare masă are propriul cod — nota comenzii apare instant pe telefon.',
+      step2_num: '02', step2_title: 'Alege ce plătești', step2_txt: 'Pozițiile tale, împărțire egală între toți, sau tot restul notei.',
+      step3_num: '03', step3_title: 'Plătește instant prin MIA', step3_txt: 'Confirmare directă din bancă — bacșiș inclus, la un singur tap.',
+      emph1: 'Fără aplicație', emph2: 'Fără așteptare', emph3: 'Bacșiș la un tap',
+      rest_eyebrow: 'Pentru restaurante',
+      rest_title: 'Mese eliberate mai repede, oaspeți mai mulțumiți',
+      rest_sub: 'Plata durează secunde, nu minute — ospătarul nu mai așteaptă cu POS-ul, iar masa se eliberează imediat ce ultimul oaspete a plătit.',
+      bcard1_title: 'Mese eliberate mai repede', bcard1_txt: 'Fiecare oaspete plătește direct de pe telefon, fără să aștepte rândul la casă.',
+      bcard2_title: 'Bacșișuri mai mari', bcard2_txt: 'Alegerea bacșișului e parte firească a plății, la un singur tap.',
+      bcard3_title: 'Dashboard live', bcard3_txt: 'Vânzări în timp real, feluri de top și orele de vârf, dintr-un singur ecran.',
+      bcard4_title: 'Oferte „ore liniștite”', bcard4_txt: 'Reduceri programate care umplu mesele goale în orele mai puțin aglomerate.',
+      bcard5_title: 'Recenzii Google', bcard5_txt: 'Clienții mulțumiți sunt invitați să lase o recenzie chiar după plată.',
+      trust_note: 'Banii merg direct în contul restaurantului prin MIA, comision sub 0.8%. Bonul fiscal rămâne pe casa restaurantului — zero risc.',
+      club_eyebrow: 'Club Eats',
+      club_title: 'Reduceri aplicate automat, la fiecare plată',
+      club_sub: 'Membrii Club Eats descoperă ofertele active în restaurantele nota. și primesc reducerea direct la plată, fără coduri sau cupoane.',
+      club_cta: 'Vezi ofertele Club Eats',
+      foot_pilot: 'În pilot cu restaurante din Chișinău.',
+    },
+    ru: {
+      invalid_notice: 'QR-код недействителен — отсканируйте его заново за столом.',
+      hero_headline: 'Оплата за столом через QR. Сканируешь, выбираешь что оплатить, готово.',
+      hero_sub: 'Мгновенная оплата через MIA прямо с телефона — с разделением счёта по позициям, поровну или остатка. Без установки приложений, без ожидания официанта с POS-терминалом.',
+      cta_demo: 'Для ресторанов — запросить демо',
+      cta_club: 'Club Eats для гостей',
+      mock_total: 'Итого',
+      mock_pay: 'Оплатить через MIA',
+      how_eyebrow: 'Для гостей',
+      how_title: 'Три шага, без приложения',
+      step1_num: '01', step1_title: 'Сканируй QR-код на столе', step1_txt: 'У каждого стола свой код — счёт заказа появляется мгновенно на телефоне.',
+      step2_num: '02', step2_title: 'Выбери что оплатить', step2_txt: 'Свои позиции, поровну между всеми, или весь остаток счёта.',
+      step3_num: '03', step3_title: 'Оплати мгновенно через MIA', step3_txt: 'Прямое подтверждение из банка — чаевые включены, в один тап.',
+      emph1: 'Без приложения', emph2: 'Без ожидания', emph3: 'Чаевые в один тап',
+      rest_eyebrow: 'Для ресторанов',
+      rest_title: 'Столы освобождаются быстрее, гости довольнее',
+      rest_sub: 'Оплата занимает секунды, а не минуты — официант больше не ждёт с POS-терминалом, а стол освобождается сразу после оплаты последнего гостя.',
+      bcard1_title: 'Столы освобождаются быстрее', bcard1_txt: 'Каждый гость платит прямо с телефона, не дожидаясь очереди на кассе.',
+      bcard2_title: 'Больше чаевых', bcard2_txt: 'Выбор чаевых — естественная часть оплаты, в один тап.',
+      bcard3_title: 'Дашборд в реальном времени', bcard3_txt: 'Продажи в реальном времени, топ блюд и часы пик — на одном экране.',
+      bcard4_title: 'Акции «тихие часы»', bcard4_txt: 'Запланированные скидки, которые заполняют пустые столы в менее загруженные часы.',
+      bcard5_title: 'Отзывы Google', bcard5_txt: 'Довольным клиентам предлагается оставить отзыв сразу после оплаты.',
+      trust_note: 'Деньги идут напрямую на счёт ресторана через MIA, комиссия менее 0.8%. Фискальный чек остаётся на кассе ресторана — нулевой риск.',
+      club_eyebrow: 'Club Eats',
+      club_title: 'Скидки применяются автоматически при каждой оплате',
+      club_sub: 'Участники Club Eats видят активные акции в ресторанах nota. и получают скидку прямо при оплате, без кодов и купонов.',
+      club_cta: 'Смотреть акции Club Eats',
+      foot_pilot: 'В пилоте с ресторанами из Кишинёва.',
+    },
+  };
+
+  let lang = localStorage.getItem('nota_lang') || 'ro';
+  const t = key => TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
+
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.getElementById('lang-btn').textContent = lang === 'ro' ? 'RU' : 'RO';
+  }
+
+  function toggleLang() {
+    lang = lang === 'ro' ? 'ru' : 'ro';
+    localStorage.setItem('nota_lang', lang);
+    applyLang();
+  }
+
+  document.getElementById('lang-btn').addEventListener('click', toggleLang);
+  document.getElementById('foot-year').textContent = new Date().getFullYear();
+
+  // Server only ever sends this page when there's no token, or the token didn't validate —
+  // so any 't' param present in the URL at this point is, by definition, an invalid one.
+  if (new URLSearchParams(location.search).get('t')) {
+    document.getElementById('invalid-notice').classList.add('show');
+  }
+
+  applyLang();
+</script>
+
+</body>
+</html>
