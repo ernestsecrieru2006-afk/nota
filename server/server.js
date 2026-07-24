@@ -13,7 +13,8 @@
  *   PORT                  Default 3000
  *   DEV_API_KEY           Optional secret header for /api/dev/* endpoints
  *   IIKO_API_LOGIN / IIKO_BASE_URL / IIKO_ORG_ID  → enables live POS sync
- *   MIA_BASE_URL / MIA_MERCHANT_ID / MIA_SECRET / MIA_WEBHOOK_SECRET  → enables real payments
+ *   MAIB_MIA_ENV (sandbox|production) + MAIB_CLIENT_ID / MAIB_CLIENT_SECRET / MAIB_SIGNATURE_KEY
+ *                         → enables real MIA payments (see server/mia.js). Omit to stay in mock mode.
  */
 
 import 'dotenv/config';
@@ -29,7 +30,8 @@ import QRCode           from 'qrcode';
 
 import { pool } from './db.js';
 import { getOpenOrder, parseIikoWebhook } from './iiko.js';
-import { requestPayment, getPaymentStatus, verifyWebhookSignature, parseWebhookPayload, setMockFailNext } from './mia.js';
+import { requestPayment, getPaymentStatus, verifyAndParseCallback, cancelPayment, refundPayment,
+         simulatePayment, setMockFailNext, MIA_MODE } from './mia.js';
 import { register, login, me, requireAuth, verifyJWT } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT } from './members.js';
@@ -43,10 +45,24 @@ const PORT      = process.env.PORT || 3000;
 const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
 const DEV_API_KEY = process.env.DEV_API_KEY || null;
-const MIA_LIVE    = !!(process.env.MIA_MERCHANT_ID && process.env.MIA_SECRET);
+const MIA_LIVE    = MIA_MODE !== 'mock'; // 'mock' | 'sandbox' | 'production' — see server/mia.js
 const IIKO_LIVE   = !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID);
 
 const roundLei = v => Math.round(Number(v) * 100) / 100;
+
+// Real MIA payments (sandbox/production) need the guest to open/scan a maib deep link — the
+// guest is already on their own phone, so we render it as an inline QR (no client-side QR lib
+// needed) AND as a tap-to-open link. Mock payments never had this (nothing to open), so we only
+// build it when there's a real deepLinkUrl to point at.
+async function buildMiaQrSvg(payment) {
+  if (!payment?.deepLinkUrl || payment._mock) return null;
+  try {
+    return await QRCode.toString(payment.deepLinkUrl, { type: 'svg', width: 220, margin: 1 });
+  } catch (err) {
+    console.error('[mia qr svg]', err.message);
+    return null;
+  }
+}
 
 // Canonical hostname — used for the production 301 redirect.
 // Derived from APP_URL so no second variable needs to be set.
@@ -203,17 +219,15 @@ app.post('/api/payment/webhook', limiterPaymentHttp, async (req, res) => {
   // Mock mode: settlements happen via internal timers only — reject external webhooks.
   if (!MIA_LIVE) return res.status(403).json({ error: 'Webhook indisponibil în modul demo' });
   try {
-    const sig = req.headers['x-mia-signature'] || req.headers['x-signature'] || '';
-    if (!verifyWebhookSignature(req.body, sig)) return res.status(401).send('Bad signature');
+    // maib embeds the signature inside the JSON body itself (result + signature), not a header.
+    const payload = verifyAndParseCallback(req.body);
+    if (!payload) return res.status(401).send('Bad signature');
 
-    const body    = JSON.parse(req.body.toString());
-    const payload = parseWebhookPayload(body);
-    const miaId   = payload.paymentId;
-
+    // We only ever act on an explicit "paid" signal. Any other terminal state (expired/cancelled)
+    // is resolved by the reconciliation poll — the docs don't specify a callback shape for those,
+    // so treating anything ambiguous as a no-op (rather than guessing) keeps this fail-closed.
     if (payload.status === 'PAID') {
-      await settlePayment(miaId, miaId);
-    } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(payload.status)) {
-      await releasePayment(miaId, `Plata ${payload.status.toLowerCase()}`);
+      await settlePayment(payload.qrId, payload.qrId, payload.payId);
     }
 
     res.json({ received: true });
@@ -313,7 +327,8 @@ app.get('/api/dashboard/recent', requireAuth, async (req, res) => {
   try {
     const rId = req.restaurant.restaurantId;
     const { rows } = await pool.query(`
-      SELECT p.id, o.table_number, p.amount_lei, p.tip_lei, p.paid_at
+      SELECT p.id, o.table_number, p.amount_lei, p.tip_lei, p.paid_at,
+             (p.mia_pay_id IS NOT NULL) AS refundable
       FROM payments p
       JOIN orders o ON o.id = p.order_id
       WHERE p.restaurant_id = $1 AND p.status = 'paid'
@@ -323,6 +338,62 @@ app.get('/api/dashboard/recent', requireAuth, async (req, res) => {
   } catch (err) {
     console.error('[recent]', err);
     res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// Refund a settled payment — authenticated, tenant-scoped, idempotent.
+app.post('/api/dashboard/payments/:id/refund', requireAuth, async (req, res) => {
+  const rId = req.restaurant.restaurantId;
+  const paymentId = Number(req.params.id);
+  if (!Number.isInteger(paymentId)) return res.status(400).json({ error: 'Invalid payment id' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [pmt] } = await client.query(
+      `SELECT id, status, mia_pay_id, amount_lei, tip_lei
+       FROM payments WHERE id = $1 AND restaurant_id = $2 FOR UPDATE`,
+      [paymentId, rId]
+    );
+    if (!pmt) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Payment not found' }); }
+
+    // Idempotent: already refunded → report success without calling maib again.
+    if (pmt.status === 'refunded') {
+      await client.query('ROLLBACK');
+      return res.json({ ok: true, alreadyRefunded: true });
+    }
+    if (pmt.status !== 'paid') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: `Cannot refund a payment with status '${pmt.status}'` });
+    }
+    if (!pmt.mia_pay_id) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Rambursarea nu e disponibilă pentru plăți demo (mock)' });
+    }
+
+    let refund;
+    try {
+      refund = await refundPayment({
+        payId:  pmt.mia_pay_id,
+        reason: (req.body && req.body.reason) || 'Refund solicitat de restaurant',
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      console.error('[refund]', err.message);
+      return res.status(502).json({ error: 'Rambursarea a eșuat la maib', detail: err.message });
+    }
+
+    await client.query(`UPDATE payments SET status='refunded' WHERE id=$1`, [paymentId]);
+    await client.query('COMMIT');
+
+    io.to(`dashboard-${rId}`).emit('payment-refunded', { id: paymentId });
+    res.json({ ok: true, refundId: refund.refundId, status: refund.status });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[refund]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  } finally {
+    client.release();
   }
 });
 
@@ -1132,6 +1203,23 @@ app.post('/api/dev/mock-fail-next', requireDevAuth, (req, res) => {
   res.json({ ok: true, message: 'Next mock payment will be declined' });
 });
 
+// Sandbox-only: trigger maib's test-pay endpoint to complete a live sandbox QR, so the full
+// webhook → settlement loop can be exercised end-to-end before real credentials exist.
+app.post('/api/dev/simulate-mia-payment', requireDevAuth, async (req, res) => {
+  if (MIA_MODE !== 'sandbox') return res.status(403).json({ error: 'Only available in sandbox mode' });
+  try {
+    const { qrId, amountLei, iban, payerName } = req.body || {};
+    if (!qrId || !amountLei || !iban || !payerName) {
+      return res.status(400).json({ error: 'qrId, amountLei, iban, payerName required' });
+    }
+    const result = await simulatePayment({ qrId, amountLei, iban, payerName });
+    res.json({ ok: true, result });
+  } catch (err) {
+    console.error('[simulate-mia-payment]', err.message);
+    res.status(502).json({ error: 'Simulation failed', detail: err.message });
+  }
+});
+
 app.get('/api/dev/table-token/:n', requireDevAuth, async (req, res) => {
   try {
     const rId    = req.restaurant.restaurantId ?? (req.query.restaurantId ? Number(req.query.restaurantId) : null);
@@ -1307,7 +1395,7 @@ ${qrs.map(({ n, url, svg }) => `
 app.get('/health', (_, res) => res.json({
   ok:   true,
   iiko: IIKO_LIVE,
-  mia:  MIA_LIVE,
+  mia:  MIA_MODE, // 'mock' | 'sandbox' | 'production' — no secrets, just which mode is active
   db:   !!process.env.DATABASE_URL,
 }));
 
@@ -1531,6 +1619,15 @@ io.on('connection', socket => {
         payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
+        // Initiation itself failed (before any provider payment exists) — no settlement can ever
+        // arrive for this attempt, so release the claimed items now rather than leaving them
+        // stuck until the socket disconnects.
+        await pool.query(
+          `UPDATE order_items SET status='available', claimed_by=NULL WHERE claimed_by=$1 AND status='claimed'`,
+          [socket.id]
+        );
+        const fresh = await getOpenOrder(tbl, currentRestaurantId);
+        io.to(`table-${currentRestaurantId}-${tbl}`).emit('order-update', { ...fresh, activeOffer: offer || null, memberBonus: memberBonus || null });
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
       }
 
@@ -1548,7 +1645,8 @@ io.on('connection', socket => {
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
-      ack?.({ success: true, ...payment });
+      const miaQrSvg = await buildMiaQrSvg(payment);
+      ack?.({ success: true, ...payment, miaQrSvg });
 
       if (payment._mock) {
         const timer = setTimeout(() => {
@@ -1631,7 +1729,8 @@ io.on('connection', socket => {
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
 
-      ack?.({ success: true, chargeAmount: netAmount, ...payment });
+      const miaQrSvg = await buildMiaQrSvg(payment);
+      ack?.({ success: true, chargeAmount: netAmount, ...payment, miaQrSvg });
 
       if (payment._mock) {
         const timer = setTimeout(() => {
@@ -1756,7 +1855,7 @@ async function checkReferralConversion(memberId) {
   }
 }
 
-async function settlePayment(miaPaymentId, confirmedMiaId = null) {
+async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) {
   const meta = paymentMeta.get(miaPaymentId);
   if (!meta) {
     // Server restart: recover from DB
@@ -1822,8 +1921,8 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
     }
 
     await client.query(
-      `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=$2 WHERE id=$1`,
-      [dbPaymentId, confirmedMiaId || miaPaymentId]
+      `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=$2, mia_pay_id=COALESCE($3, mia_pay_id) WHERE id=$1`,
+      [dbPaymentId, confirmedMiaId || miaPaymentId, payId]
     );
 
     // Consume referral bonus atomically with the payment settlement
@@ -1869,7 +1968,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null) {
       amountLei, total: Number(amountLei) + Number(tipLei),
     });
     io.to(`dashboard-${restaurantId}`).emit('payment-made', {
-      table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
+      id: dbPaymentId, table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
       paid_at: new Date().toISOString(),
     });
 
@@ -1886,7 +1985,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
   const meta = paymentMeta.get(miaPaymentId);
   if (!meta) {
     const { rows: [pmt] } = await pool.query(
-      `SELECT p.id, p.socket_id, p.mode, p.order_id, p.member_id, o.table_number, o.restaurant_id
+      `SELECT p.id, p.socket_id, p.mode, p.order_id, p.member_id, p.mia_payment_id, o.table_number, o.restaurant_id
        FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
       [miaPaymentId]
@@ -1930,6 +2029,9 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
 
     await client.query('COMMIT');
 
+    // Best-effort: tell maib this QR is dead so it can't be paid after we've released the items.
+    if (MIA_LIVE) cancelPayment(miaPaymentId, reason);
+
     const s = io.sockets.sockets.get(socketId);
     if (s) s.emit('payment-failed', { reason });
 
@@ -1949,7 +2051,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
 }
 
 // DB-only settlement/release for payments where in-memory meta is gone (server restart)
-async function settleFromDB(pmt, confirmedMiaId = null) {
+async function settleFromDB(pmt, confirmedMiaId = null, payId = null) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -1980,8 +2082,9 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
     }
 
     await client.query(
-      `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=COALESCE($2, mia_payment_id) WHERE id=$1`,
-      [pmt.id, confirmedMiaId]
+      `UPDATE payments SET status='paid', paid_at=NOW(), mia_payment_id=COALESCE($2, mia_payment_id),
+              mia_pay_id=COALESCE($3, mia_pay_id) WHERE id=$1`,
+      [pmt.id, confirmedMiaId, payId]
     );
     await client.query('COMMIT');
 
@@ -2019,7 +2122,7 @@ async function settleFromDB(pmt, confirmedMiaId = null) {
       amountLei: pmt.amount_lei, total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
     });
     io.to(`dashboard-${pmt.restaurant_id}`).emit('payment-made', {
-      table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
+      id: pmt.id, table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
       paid_at: new Date().toISOString(),
     });
   } catch (err) {
@@ -2048,6 +2151,8 @@ async function releaseFromDB(pmt, reason = '') {
       );
     }
     await client.query('COMMIT');
+
+    if (MIA_LIVE && pmt.mia_payment_id) cancelPayment(pmt.mia_payment_id, reason);
 
     const [order, activeOffer] = await Promise.all([
       getOpenOrder(pmt.table_number, pmt.restaurant_id),
@@ -2096,12 +2201,12 @@ async function reconcilePendingPayments() {
       }
 
       // 30s–3min and live MIA → poll for status
-      if (ageMs > 30_000 && miaId && process.env.MIA_MERCHANT_ID) {
+      if (ageMs > 30_000 && miaId && MIA_LIVE) {
         try {
-          const { status } = await getPaymentStatus(miaId);
+          const { status, payId } = await getPaymentStatus(miaId);
           if (status === 'PAID') {
-            if (paymentMeta.has(miaId)) await settlePayment(miaId, miaId);
-            else await settleFromDB(pmt, miaId);
+            if (paymentMeta.has(miaId)) await settlePayment(miaId, miaId, payId);
+            else await settleFromDB(pmt, miaId, payId);
           } else if (['FAILED', 'EXPIRED', 'CANCELLED'].includes(status)) {
             if (paymentMeta.has(miaId)) await releasePayment(miaId, `Plata ${status}`);
             else await releaseFromDB(pmt, status.toLowerCase());
@@ -2245,7 +2350,7 @@ httpServer.listen(PORT, async () => {
   console.log(`\n🍽  nota. server running on port ${PORT}`);
   console.log(`   App URL:  ${APP_URL}`);
   console.log(`   iiko:     ${IIKO_LIVE ? '✅ LIVE' : '⚠️  mock'}`);
-  console.log(`   MIA:      ${MIA_LIVE  ? '✅ LIVE' : '⚠️  mock'}`);
+  console.log(`   MIA:      ${MIA_MODE === 'production' ? '✅ LIVE (production)' : MIA_MODE === 'sandbox' ? '🧪 sandbox' : '⚠️  mock'}`);
   console.log(`   DB:       ${process.env.DATABASE_URL ? '✅ connected' : '❌ DATABASE_URL missing'}`);
 
   // Release any items that were left claimed by a socket from the previous process

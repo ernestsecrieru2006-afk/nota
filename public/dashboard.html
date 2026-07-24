@@ -507,6 +507,9 @@ html, body {
   transition: background .18s;
 }
 .pay-row:hover { background: var(--surface); }
+.pay-refund-btn { flex-shrink: 0; background: none; border: 1px solid var(--border); color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 600; padding: 5px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+.pay-refund-btn:hover     { border-color: var(--red); color: var(--red); }
+.pay-refund-btn:disabled  { opacity: .5; cursor: default; }
 .pay-row.pay-new {
   animation: slideIn .35s cubic-bezier(.4,0,.2,1);
   border-left: 2px solid var(--em);
@@ -1578,8 +1581,11 @@ async function loadRecentPayments() {
 function payRowHTML(p, isNew) {
   const total   = Number(p.amount_lei) + Number(p.tip_lei);
   const hasTip  = Number(p.tip_lei) > 0;
+  // p.refundable is only known for rows loaded from /api/dashboard/recent (has mia_pay_id).
+  // Live payment-made events don't carry it — refund button just won't show until reloaded.
+  const canRefund = p.refundable && p.id;
   return `
-    <div class="pay-row ${isNew ? 'pay-new' : ''}">
+    <div class="pay-row ${isNew ? 'pay-new' : ''}" data-payment-id="${p.id ?? ''}">
       <div class="pay-icon-wrap">
         <span class="pay-icon-inner">MIA</span>
       </div>
@@ -1591,7 +1597,23 @@ function payRowHTML(p, isNew) {
         <div class="pay-amount">${Math.round(total)} lei</div>
         ${hasTip ? `<div class="pay-tip">+${Math.round(p.tip_lei)} bacșiș</div>` : ''}
       </div>
+      ${canRefund ? `<button class="pay-refund-btn" data-refund="${p.id}">Refund</button>` : ''}
     </div>`;
+}
+
+async function refundPayment(id, btn) {
+  if (!confirm('Rambursezi această plată? Banii vor fi returnați clientului.')) return;
+  btn.disabled = true;
+  try {
+    const res = await apiMut('POST', `/api/dashboard/payments/${id}/refund`, {});
+    if (res.error) { toast('Eroare: ' + res.error); btn.disabled = false; return; }
+    document.querySelector(`.pay-row[data-payment-id="${id}"]`)?.remove();
+    await loadStats();
+    toast('Plată rambursată.', 'success');
+  } catch {
+    toast('Eroare la rambursare.');
+    btn.disabled = false;
+  }
 }
 
 // ── Socket ────────────────────────────────────────────────────────────────────
@@ -1675,10 +1697,12 @@ function dismissWaiter(tableNumber) {
   loadTables();
 }
 
-// Delegated handler for dismiss buttons in feed (CSP-safe: no inline onclick)
+// Delegated handler for dismiss/refund buttons in feed (CSP-safe: no inline onclick)
 document.getElementById('payments-feed').addEventListener('click', e => {
-  const btn = e.target.closest('[data-dismiss-waiter]');
-  if (btn) dismissWaiter(Number(btn.dataset.dismissWaiter));
+  const dismissBtn = e.target.closest('[data-dismiss-waiter]');
+  if (dismissBtn) { dismissWaiter(Number(dismissBtn.dataset.dismissWaiter)); return; }
+  const refundBtn = e.target.closest('[data-refund]');
+  if (refundBtn) refundPayment(Number(refundBtn.dataset.refund), refundBtn);
 });
 
 // ── Seed ──────────────────────────────────────────────────────────────────────

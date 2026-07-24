@@ -85,24 +85,30 @@ Every function has the real iiko API call commented out directly above the mock 
 
 Add to `.env`: `IIKO_URL`, `IIKO_API_KEY`
 
-### 2 — MIA bank (Request-to-Pay)
+### 2 — maib MIA QR API (real integration, not mocked)
 
-**File: `server/mock-mia.js`**
+**File: `server/mia.js`** — a faithful implementation against the real docs
+(https://docs.maibmerchants.md/mia-qr-api), with three modes:
 
-Three functions; each has the real `fetch()` call commented out:
+| Mode | When active |
+|---|---|
+| `mock` | Default — no credentials set. Internal-timer fake payments, as before. |
+| `sandbox` | `MAIB_MIA_ENV=sandbox` + credentials set. Real calls against maib's test env, incl. the `test-pay` simulation endpoint. |
+| `production` | `MAIB_MIA_ENV=production` + credentials set. Real calls against maib's live API. |
 
 | Function | When it runs |
 |---|---|
-| `requestPayment(opts)` | Guest taps "Plătește cu MIA" |
-| `getPaymentStatus(paymentId)` | Polling / webhook fallback |
-| `verifyWebhookSignature(body, sig)` | `POST /api/payment/webhook` handler |
+| `requestPayment(opts)` | Guest taps "Plătește cu MIA" — creates a Dynamic QR |
+| `getPaymentStatus(qrId)` | Reconciliation poll fallback for missed webhooks |
+| `verifyAndParseCallback(rawBody)` | `POST /api/payment/webhook` — validates the documented signature scheme |
+| `cancelPayment(qrId, reason)` | Best-effort cancel on timeout/failure |
+| `refundPayment({ payId, amountLei, reason })` | `POST /api/dashboard/payments/:id/refund` |
+| `simulatePayment(...)` | Sandbox-only, via `POST /api/dev/simulate-mia-payment` |
 
-**To go live:**
-1. Get credentials from MIA: `MIA_MERCHANT_ID`, `MIA_SECRET`, `MIA_WEBHOOK_SECRET`
-2. Add them to `.env`
-3. Uncomment the `fetch()` blocks in `mock-mia.js`
-4. Update `POST /api/payment/webhook` in `server.js` to verify signature + emit `pay-claimed`
-5. In `public/app.js` `mia-btn` handler, open `result.deepLinkUrl` instead of the fake bank screen
+**To go live:** get sandbox credentials from `ecom@maib.md`, set `MAIB_MIA_ENV=sandbox` +
+`MAIB_CLIENT_ID`/`MAIB_CLIENT_SECRET`/`MAIB_SIGNATURE_KEY` in `.env` (see `.env.example`),
+test the full loop with the sandbox simulate endpoint, then flip `MAIB_MIA_ENV=production`
+with production credentials when maib issues them — no code changes needed.
 
 ---
 
@@ -146,7 +152,8 @@ Then visit `/qrcodes` to generate and print QR codes pointing at your live URL.
 | GET | `/api/table/:n` | Fetch open order |
 | POST | `/api/table/:n/item` | Add dish `{ name, price }` |
 | POST | `/api/payment/initiate` | Start MIA payment `{ amountLei, socketId }` |
-| POST | `/api/payment/webhook` | Bank callback (real MIA integration) |
+| POST | `/api/payment/webhook` | maib callback notification (sandbox/production only) |
+| POST | `/api/dashboard/payments/:id/refund` | Refund a settled payment (auth'd, tenant-scoped) |
 | GET | `/api/dashboard/stats` | Today's totals |
 | GET | `/api/dashboard/top-dishes` | Most-paid dishes |
 | GET | `/api/dashboard/hourly` | Payments by hour |

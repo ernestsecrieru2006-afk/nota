@@ -559,6 +559,11 @@
     <div class="mia-ico">M</div>
     <div class="mia-ttl" data-i18n="mia_processing_title">Se procesează plata</div>
     <div class="mia-sub" data-i18n="mia_processing_sub">Așteptăm confirmarea băncii…</div>
+    <!-- Shown only for real (sandbox/production) MIA payments — mock mode has nothing to open. -->
+    <div id="mia-qr-wrap" style="display:none; margin: 16px 0;">
+      <div id="mia-qr-svg" style="display:flex; justify-content:center;"></div>
+      <a id="mia-qr-link" href="#" target="_blank" rel="noopener" class="btn-ghost" style="display:block; margin-top:12px; text-align:center;" data-i18n="mia_open_app">Deschide în aplicația MIA</a>
+    </div>
     <div class="spinner"></div>
   </div>
 </div>
@@ -696,6 +701,7 @@
       btn_retry: 'Încearcă din nou',
       mia_processing_title: 'Se procesează plata',
       mia_processing_sub: 'Așteptăm confirmarea băncii…',
+      mia_open_app: 'Deschide în aplicația MIA',
       suc_title: 'Plată confirmată!',
       receipt_hdr: 'Bon Fiscal Electronic',
       rcpt_tip: 'Bacșiș',
@@ -775,6 +781,7 @@
       btn_retry: 'Повторить',
       mia_processing_title: 'Обрабатываем платёж',
       mia_processing_sub: 'Ожидаем подтверждения банка…',
+      mia_open_app: 'Открыть в приложении MIA',
       suc_title: 'Оплата подтверждена!',
       receipt_hdr: 'Электронный фискальный чек',
       rcpt_tip: 'Чаевые',
@@ -1323,6 +1330,9 @@
     payTotal  = net + payTipLei;
 
     document.getElementById('ov-mia').classList.add('show');
+    // Reset from any previous attempt — only show QR/link again if this ack actually has one.
+    document.getElementById('mia-qr-wrap').style.display = 'none';
+    document.getElementById('mia-qr-svg').innerHTML = '';
 
     const deviceId = localStorage.getItem('nota_device_id') || null;
 
@@ -1335,6 +1345,13 @@
         return;
       }
       if (ack.paymentId) pendingPaymentId = ack.paymentId;
+      // Real (sandbox/production) MIA payment: guest is already on their phone, so offer a
+      // tap-to-open link into the MIA app plus a QR they can show/scan as a fallback.
+      if (ack.miaQrSvg && ack.deepLinkUrl) {
+        document.getElementById('mia-qr-svg').innerHTML = ack.miaQrSvg;
+        document.getElementById('mia-qr-link').href = ack.deepLinkUrl;
+        document.getElementById('mia-qr-wrap').style.display = '';
+      }
     };
 
     if (splitMode === 'mine') {

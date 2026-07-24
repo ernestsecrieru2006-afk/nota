@@ -131,6 +131,9 @@ async function setup() {
       await client.query(`ALTER TABLE orders ADD COLUMN IF NOT EXISTS table_number INT`);
       await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS restaurant_id INT REFERENCES restaurants(id)`);
       await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS mia_payment_id TEXT`);
+      // mia_pay_id: maib's real payId (only exists once a QR is paid) — needed for refunds,
+      // separate from mia_payment_id which holds our correlation key (the qrId).
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS mia_pay_id TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS iiko_url TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS iiko_api_key TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS iiko_org_id TEXT`);
