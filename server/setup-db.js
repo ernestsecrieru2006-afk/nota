@@ -247,6 +247,40 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_feedback_restaurant ON feedback(restaurant_id, created_at)`);
     } catch { /* already exist */ }
 
+    // ── Menu: in-QR restaurant menu (choice screen + browsing) ───────────────
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS menu_categories (
+        id            SERIAL       PRIMARY KEY,
+        restaurant_id INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        name_ro       TEXT         NOT NULL,
+        name_ru       TEXT,
+        sort_order    INT          NOT NULL DEFAULT 0,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS menu_items (
+        id             SERIAL       PRIMARY KEY,
+        category_id    INT          NOT NULL REFERENCES menu_categories(id) ON DELETE CASCADE,
+        restaurant_id  INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        name_ro        TEXT         NOT NULL,
+        name_ru        TEXT,
+        description_ro TEXT,
+        description_ru TEXT,
+        price          NUMERIC(8,2) NOT NULL,
+        available      BOOLEAN      NOT NULL DEFAULT true,
+        photo_url      TEXT,
+        sort_order     INT          NOT NULL DEFAULT 0,
+        created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS menu_published BOOLEAN NOT NULL DEFAULT false`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_menu_categories_restaurant ON menu_categories(restaurant_id, sort_order)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_menu_items_category   ON menu_items(category_id, sort_order)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id)`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

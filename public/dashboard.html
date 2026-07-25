@@ -362,6 +362,9 @@ html, body {
 .t-tile.t-active { border-color: var(--amber); background: var(--amber-bg); }
 .t-tile.t-paid   { border-color: rgba(16,185,129,.35); background: var(--em-bg); }
 .t-tile.t-empty  { opacity: .38; }
+.t-tile.t-pending { border-color: var(--blue); background: var(--blue-bg); }
+.t-pending .t-indicator { background: var(--blue); box-shadow: 0 0 6px rgba(59,130,246,.5); animation: pulse 1s infinite; }
+.t-pending .t-status    { color: var(--blue); }
 
 .t-num {
   font-size: 9px; font-weight: 700;
@@ -634,6 +637,9 @@ html, body {
 .btn-offer-edit:hover { border-color: var(--text2); color: var(--text); }
 .btn-offer-del  { background: none; border: 1px solid transparent; color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 600; padding: 4px 10px; border-radius: 6px; cursor: pointer; transition: all .15s; }
 .btn-offer-del:hover  { border-color: var(--red); color: var(--red); }
+.menu-mini-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all .15s; }
+.menu-mini-btn:hover:not(:disabled) { border-color: var(--em-dim); color: var(--em-hi); }
+.menu-mini-btn:disabled { opacity: .3; cursor: default; }
 .offers-empty { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
 /* Offer form */
 .offer-form-panel { background: var(--card); border: 1px solid var(--em-dim); border-radius: var(--rl); padding: 20px; margin-bottom: 20px; }
@@ -753,11 +759,23 @@ html, body {
 
       <nav class="sidebar-nav">
         <div class="nav-group-label" style="margin-top:4px;margin-bottom:8px">Navigare</div>
-        <a class="nav-item active">
+        <a class="nav-item active" data-view="dashboard">
           <span class="nav-icon">▪</span>Tablou de bord
+        </a>
+        <a class="nav-item" data-view="club">
+          <span class="nav-icon">🍴</span>Club Eats
+        </a>
+        <a class="nav-item" data-view="offers">
+          <span class="nav-icon">%</span>Oferte
+        </a>
+        <a class="nav-item" data-view="menu">
+          <span class="nav-icon">📖</span>Meniu
         </a>
         <a class="nav-item" id="qr-link" href="/qrcodes" target="_blank">
           <span class="nav-icon">⬡</span>Coduri QR
+        </a>
+        <a class="nav-item" data-view="feedback">
+          <span class="nav-icon">★</span>Feedback
         </a>
 
         <div style="margin-top:20px">
@@ -792,7 +810,7 @@ html, body {
     <main class="main">
 
       <!-- Page header -->
-      <div class="main-header">
+      <div class="main-header" data-view="dashboard">
         <div>
           <div class="main-title">Tablou de bord</div>
           <div class="main-date" id="main-date"></div>
@@ -806,7 +824,7 @@ html, body {
       </div>
 
       <!-- KPI cards -->
-      <div class="stat-grid">
+      <div class="stat-grid" data-view="dashboard">
         <div class="stat-card">
           <div class="sc-label">Total încasat</div>
           <div class="sc-val em" id="stat-total">0</div>
@@ -830,7 +848,7 @@ html, body {
       </div>
 
       <!-- Charts -->
-      <div class="charts-row">
+      <div class="charts-row" data-view="dashboard">
         <!-- Revenue by hour: emerald area chart -->
         <div class="chart-card">
           <div class="chart-hd">
@@ -866,7 +884,7 @@ html, body {
       </div>
 
       <!-- Tables -->
-      <div>
+      <div data-view="dashboard">
         <div class="section-hd">
           <div class="section-title">Starea meselor</div>
           <div class="section-meta" id="tables-summary"></div>
@@ -877,11 +895,11 @@ html, body {
       </div>
 
       <!-- ══ CLUB EATS SECTION ══════════════════════════════ -->
-      <div class="ce-section" id="ce-section">
-        <div class="ce-header">
+      <div class="ce-section" id="ce-section" data-view="club offers">
+        <div class="ce-header" data-subview="club">
           <div>
             <div class="section-title" style="margin-bottom:2px">Club Eats</div>
-            <div style="font-size:12px;color:var(--muted)">Oferte ore liniștite & atribuire venituri</div>
+            <div style="font-size:12px;color:var(--muted)">Atribuire venituri & clienți</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
             <div class="period-tabs">
@@ -889,12 +907,11 @@ html, body {
               <button class="per-tab" data-period="7d">7 zile</button>
               <button class="per-tab" data-period="30d">30 zile</button>
             </div>
-            <button class="btn-add-offer" id="btn-add-offer">+ Ofertă nouă</button>
           </div>
         </div>
 
         <!-- KPI row -->
-        <div class="ce-kpi-row">
+        <div class="ce-kpi-row" data-subview="club">
           <div class="ce-kpi">
             <div class="ce-kpi-lbl">Venit adus de nota.</div>
             <div class="ce-kpi-val em" id="ce-net">— lei</div>
@@ -922,7 +939,7 @@ html, body {
         </div>
 
         <!-- Referral stats row -->
-        <div class="ce-kpi-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px" id="ce-referral-row">
+        <div class="ce-kpi-row" style="grid-template-columns:repeat(2,1fr);margin-bottom:20px" id="ce-referral-row" data-subview="club">
           <div class="ce-kpi" style="border-color:rgba(201,168,76,.25)">
             <div class="ce-kpi-lbl" style="color:#c9a84c88">Membri via recomandare</div>
             <div class="ce-kpi-val" id="ce-via-referral" style="color:#c9a84c">—</div>
@@ -932,6 +949,16 @@ html, body {
             <div class="ce-kpi-val" id="ce-referral-conv" style="color:#c9a84c">—</div>
           </div>
         </div>
+
+        <!-- ── Oferte (offer CRUD) ────────────────────────────── -->
+        <div data-subview="offers">
+          <div class="ce-header" style="margin-bottom:16px">
+            <div>
+              <div class="section-title" style="margin-bottom:2px">Oferte</div>
+              <div style="font-size:12px;color:var(--muted)">Ore liniștite & reduceri Club Eats</div>
+            </div>
+            <button class="btn-add-offer" id="btn-add-offer">+ Ofertă nouă</button>
+          </div>
 
         <!-- Offer form (hidden) -->
         <div class="offer-form-panel" id="offer-form-panel" style="display:none">
@@ -990,9 +1017,11 @@ html, body {
 
         <!-- Offers list -->
         <div id="offers-list"></div>
+        </div>
+        <!-- ── end Oferte ─────────────────────────────────────── -->
 
         <!-- Per-offer attribution -->
-        <div id="ce-attr-wrap" style="display:none">
+        <div id="ce-attr-wrap" style="display:none" data-subview="club">
           <div class="section-title" style="font-size:13px;margin-bottom:12px">Atribuire per ofertă</div>
           <div class="offers-table">
             <table class="attr-table" id="ce-attr-table">
@@ -1014,8 +1043,90 @@ html, body {
         </div>
       </div>
 
+      <!-- ══ MENIU SECTION ═══════════════════════════════════ -->
+      <div data-view="menu" id="menu-section">
+        <div class="ce-header">
+          <div>
+            <div class="section-title" style="margin-bottom:2px">Meniu</div>
+            <div style="font-size:12px;color:var(--muted)">Meniul restaurantului, afișat în codul QR de pe masă</div>
+          </div>
+          <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="menu-publish-toggle" style="accent-color:var(--em)">
+              <span id="menu-publish-lbl">Meniu ascuns</span>
+            </label>
+            <button class="btn-add-offer" id="btn-add-category">+ Categorie</button>
+          </div>
+        </div>
+
+        <!-- Category form (hidden) -->
+        <div class="offer-form-panel" id="cat-form-panel" style="display:none">
+          <div class="offer-form-title" id="cat-form-title">Categorie nouă</div>
+          <input type="hidden" id="cat-edit-id">
+          <div class="offer-form-grid">
+            <div class="offer-field">
+              <label>Nume (RO)</label>
+              <input type="text" id="cat-name-ro" placeholder="ex: Feluri principale">
+            </div>
+            <div class="offer-field">
+              <label>Nume (RU) — opțional</label>
+              <input type="text" id="cat-name-ru" placeholder="ex: Основные блюда">
+            </div>
+          </div>
+          <div class="offer-form-actions">
+            <button class="btn-save-offer" id="btn-save-category">Salvează categoria</button>
+            <button class="btn-cancel-offer" id="btn-cancel-category">Anulează</button>
+          </div>
+        </div>
+
+        <!-- Item form (hidden) -->
+        <div class="offer-form-panel" id="item-form-panel" style="display:none">
+          <div class="offer-form-title" id="item-form-title">Fel nou</div>
+          <input type="hidden" id="item-edit-id">
+          <input type="hidden" id="item-category-id">
+          <div class="offer-form-grid">
+            <div class="offer-field">
+              <label>Nume (RO)</label>
+              <input type="text" id="item-name-ro" placeholder="ex: Spaghetti Carbonara">
+            </div>
+            <div class="offer-field">
+              <label>Nume (RU) — opțional</label>
+              <input type="text" id="item-name-ru">
+            </div>
+            <div class="offer-field">
+              <label>Preț (lei)</label>
+              <input type="number" id="item-price" min="0.01" step="0.01" placeholder="185">
+            </div>
+            <div class="offer-field">
+              <label>Foto URL — opțional</label>
+              <input type="text" id="item-photo" placeholder="https://...">
+            </div>
+          </div>
+          <div class="offer-field" style="margin-bottom:10px">
+            <label>Descriere RO — opțional</label>
+            <input type="text" id="item-desc-ro" placeholder="ex: cu pancetta și parmezan">
+          </div>
+          <div class="offer-field" style="margin-bottom:16px">
+            <label>Descriere RU — opțional</label>
+            <input type="text" id="item-desc-ru">
+          </div>
+          <div style="margin-bottom:16px">
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="item-available" checked style="accent-color:var(--em)">
+              Disponibil
+            </label>
+          </div>
+          <div class="offer-form-actions">
+            <button class="btn-save-offer" id="btn-save-item">Salvează felul</button>
+            <button class="btn-cancel-offer" id="btn-cancel-item">Anulează</button>
+          </div>
+        </div>
+
+        <div id="menu-categories-list"></div>
+      </div>
+
       <!-- ── Feedback & Reviews ────────────────────────────────────────── -->
-      <div id="feedback-section" style="margin-top:36px">
+      <div id="feedback-section" style="margin-top:0" data-view="feedback">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
           <div>
             <div class="section-title" style="margin-bottom:2px">Feedback & Recenzii</div>
@@ -1072,7 +1183,7 @@ html, body {
       </div>
 
       <!-- Coming soon — prominent product previews -->
-      <div>
+      <div data-view="dashboard">
         <div class="cs-section-hd">
           <div class="cs-section-title">Urmează</div>
           <div class="cs-section-desc">Viziunea completă a platformei nota.</div>
@@ -1128,7 +1239,7 @@ html, body {
     </main>
 
     <!-- ── Feed Panel ─────────────────────────────────────── -->
-    <aside class="feed-panel">
+    <aside class="feed-panel" data-view="dashboard">
       <div class="feed-hd">
         <div class="feed-title">Plăți recente</div>
         <div class="feed-badge" id="feed-count">0</div>
@@ -1329,10 +1440,50 @@ function showDashboard() {
 
   loadAll();
   connectSocket();
+  switchView('dashboard');
 }
 
+// ── View switching ────────────────────────────────────────────────────────────
+// Elements opt in via data-view="name" (space-separated for elements shared by
+// more than one view, e.g. the Club Eats section body is used by both 'club' and
+// 'offers'). data-subview does the same for elements nested inside a shared parent.
+let currentView = 'dashboard';
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('[data-view]:not(.nav-item)').forEach(el => {
+    el.style.display = el.dataset.view.split(' ').includes(view) ? '' : 'none';
+  });
+  document.querySelectorAll('[data-subview]').forEach(el => {
+    el.style.display = el.dataset.subview.split(' ').includes(view) ? '' : 'none';
+  });
+  document.querySelectorAll('.sidebar-nav .nav-item[data-view]').forEach(el => {
+    el.classList.toggle('active', el.dataset.view === view);
+  });
+  // ce-attr-wrap has an extra "only if there's data" condition on top of the
+  // subview match — reconcile it here too, since renderCeAttr() may have run
+  // before this view became active.
+  updateCeAttrVisibility();
+}
+
+// The attribution table is only shown on the 'club' subview AND only once there's
+// data to show — two independent conditions, so it can't rely on the generic
+// data-subview toggle alone (that would show an empty table on every club visit).
+let ceHasAttrData = false;
+function updateCeAttrVisibility() {
+  const wrap = document.getElementById('ce-attr-wrap');
+  const onClubView = wrap.dataset.subview.split(' ').includes(currentView);
+  wrap.style.display = (onClubView && ceHasAttrData) ? '' : 'none';
+}
+
+document.querySelector('.sidebar-nav').addEventListener('click', e => {
+  const item = e.target.closest('.nav-item[data-view]');
+  if (!item) return; // external links (Coduri QR) fall through untouched
+  e.preventDefault();
+  switchView(item.dataset.view);
+});
+
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu()]);
 }
 
 // ── API Helper ────────────────────────────────────────────────────────────────
@@ -1544,11 +1695,14 @@ async function loadTables() {
     const unpaid  = Number(t.unpaid_lei);
     const hasAct  = Number(t.available) > 0 || Number(t.claimed) > 0;
     const hasPaid = Number(t.paid) > 0 && !hasAct;
+    const isPending = !!t.payment_pending;
     const isWaiter = waitercalls.has(Number(t.number));
-    const cls     = (hasAct ? 't-active' : hasPaid ? 't-paid' : 't-empty') + (isWaiter ? ' t-waiter' : '');
+    const cls     = (hasAct ? 't-active' : hasPaid ? 't-paid' : 't-empty')
+                    + (isPending ? ' t-pending' : '') + (isWaiter ? ' t-waiter' : '');
     const amtTxt  = unpaid > 0 ? `${Math.round(unpaid)} lei` : '';
     const stTxt   = isWaiter
       ? '🔔 ospătar'
+      : isPending ? '⏳ plată în curs'
       : hasAct ? `${t.available} disp · ${t.claimed} sel` : hasPaid ? 'Achitat' : 'Liberă';
     return `
       <div class="t-tile ${cls}">
@@ -1647,7 +1801,15 @@ function connectSocket() {
     toast(`Masa ${p.table_number} — ${total} lei`, 'success');
   });
 
-  socket.on('order-update', () => { loadTables(); });
+  // 'order-update' is only ever broadcast to guest table rooms, not the dashboard room — it
+  // never reached here. 'table-activity' is the real signal: emitted on claim/release/pending
+  // payment start/failure/expiry/recycle, i.e. everything that changes a table's live state.
+  // Debounced slightly so a burst of item taps doesn't hammer the tables endpoint.
+  let tablesRefreshTimer = null;
+  socket.on('table-activity', () => {
+    clearTimeout(tablesRefreshTimer);
+    tablesRefreshTimer = setTimeout(loadTables, 250);
+  });
 
   socket.on('feedback-received', fb => {
     loadFeedback(fbCurrentPeriod);
@@ -1823,10 +1985,10 @@ function renderOffers(offers) {
 }
 
 function renderCeAttr(offers) {
-  const wrap = document.getElementById('ce-attr-wrap');
   const body = document.getElementById('ce-attr-body');
-  if (!offers.length) { wrap.style.display = 'none'; return; }
-  wrap.style.display = '';
+  ceHasAttrData = offers.length > 0;
+  updateCeAttrVisibility();
+  if (!offers.length) return;
   body.innerHTML = offers.map(o => `
     <tr>
       <td style="color:var(--text);font-weight:600">${esc(o.offer_name || '—')}</td>
@@ -2106,9 +2268,246 @@ document.getElementById('ce-section').addEventListener('change', e => {
   if (tog) toggleOfferActive(Number(tog.dataset.offerToggle), tog.checked);
 });
 
-// Club Eats card in "coming soon" scrolls to section
+// Club Eats card in "coming soon" switches to the Club Eats view
 document.getElementById('ce-card-shortcut')?.addEventListener('click', () => {
-  document.getElementById('ce-section').scrollIntoView({ behavior: 'smooth' });
+  switchView('club');
+});
+
+// ── Meniu ─────────────────────────────────────────────────────────────────────
+let menuState = { published: false, categories: [] };
+
+async function loadMenu() {
+  try {
+    menuState = await api('/api/dashboard/menu');
+    document.getElementById('menu-publish-toggle').checked = menuState.published;
+    updateMenuPublishLabel();
+    renderMenu();
+  } catch (err) { console.error('[menu]', err); }
+}
+
+function updateMenuPublishLabel() {
+  document.getElementById('menu-publish-lbl').textContent = menuState.published
+    ? 'Meniu publicat (vizibil oaspeților)' : 'Meniu ascuns';
+}
+
+function findCategory(id) { return menuState.categories.find(c => c.id === id); }
+function findItem(id) {
+  for (const c of menuState.categories) {
+    const it = c.items.find(i => i.id === id);
+    if (it) return { item: it, category: c };
+  }
+  return null;
+}
+
+function renderMenu() {
+  const list = document.getElementById('menu-categories-list');
+  if (!menuState.categories.length) {
+    list.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:20px 0">Niciun fel de mâncare încă. Adaugă o categorie pentru a începe.</div>';
+    return;
+  }
+  list.innerHTML = menuState.categories.map((c, ci) => `
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 18px;margin-bottom:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+        <div style="font-weight:700;font-size:14px">${esc(c.name_ro)}${c.name_ru ? ` <span style="color:var(--muted);font-weight:400">/ ${esc(c.name_ru)}</span>` : ''}</div>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+          <button class="menu-mini-btn" data-cat-up="${c.id}" ${ci === 0 ? 'disabled' : ''}>↑</button>
+          <button class="menu-mini-btn" data-cat-down="${c.id}" ${ci === menuState.categories.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="menu-mini-btn" data-cat-edit="${c.id}">Edit</button>
+          <button class="menu-mini-btn" data-cat-del="${c.id}">Șterge</button>
+          <button class="btn-add-offer" style="padding:4px 10px;font-size:11px" data-add-item="${c.id}">+ Fel</button>
+        </div>
+      </div>
+      ${c.items.length ? c.items.map((it, ii) => `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <div style="font-size:13px;font-weight:600;${it.available ? '' : 'color:var(--muted);text-decoration:line-through'}">${esc(it.name_ro)}</div>
+            ${it.description_ro ? `<div style="font-size:11.5px;color:var(--muted)">${esc(it.description_ro)}</div>` : ''}
+          </div>
+          <div style="font-size:13px;font-weight:700;white-space:nowrap">${Number(it.price).toFixed(0)} lei</div>
+          <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
+            <label style="display:flex;align-items:center" title="Disponibil">
+              <input type="checkbox" data-item-avail="${it.id}" ${it.available ? 'checked' : ''} style="accent-color:var(--em)">
+            </label>
+            <button class="menu-mini-btn" data-item-up="${it.id}" ${ii === 0 ? 'disabled' : ''}>↑</button>
+            <button class="menu-mini-btn" data-item-down="${it.id}" ${ii === c.items.length - 1 ? 'disabled' : ''}>↓</button>
+            <button class="menu-mini-btn" data-item-edit="${it.id}">Edit</button>
+            <button class="menu-mini-btn" data-item-del="${it.id}">×</button>
+          </div>
+        </div>
+      `).join('') : '<div style="font-size:12px;color:var(--muted);padding:6px 0">Niciun fel în această categorie.</div>'}
+    </div>
+  `).join('');
+}
+
+function showCategoryForm(cat) {
+  document.getElementById('cat-form-title').textContent = cat ? 'Editează categoria' : 'Categorie nouă';
+  document.getElementById('cat-edit-id').value = cat ? cat.id : '';
+  document.getElementById('cat-name-ro').value = cat ? cat.name_ro : '';
+  document.getElementById('cat-name-ru').value = cat ? (cat.name_ru || '') : '';
+  document.getElementById('item-form-panel').style.display = 'none';
+  document.getElementById('cat-form-panel').style.display = '';
+  document.getElementById('cat-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function hideCategoryForm() { document.getElementById('cat-form-panel').style.display = 'none'; }
+
+async function saveCategory() {
+  const id = document.getElementById('cat-edit-id').value;
+  const name_ro = document.getElementById('cat-name-ro').value.trim();
+  const name_ru = document.getElementById('cat-name-ru').value.trim();
+  if (!name_ro) return toast('Introdu o denumire pentru categorie.');
+  try {
+    const res = id
+      ? await apiMut('PUT', `/api/dashboard/menu/categories/${id}`, { name_ro, name_ru })
+      : await apiMut('POST', '/api/dashboard/menu/categories', { name_ro, name_ru });
+    if (res.error) return toast('Eroare: ' + res.error);
+    hideCategoryForm();
+    await loadMenu();
+    toast(id ? 'Categorie actualizată.' : 'Categorie creată!', 'success');
+  } catch { toast('Eroare la salvare.'); }
+}
+
+async function deleteCategory(id) {
+  if (!confirm('Ștergi această categorie și toate felurile din ea?')) return;
+  try {
+    await apiMut('DELETE', `/api/dashboard/menu/categories/${id}`, {});
+    await loadMenu();
+    toast('Categorie ștearsă.', 'success');
+  } catch { toast('Eroare la ștergere.'); }
+}
+
+async function moveCategory(id, dir) {
+  const idx = menuState.categories.findIndex(c => c.id === id);
+  const swapIdx = idx + dir;
+  if (idx < 0 || swapIdx < 0 || swapIdx >= menuState.categories.length) return;
+  const a = menuState.categories[idx], b = menuState.categories[swapIdx];
+  await Promise.all([
+    apiMut('PUT', `/api/dashboard/menu/categories/${a.id}`, { name_ro: a.name_ro, name_ru: a.name_ru, sort_order: b.sort_order }),
+    apiMut('PUT', `/api/dashboard/menu/categories/${b.id}`, { name_ro: b.name_ro, name_ru: b.name_ru, sort_order: a.sort_order }),
+  ]);
+  await loadMenu();
+}
+
+function showItemForm(categoryId, item) {
+  document.getElementById('item-form-title').textContent = item ? 'Editează felul' : 'Fel nou';
+  document.getElementById('item-edit-id').value = item ? item.id : '';
+  document.getElementById('item-category-id').value = categoryId;
+  document.getElementById('item-name-ro').value = item ? item.name_ro : '';
+  document.getElementById('item-name-ru').value = item ? (item.name_ru || '') : '';
+  document.getElementById('item-price').value = item ? item.price : '';
+  document.getElementById('item-photo').value = item ? (item.photo_url || '') : '';
+  document.getElementById('item-desc-ro').value = item ? (item.description_ro || '') : '';
+  document.getElementById('item-desc-ru').value = item ? (item.description_ru || '') : '';
+  document.getElementById('item-available').checked = item ? !!item.available : true;
+  document.getElementById('cat-form-panel').style.display = 'none';
+  document.getElementById('item-form-panel').style.display = '';
+  document.getElementById('item-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function hideItemForm() { document.getElementById('item-form-panel').style.display = 'none'; }
+
+async function saveItem() {
+  const id = document.getElementById('item-edit-id').value;
+  const category_id = document.getElementById('item-category-id').value;
+  const name_ro = document.getElementById('item-name-ro').value.trim();
+  const name_ru = document.getElementById('item-name-ru').value.trim();
+  const price = Number(document.getElementById('item-price').value);
+  const photo_url = document.getElementById('item-photo').value.trim();
+  const description_ro = document.getElementById('item-desc-ro').value.trim();
+  const description_ru = document.getElementById('item-desc-ru').value.trim();
+  const available = document.getElementById('item-available').checked;
+  if (!name_ro) return toast('Introdu o denumire pentru fel.');
+  if (!price || price <= 0) return toast('Introdu un preț valid.');
+  const body = { category_id, name_ro, name_ru, description_ro, description_ru, price, available, photo_url };
+  try {
+    const res = id
+      ? await apiMut('PUT', `/api/dashboard/menu/items/${id}`, body)
+      : await apiMut('POST', '/api/dashboard/menu/items', body);
+    if (res.error) return toast('Eroare: ' + res.error);
+    hideItemForm();
+    await loadMenu();
+    toast(id ? 'Fel actualizat.' : 'Fel adăugat!', 'success');
+  } catch { toast('Eroare la salvare.'); }
+}
+
+async function deleteItem(id) {
+  if (!confirm('Ștergi acest fel din meniu?')) return;
+  try {
+    await apiMut('DELETE', `/api/dashboard/menu/items/${id}`, {});
+    await loadMenu();
+    toast('Fel șters.', 'success');
+  } catch { toast('Eroare la ștergere.'); }
+}
+
+async function moveItem(id, dir) {
+  const found = findItem(id);
+  if (!found) return;
+  const { category } = found;
+  const idx = category.items.findIndex(i => i.id === id);
+  const swapIdx = idx + dir;
+  if (swapIdx < 0 || swapIdx >= category.items.length) return;
+  const a = category.items[idx], b = category.items[swapIdx];
+  const putItem = (it, sortOrder) => apiMut('PUT', `/api/dashboard/menu/items/${it.id}`, {
+    name_ro: it.name_ro, name_ru: it.name_ru, description_ro: it.description_ro, description_ru: it.description_ru,
+    price: it.price, available: it.available, photo_url: it.photo_url, sort_order: sortOrder,
+  });
+  await Promise.all([putItem(a, b.sort_order), putItem(b, a.sort_order)]);
+  await loadMenu();
+}
+
+async function toggleItemAvailable(id, available) {
+  const found = findItem(id);
+  if (!found) return;
+  const it = found.item;
+  await apiMut('PUT', `/api/dashboard/menu/items/${id}`, {
+    name_ro: it.name_ro, name_ru: it.name_ru, description_ro: it.description_ro, description_ru: it.description_ru,
+    price: it.price, available, photo_url: it.photo_url,
+  });
+  it.available = available; // optimistic local update — avoids a full reload flicker
+  renderMenu();
+}
+
+async function toggleMenuPublish(published) {
+  try {
+    await apiMut('POST', '/api/dashboard/menu/publish', { published });
+    menuState.published = published;
+    updateMenuPublishLabel();
+    toast(published ? 'Meniu publicat — vizibil acum oaspeților.' : 'Meniu ascuns.', 'success');
+  } catch { toast('Eroare la salvare.'); }
+}
+
+document.getElementById('menu-section').addEventListener('click', e => {
+  if (e.target.closest('#btn-add-category')) { showCategoryForm(null); return; }
+  if (e.target.closest('#btn-save-category')) { saveCategory(); return; }
+  if (e.target.closest('#btn-cancel-category')) { hideCategoryForm(); return; }
+  if (e.target.closest('#btn-save-item')) { saveItem(); return; }
+  if (e.target.closest('#btn-cancel-item')) { hideItemForm(); return; }
+  const catEdit = e.target.closest('[data-cat-edit]');
+  if (catEdit) { showCategoryForm(findCategory(Number(catEdit.dataset.catEdit))); return; }
+  const catDel = e.target.closest('[data-cat-del]');
+  if (catDel) { deleteCategory(Number(catDel.dataset.catDel)); return; }
+  const catUp = e.target.closest('[data-cat-up]');
+  if (catUp) { moveCategory(Number(catUp.dataset.catUp), -1); return; }
+  const catDown = e.target.closest('[data-cat-down]');
+  if (catDown) { moveCategory(Number(catDown.dataset.catDown), 1); return; }
+  const addItem = e.target.closest('[data-add-item]');
+  if (addItem) { showItemForm(Number(addItem.dataset.addItem), null); return; }
+  const itemEdit = e.target.closest('[data-item-edit]');
+  if (itemEdit) {
+    const found = findItem(Number(itemEdit.dataset.itemEdit));
+    if (found) showItemForm(found.category.id, found.item);
+    return;
+  }
+  const itemDel = e.target.closest('[data-item-del]');
+  if (itemDel) { deleteItem(Number(itemDel.dataset.itemDel)); return; }
+  const itemUp = e.target.closest('[data-item-up]');
+  if (itemUp) { moveItem(Number(itemUp.dataset.itemUp), -1); return; }
+  const itemDown = e.target.closest('[data-item-down]');
+  if (itemDown) { moveItem(Number(itemDown.dataset.itemDown), 1); return; }
+});
+
+document.getElementById('menu-section').addEventListener('change', e => {
+  const avail = e.target.closest('[data-item-avail]');
+  if (avail) { toggleItemAvailable(Number(avail.dataset.itemAvail), avail.checked); return; }
+  if (e.target.id === 'menu-publish-toggle') { toggleMenuPublish(e.target.checked); return; }
 });
 
 // ── Feedback & Recenzii ───────────────────────────────────────────────────────

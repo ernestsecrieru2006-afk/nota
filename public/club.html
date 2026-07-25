@@ -213,6 +213,7 @@ a { color:inherit; text-decoration:none; }
 <!-- ── Toast ── -->
 <div class="toast" id="toast"></div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
 'use strict';
 // ── i18n ──────────────────────────────────────────────────────────────────────
@@ -607,6 +608,20 @@ document.getElementById('inp-email').addEventListener('keydown', e => {
   }
   applyLang();
   loadOffers();
+
+  // Live sync: any offer create/edit/toggle/delete anywhere nudges every /club visitor to
+  // refetch the (already public-safe) offers list — no restaurant internals in the payload.
+  const socket = io({ transports: ['websocket', 'polling'] });
+  socket.on('connect', () => socket.emit('join-public-offers'));
+  let offerRefetchTimer = null;
+  socket.on('offer-change', () => {
+    clearTimeout(offerRefetchTimer);
+    offerRefetchTimer = setTimeout(loadOffers, 250);
+  });
+
+  // Time-window open/close is not a data change — no event fires for it — so re-evaluate
+  // ACTIV ACUM against the wall clock periodically using the already-fetched offer list.
+  setInterval(() => renderOffers(lastOffers), 30_000);
 })();
 </script>
 </body>

@@ -50,6 +50,21 @@ const IIKO_LIVE   = !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID);
 
 const roundLei = v => Math.round(Number(v) * 100) / 100;
 
+// The dashboard's table grid only ever refreshed on 'payment-made' or 'waiter-called' — both
+// only fire on a *settled* payment, so claims, deselects, and in-flight/failed/expired payments
+// were invisible until something finally settled. This is the single signal the dashboard grid
+// reacts to for everything else; it's cheap (dashboard just re-fetches /api/dashboard/tables).
+function notifyDashboardActivity(restaurantId, tableNumber) {
+  if (!restaurantId || !tableNumber) return;
+  io.to(`dashboard-${restaurantId}`).emit('table-activity', { tableNumber });
+}
+
+// /club is public and cross-tenant, so this only ever carries a nudge to refetch the already-
+// sanitized /api/public/offers endpoint — never restaurant internals, ids, or tokens.
+function notifyOfferChange() {
+  io.to('public-offers').emit('offer-change', {});
+}
+
 // Real MIA payments (sandbox/production) need the guest to open/scan a maib deep link — the
 // guest is already on their own phone, so we render it as an inline QR (no client-side QR lib
 // needed) AND as a tap-to-open link. Mock payments never had this (nothing to open), so we only
@@ -121,22 +136,53 @@ app.use('/api/payment/webhook', express.raw({ type: '*/*' }));
 app.use('/api/iiko/webhook',    express.raw({ type: '*/*' }));
 app.use(express.json({ limit: '100kb' }));
 
-// Bare-domain root: valid table token → guest app (unchanged); no/invalid token → company
-// landing page instead of the guest app's own dead-end "Masă invalidă" screen. The guest app's
-// client-side validation (GET /api/table/by-token/:token) is untouched and still runs exactly
-// as before whenever index.html is served — this route only decides which shell to send.
+// Resolves a table token to { number, menu_published } | null (bad/missing token) |
+// 'error' (DB hiccup — callers fail toward the guest app, never strand a real diner).
+// The client-side validation (GET /api/table/by-token/:token) is untouched and still runs
+// exactly as before whenever index.html is served — this only decides which shell to send.
+async function resolveTableByToken(token) {
+  if (typeof token !== 'string' || !/^[0-9a-f]{16}$/.test(token)) return null;
+  try {
+    const { rows: [tbl] } = await pool.query(
+      `SELECT t.number, r.menu_published FROM tables t
+       JOIN restaurants r ON r.id = t.restaurant_id
+       WHERE t.token = $1`,
+      [token]
+    );
+    return tbl || null;
+  } catch (err) {
+    console.error('[resolveTableByToken] lookup failed — defaulting to guest app', err.message);
+    return 'error';
+  }
+}
+
+// Bare-domain root: valid token + published menu → one-tap choice screen; valid token, no menu
+// → guest bill exactly as before (zero regression); no/invalid token → company landing page
+// instead of the guest app's own dead-end "Masă invalidă" screen.
 app.get('/', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache'); // same as static HTML — deploys go live immediately
-  const token = req.query.t;
-  if (typeof token === 'string' && /^[0-9a-f]{16}$/.test(token)) {
-    try {
-      const { rows: [tbl] } = await pool.query('SELECT number FROM tables WHERE token = $1', [token]);
-      if (tbl) return res.sendFile(join(__dirname, '../public/index.html'));
-    } catch (err) {
-      console.error('[GET /] token lookup failed — defaulting to guest app', err.message);
-      return res.sendFile(join(__dirname, '../public/index.html')); // fail toward the working flow, not a dead end
-    }
-  }
+  const tbl = await resolveTableByToken(req.query.t);
+  if (tbl === 'error') return res.sendFile(join(__dirname, '../public/index.html'));
+  if (tbl) return res.sendFile(join(__dirname, tbl.menu_published ? '../public/choice.html' : '../public/index.html'));
+  res.sendFile(join(__dirname, '../public/home.html'));
+});
+
+// Always the bill, regardless of menu — reached from the choice screen's pay button and from
+// the menu page's persistent pay bar. Same token, same guest app, same everything.
+app.get('/bill', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  const tbl = await resolveTableByToken(req.query.t);
+  if (tbl === 'error' || tbl) return res.sendFile(join(__dirname, '../public/index.html'));
+  res.sendFile(join(__dirname, '../public/home.html'));
+});
+
+// The menu — only reachable when a menu is actually published; falls back to the bill if a
+// stale /menu link is visited right after the restaurant unpublishes.
+app.get('/menu', async (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  const tbl = await resolveTableByToken(req.query.t);
+  if (tbl === 'error') return res.sendFile(join(__dirname, '../public/index.html'));
+  if (tbl) return res.sendFile(join(__dirname, tbl.menu_published ? '../public/menu.html' : '../public/index.html'));
   res.sendFile(join(__dirname, '../public/home.html'));
 });
 
@@ -425,12 +471,13 @@ app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
              COUNT(oi.id) FILTER (WHERE oi.status = 'available') AS available,
              COUNT(oi.id) FILTER (WHERE oi.status = 'claimed')   AS claimed,
              COUNT(oi.id) FILTER (WHERE oi.status = 'paid')      AS paid,
-             COALESCE(SUM(oi.price) FILTER (WHERE oi.status IN ('available','claimed')), 0) AS unpaid_lei
+             COALESCE(SUM(oi.price) FILTER (WHERE oi.status IN ('available','claimed')), 0) AS unpaid_lei,
+             EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.status = 'pending') AS payment_pending
       FROM tables t
       LEFT JOIN orders o  ON o.table_id = t.id AND o.status = 'open'
       LEFT JOIN order_items oi ON oi.order_id = o.id
       WHERE t.restaurant_id = $1
-      GROUP BY t.number ORDER BY t.number
+      GROUP BY t.number, o.id ORDER BY t.number
     `, [rId]);
     res.json(rows);
   } catch (err) {
@@ -510,6 +557,7 @@ app.post('/api/dashboard/offers', requireAuth, async (req, res) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
       [req.restaurant.restaurantId, name.trim(), pct, days, start_time, end_time, !!active, !!public_visible, !!member_only]
     );
+    notifyOfferChange();
     res.json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -529,6 +577,7 @@ app.put('/api/dashboard/offers/:id', requireAuth, async (req, res) => {
       [name.trim(), pct, days, start_time, end_time, !!active, !!public_visible, !!member_only, id, req.restaurant.restaurantId]
     );
     if (!row) return res.status(404).json({ error: 'Not found' });
+    notifyOfferChange();
     res.json(row);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -538,8 +587,165 @@ app.delete('/api/dashboard/offers/:id', requireAuth, async (req, res) => {
   if (!id) return res.status(400).json({ error: 'Invalid id' });
   try {
     await pool.query(`DELETE FROM offers WHERE id=$1 AND restaurant_id=$2`, [id, req.restaurant.restaurantId]);
+    notifyOfferChange();
     res.json({ ok: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Menu (dashboard CRUD, tenant-scoped) ──────────────────────────────────────
+
+app.get('/api/dashboard/menu', requireAuth, async (req, res) => {
+  try {
+    const rId = req.restaurant.restaurantId;
+    const [{ rows: rest }, { rows: categories }, { rows: items }] = await Promise.all([
+      pool.query(`SELECT menu_published FROM restaurants WHERE id=$1`, [rId]),
+      pool.query(`SELECT * FROM menu_categories WHERE restaurant_id=$1 ORDER BY sort_order, id`, [rId]),
+      pool.query(`SELECT * FROM menu_items WHERE restaurant_id=$1 ORDER BY sort_order, id`, [rId]),
+    ]);
+    const byCategory = new Map(categories.map(c => [c.id, { ...c, items: [] }]));
+    for (const it of items) byCategory.get(it.category_id)?.items.push(it);
+    res.json({ published: !!rest[0]?.menu_published, categories: [...byCategory.values()] });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/menu/publish', requireAuth, async (req, res) => {
+  try {
+    await pool.query(`UPDATE restaurants SET menu_published=$1 WHERE id=$2`,
+      [!!req.body.published, req.restaurant.restaurantId]);
+    res.json({ ok: true, published: !!req.body.published });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/menu/categories', requireAuth, async (req, res) => {
+  const { name_ro, name_ru } = req.body;
+  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 120) return res.status(400).json({ error: 'Invalid name_ro' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO menu_categories (restaurant_id, name_ro, name_ru, sort_order)
+       SELECT $1, $2, $3, COALESCE(MAX(sort_order), 0) + 1 FROM menu_categories WHERE restaurant_id=$1
+       RETURNING *`,
+      [rId, name_ro.trim(), (name_ru || '').trim() || null]
+    );
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/menu/categories/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name_ro, name_ru, sort_order } = req.body;
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 120) return res.status(400).json({ error: 'Invalid name_ro' });
+  try {
+    const { rows: [row] } = await pool.query(
+      `UPDATE menu_categories SET name_ro=$1, name_ru=$2, sort_order=COALESCE($3, sort_order)
+       WHERE id=$4 AND restaurant_id=$5 RETURNING *`,
+      [name_ro.trim(), (name_ru || '').trim() || null, Number.isInteger(sort_order) ? sort_order : null, id, req.restaurant.restaurantId]
+    );
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/dashboard/menu/categories/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    await pool.query(`DELETE FROM menu_categories WHERE id=$1 AND restaurant_id=$2`, [id, req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/menu/items', requireAuth, async (req, res) => {
+  const { category_id, name_ro, name_ru, description_ro, description_ru, price, available = true, photo_url } = req.body;
+  const catId = parseInt(category_id);
+  if (!catId) return res.status(400).json({ error: 'Invalid category_id' });
+  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 160) return res.status(400).json({ error: 'Invalid name_ro' });
+  const priceNum = Number(price);
+  if (!Number.isFinite(priceNum) || priceNum <= 0 || priceNum > 100000) return res.status(400).json({ error: 'Invalid price' });
+  if (photo_url && (typeof photo_url !== 'string' || photo_url.length > 1000)) return res.status(400).json({ error: 'Invalid photo_url' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    // Tenant check: the category must belong to this restaurant before we attach an item to it.
+    const { rows: [cat] } = await pool.query(`SELECT id FROM menu_categories WHERE id=$1 AND restaurant_id=$2`, [catId, rId]);
+    if (!cat) return res.status(404).json({ error: 'Category not found' });
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO menu_items (category_id, restaurant_id, name_ro, name_ru, description_ro, description_ru, price, available, photo_url, sort_order)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(MAX(sort_order), 0) + 1 FROM menu_items WHERE category_id=$1
+       RETURNING *`,
+      [catId, rId, name_ro.trim(), (name_ru || '').trim() || null,
+       (description_ro || '').trim() || null, (description_ru || '').trim() || null,
+       priceNum, !!available, (photo_url || '').trim() || null]
+    );
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/menu/items/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { name_ro, name_ru, description_ro, description_ru, price, available, photo_url, sort_order } = req.body;
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 160) return res.status(400).json({ error: 'Invalid name_ro' });
+  const priceNum = Number(price);
+  if (!Number.isFinite(priceNum) || priceNum <= 0 || priceNum > 100000) return res.status(400).json({ error: 'Invalid price' });
+  if (photo_url && (typeof photo_url !== 'string' || photo_url.length > 1000)) return res.status(400).json({ error: 'Invalid photo_url' });
+  try {
+    const { rows: [row] } = await pool.query(
+      `UPDATE menu_items SET name_ro=$1, name_ru=$2, description_ro=$3, description_ru=$4,
+              price=$5, available=$6, photo_url=$7, sort_order=COALESCE($8, sort_order)
+       WHERE id=$9 AND restaurant_id=$10 RETURNING *`,
+      [name_ro.trim(), (name_ru || '').trim() || null,
+       (description_ro || '').trim() || null, (description_ru || '').trim() || null,
+       priceNum, !!available, (photo_url || '').trim() || null,
+       Number.isInteger(sort_order) ? sort_order : null, id, req.restaurant.restaurantId]
+    );
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/dashboard/menu/items/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    await pool.query(`DELETE FROM menu_items WHERE id=$1 AND restaurant_id=$2`, [id, req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Menu (public, guest-facing, scoped by table token) ────────────────────────
+// No auth — but the only thing a token unlocks is that one table's own restaurant's published
+// menu, exactly like /api/table/by-token/:token already does for the bill. No restaurant_id is
+// ever accepted directly from the client, only resolved from the token server-side.
+
+app.get('/api/menu/by-token/:token', async (req, res) => {
+  const token = req.params.token;
+  if (typeof token !== 'string' || !/^[0-9a-f]{16}$/.test(token)) return res.status(404).json({ error: 'Masă invalidă' });
+  try {
+    const { rows: [tbl] } = await pool.query('SELECT restaurant_id FROM tables WHERE token=$1', [token]);
+    if (!tbl) return res.status(404).json({ error: 'Masă invalidă' });
+    const { rows: [rest] } = await pool.query(
+      `SELECT name, menu_published FROM restaurants WHERE id=$1`, [tbl.restaurant_id]
+    );
+    if (!rest?.menu_published) return res.status(404).json({ error: 'Meniul nu este disponibil' });
+
+    const [{ rows: categories }, { rows: items }] = await Promise.all([
+      pool.query(`SELECT id, name_ro, name_ru FROM menu_categories WHERE restaurant_id=$1 ORDER BY sort_order, id`, [tbl.restaurant_id]),
+      pool.query(
+        `SELECT category_id, name_ro, name_ru, description_ro, description_ru, price, photo_url
+         FROM menu_items WHERE restaurant_id=$1 AND available=true ORDER BY sort_order, id`,
+        [tbl.restaurant_id]
+      ),
+    ]);
+    const byCategory = new Map(categories.map(c => [c.id, { name_ro: c.name_ro, name_ru: c.name_ru, items: [] }]));
+    for (const it of items) byCategory.get(it.category_id)?.items.push(it);
+    const nonEmptyCategories = [...byCategory.values()].filter(c => c.items.length > 0);
+
+    res.json({ restaurantName: rest.name, categories: nonEmptyCategories });
+  } catch (err) {
+    console.error('[GET /api/menu/by-token]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
 // ─── AI Promo-Kit Generator ───────────────────────────────────────────────────
@@ -1166,6 +1372,7 @@ app.post('/api/dev/seed-table', requireDevAuth, async (req, res) => {
 
     const fresh = await getOpenOrder(tableNumber, restaurantId);
     io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', fresh);
+    notifyDashboardActivity(restaurantId, tableNumber);
     res.json({ ok: true, orderId: order.id, items: DEMO_DISHES.length });
   } catch (err) {
     console.error('[seed-table]', err);
@@ -1525,6 +1732,13 @@ io.on('connection', socket => {
     socket.join(`dashboard-${payload.restaurantId}`);
   });
 
+  // Public, unauthenticated: /club broadcasts to every visitor across all restaurants — the
+  // public offers listing is already cross-tenant (GET /api/public/offers), so one shared room
+  // is the right shape, not a per-restaurant one. No tenant data is exposed by joining it.
+  socket.on('join-public-offers', () => {
+    socket.join('public-offers');
+  });
+
   socket.on('claim-items', async (itemIds, ack) => {
     if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
     if (!currentTable) return ack?.({ error: 'Not joined to a table' });
@@ -1550,6 +1764,7 @@ io.on('connection', socket => {
         io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           claimed.map(r => ({ id: r.id, status: 'claimed', claimed_by: socket.id }))
         );
+        notifyDashboardActivity(currentRestaurantId, currentTable);
       }
       ack?.({ claimed: claimed.map(r => r.id), contested: contestedIds });
     } catch (err) {
@@ -1574,6 +1789,7 @@ io.on('connection', socket => {
         io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           released.map(r => ({ id: r.id, status: 'available', claimed_by: null }))
         );
+        notifyDashboardActivity(currentRestaurantId, currentTable);
       }
     } catch (err) {
       console.error('[release-claims]', err);
@@ -1598,6 +1814,7 @@ io.on('connection', socket => {
         io.to(`table-${currentRestaurantId}-${currentTable}`).emit('items-patch',
           [{ id: rows[0].id, status: 'available', claimed_by: null }]
         );
+        notifyDashboardActivity(currentRestaurantId, currentTable);
       }
       ack?.({ released: rows.map(r => r.id) });
     } catch (err) {
@@ -1648,6 +1865,7 @@ io.on('connection', socket => {
         );
         const fresh = await getOpenOrder(tbl, currentRestaurantId);
         io.to(`table-${currentRestaurantId}-${tbl}`).emit('order-update', { ...fresh, activeOffer: offer || null, memberBonus: memberBonus || null });
+        notifyDashboardActivity(currentRestaurantId, tbl);
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
       }
 
@@ -1664,6 +1882,7 @@ io.on('connection', socket => {
       };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
+      notifyDashboardActivity(currentRestaurantId, tbl);
 
       const miaQrSvg = await buildMiaQrSvg(payment);
       ack?.({ success: true, ...payment, miaQrSvg });
@@ -1748,6 +1967,7 @@ io.on('connection', socket => {
       };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
+      notifyDashboardActivity(currentRestaurantId, tbl);
 
       const miaQrSvg = await buildMiaQrSvg(payment);
       ack?.({ success: true, chargeAmount: netAmount, ...payment, miaQrSvg });
@@ -2060,6 +2280,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
       getActiveOffer(restaurantId),
     ]);
     io.to(`table-${restaurantId}-${tableNumber}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
+    notifyDashboardActivity(restaurantId, tableNumber);
 
     cleanupMeta(miaPaymentId, socketId);
   } catch (err) {
@@ -2179,6 +2400,7 @@ async function releaseFromDB(pmt, reason = '') {
       getActiveOffer(pmt.restaurant_id),
     ]);
     io.to(`table-${pmt.restaurant_id}-${pmt.table_number}`).emit('order-update', { ...order, activeOffer: activeOffer || null });
+    notifyDashboardActivity(pmt.restaurant_id, pmt.table_number);
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[releaseFromDB]', err);

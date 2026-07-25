@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>nota.</title>
+<meta name="robots" content="noindex">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --primary: #00333c; --secondary: #775a19; --bg: #f8f9fa;
+  --on-surface: #191c1d; --on-sv: #40484a; --brass: #C5A059;
+  --radius: 0.9rem; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+}
+html, body { height: 100%; font-family: 'Manrope', system-ui, sans-serif; background-color: var(--bg);
+  background-image: radial-gradient(ellipse at 18% 10%, rgba(0,51,60,0.06) 0%, transparent 55%),
+                     radial-gradient(ellipse at 85% 80%, rgba(197,160,89,0.1) 0%, transparent 55%);
+  color: var(--on-surface); -webkit-font-smoothing: antialiased; }
+.wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: calc(24px + var(--safe-t)) 20px calc(24px + var(--safe-b)); text-align: center; }
+.lang-toggle { position: fixed; top: calc(14px + var(--safe-t)); right: 16px;
+  background: rgba(197,160,89,0.14); border: 1px solid rgba(197,160,89,0.3); border-radius: 6px;
+  padding: 5px 10px; font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700;
+  color: var(--secondary); cursor: pointer; letter-spacing: 0.1em; }
+.mark { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
+.mark span { color: var(--brass); }
+.rname { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 700; color: var(--on-surface);
+  margin: 4px 0 40px; line-height: 1.25; max-width: 420px; }
+.choice-row { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
+.choice-btn { display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: 22px 20px; border-radius: var(--radius); font-family: 'Manrope', sans-serif;
+  font-size: 17px; font-weight: 700; text-decoration: none; cursor: pointer; border: none;
+  transition: transform 0.15s, box-shadow 0.15s; }
+.choice-btn:active { transform: scale(0.97); }
+.choice-menu { background: #fff; color: var(--primary); border: 1.5px solid rgba(197,160,89,0.4);
+  box-shadow: 0 8px 20px rgba(0,51,60,0.08); }
+.choice-pay { background: var(--primary); color: #fff; box-shadow: 0 10px 24px rgba(0,51,60,0.24); }
+.choice-icon { font-size: 22px; line-height: 1; }
+</style>
+</head>
+<body>
+<button class="lang-toggle" id="lang-btn">RU</button>
+<div class="wrap">
+  <div class="mark">nota<span>.</span></div>
+  <div class="rname" id="rname">&nbsp;</div>
+  <div class="choice-row">
+    <a class="choice-btn choice-menu" id="btn-menu" href="#"><span class="choice-icon">📖</span><span data-i18n="see_menu">Vezi meniul</span></a>
+    <a class="choice-btn choice-pay" id="btn-pay" href="#"><span class="choice-icon">💳</span><span data-i18n="pay_bill">Plătește nota</span></a>
+  </div>
+</div>
+<script>
+  const TRANS = {
+    ro: { see_menu: 'Vezi meniul', pay_bill: 'Plătește nota', loading: 'Se încarcă…' },
+    ru: { see_menu: 'Посмотреть меню', pay_bill: 'Оплатить счёт', loading: 'Загрузка…' },
+  };
+  let lang = localStorage.getItem('nota_lang') || 'ro';
+  const t = key => TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
+
+  function applyLang() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    document.getElementById('lang-btn').textContent = lang === 'ro' ? 'RU' : 'RO';
+  }
+  document.getElementById('lang-btn').addEventListener('click', () => {
+    lang = lang === 'ro' ? 'ru' : 'ro';
+    localStorage.setItem('nota_lang', lang);
+    applyLang();
+  });
+
+  const token = new URLSearchParams(location.search).get('t') || '';
+  document.getElementById('btn-menu').href = `/menu?t=${encodeURIComponent(token)}`;
+  document.getElementById('btn-pay').href  = `/bill?t=${encodeURIComponent(token)}`;
+
+  applyLang();
+
+  fetch(`/api/menu/by-token/${encodeURIComponent(token)}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(data => { document.getElementById('rname').textContent = data?.restaurantName || 'nota.'; })
+    .catch(() => {});
+</script>
+</body>
+</html>

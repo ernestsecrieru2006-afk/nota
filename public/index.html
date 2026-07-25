@@ -354,6 +354,12 @@
   </div>
 </header>
 
+<!-- Only shown when this table's restaurant has a published menu — reached from the choice
+     screen or the menu page's pay bar, so a way back to browsing matters here. -->
+<div id="back-to-menu" style="display:none; text-align:center; padding:6px 16px 0;">
+  <a id="back-to-menu-link" href="#" style="color:var(--secondary); font-weight:600; font-size:12px; text-decoration:none;">← <span data-i18n="back_to_menu">Meniu</span></a>
+</div>
+
 <!-- ══ SCREEN 1 — BILL ══════════════════════════════════════ -->
 <div class="screen active" id="screen-bill">
   <div class="col">
@@ -710,6 +716,7 @@
       rcpt_tva_prefix: 'incl. TVA 20% —',
       iiko_tag: 'BON FISCAL ELECTRONIC emis prin iiko',
       waiter_btn_title: 'Cheamă ospătarul',
+      back_to_menu: 'Meniu',
       waiter_confirmed: 'Ospătarul a fost anunțat ✓',
       toast_paid_pre: 'Cineva a plătit ',
       toast_paid_suf: ' lei ✓',
@@ -790,6 +797,7 @@
       rcpt_tva_prefix: 'вкл. НДС 20% —',
       iiko_tag: 'ЭЛЕКТРОННЫЙ ФИСКАЛЬНЫЙ ЧЕК выдан через iiko',
       waiter_btn_title: 'Вызвать официанта',
+      back_to_menu: 'Меню',
       waiter_confirmed: 'Официант уведомлён ✓',
       toast_paid_pre: 'Кто-то оплатил ',
       toast_paid_suf: ' лей ✓',
@@ -873,6 +881,17 @@
   // ── Token from URL ────────────────────────────────────────────────────────────
   const params = new URLSearchParams(location.search);
   const token  = params.get('t') || '';
+
+  // Fire-and-forget: only reveal "← Meniu" if this table's restaurant actually has a published
+  // menu. Never blocks anything else on the page — the bill flow works identically either way.
+  if (token) {
+    fetch(`/api/menu/by-token/${encodeURIComponent(token)}`)
+      .then(r => { if (r.ok) {
+        document.getElementById('back-to-menu').style.display = '';
+        document.getElementById('back-to-menu-link').href = `/menu?t=${encodeURIComponent(token)}`;
+      }})
+      .catch(() => {});
+  }
 
   // ── App state ─────────────────────────────────────────────────────────────────
   let order            = null;
