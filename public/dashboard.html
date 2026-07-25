@@ -7,7 +7,8 @@
 <title>nota. — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@700;800&family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2300333c'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='700' fill='%23C5A059' text-anchor='middle'%3En.%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
 /* ── Design tokens: Minimalist Graphite + Emerald accent ── */
@@ -81,10 +82,11 @@ html, body {
   box-shadow: var(--shd);
 }
 .login-brand {
-  font-family: 'Manrope', sans-serif;
-  font-size: 28px; font-weight: 800;
-  color: var(--em); letter-spacing: -1px; margin-bottom: 6px;
+  font-family: 'Playfair Display', serif;
+  font-size: 28px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.5px; margin-bottom: 6px;
 }
+.login-brand span { color: #C5A059; }
 .login-sub { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
 
 .field { margin-bottom: 16px; }
@@ -152,10 +154,11 @@ html, body {
   flex-shrink: 0;
 }
 .s-brand {
-  font-family: 'Manrope', sans-serif;
-  font-size: 24px; font-weight: 800;
-  color: var(--em); letter-spacing: -1px;
+  font-family: 'Playfair Display', serif;
+  font-size: 24px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.5px;
 }
+.s-brand span { color: #C5A059; }
 .s-tagline { font-size: 11px; color: var(--muted); margin-top: 3px; }
 
 .sidebar-nav { flex: 1; padding: 14px 10px; overflow-y: auto; }
@@ -812,7 +815,7 @@ html, body {
 <!-- ══ LOGIN ══════════════════════════════════════════════ -->
 <div id="login-screen">
   <div class="login-card">
-    <div class="login-brand">nota.</div>
+    <div class="login-brand">nota<span>.</span></div>
     <div class="login-sub">Panou de control restaurant</div>
 
     <div id="register-extra">
@@ -862,7 +865,7 @@ html, body {
     <!-- ── Sidebar ──────────────────────────────────────── -->
     <aside class="sidebar">
       <div class="sidebar-top">
-        <div class="s-brand">nota.</div>
+        <div class="s-brand">nota<span>.</span></div>
         <div class="s-tagline">Restaurant Intelligence</div>
       </div>
 

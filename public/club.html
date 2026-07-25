@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Club Eats — nota.</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2300333c'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='700' fill='%23C5A059' text-anchor='middle'%3En.%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -23,13 +24,23 @@
   --r:        12px;
   --rl:       18px;
 }
-body { font-family:'Manrope',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100dvh; }
+body { font-family:'Manrope',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100dvh; padding-bottom:64px; }
+
+/* ── Bottom nav ── */
+.bottom-nav { position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:space-around; align-items:center;
+  padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px)); background:rgba(10,10,15,.92); backdrop-filter:blur(14px);
+  -webkit-backdrop-filter:blur(14px); border-top:1px solid var(--border); z-index:50; }
+.bottom-nav-item { display:flex; flex-direction:column; align-items:center; gap:2px; font-size:11px; font-weight:600;
+  color:var(--muted); padding:4px 18px; border-radius:14px; }
+.bottom-nav-item.active { color:var(--gold-hi); background:var(--gold-dim); }
 a { color:inherit; text-decoration:none; }
 
 /* ── Nav ── */
-.nav { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); position:sticky; top:0; background:var(--bg); z-index:10; }
-.nav-brand { font-family:'Playfair Display',serif; font-size:20px; color:var(--gold-hi); letter-spacing:.02em; }
-.nav-brand span { color:var(--text2); font-size:11px; font-family:'Manrope',sans-serif; font-weight:600; letter-spacing:.12em; text-transform:uppercase; display:block; }
+.nav { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); position:sticky; top:0; background:rgba(10,10,15,.88); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); z-index:10; gap:10px; flex-wrap:wrap; }
+.nav-brand-row { display:flex; align-items:center; gap:8px; }
+.nav-brand { font-family:'Playfair Display',serif; font-size:20px; font-weight:700; color:#fff; letter-spacing:.01em; }
+.nav-brand span { color:var(--gold-hi); }
+.nav-pill { font-size:9.5px; font-weight:800; letter-spacing:.11em; color:var(--gold-hi); background:rgba(201,168,76,.16); border:1px solid var(--gold); border-radius:99px; padding:3px 9px; text-transform:uppercase; }
 .nav-lang { display:flex; gap:6px; }
 .lang-btn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:12px; font-weight:600; padding:4px 10px; cursor:pointer; font-family:inherit; transition:border-color .15s,color .15s; }
 .lang-btn.active { border-color:var(--gold); color:var(--gold-hi); }
@@ -42,29 +53,58 @@ a { color:inherit; text-decoration:none; }
 .btn-logout { background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; font-family:inherit; text-decoration:underline; margin-left:8px; }
 
 /* ── Hero ── */
-.hero { text-align:center; padding:48px 24px 32px; }
+@keyframes hero-pan { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+.hero { position:relative; overflow:hidden; text-align:center; padding:48px 24px 40px; margin:14px 14px 0;
+  border-radius:20px; background:linear-gradient(120deg,#00272e,#012129,#00333c,#001d22); background-size:300% 300%;
+  animation:hero-pan 10s ease-in-out infinite; border:1px solid rgba(201,168,76,.25); }
+.hero::after { content:''; position:absolute; right:-30px; bottom:-40px; width:190px; height:190px; opacity:.14;
+  background:radial-gradient(circle at 30% 30%, var(--gold-hi), transparent 70%); pointer-events:none; }
 .hero-badge { display:inline-flex; align-items:center; gap:6px; background:var(--gold-dim); border:1px solid var(--gold); border-radius:99px; padding:5px 14px; font-size:11px; font-weight:700; color:var(--gold-hi); letter-spacing:.08em; text-transform:uppercase; margin-bottom:20px; }
-.hero-title { font-family:'Playfair Display',serif; font-size:clamp(28px,7vw,48px); color:var(--text); line-height:1.15; margin-bottom:12px; }
+.hero-title { font-family:'Playfair Display',serif; font-size:clamp(28px,7vw,48px); color:#fff; line-height:1.15; margin-bottom:12px; position:relative; }
 .hero-title em { color:var(--gold-hi); font-style:normal; }
-.hero-sub { color:var(--text2); font-size:15px; line-height:1.6; max-width:480px; margin:0 auto 28px; }
-.hero-cta { display:inline-block; background:var(--gold); color:#000; font-weight:700; font-size:15px; border-radius:10px; padding:12px 28px; cursor:pointer; border:none; font-family:inherit; transition:.15s; }
+.hero-sub { color:rgba(255,255,255,.72); font-size:15px; line-height:1.6; max-width:480px; margin:0 auto 28px; position:relative; }
+.hero-cta { display:inline-block; background:var(--gold); color:#000; font-weight:700; font-size:15px; border-radius:10px; padding:12px 28px; cursor:pointer; border:none; font-family:inherit; transition:.15s; position:relative; }
 .hero-cta:hover { background:var(--gold-hi); }
 
 /* ── Section ── */
 .section { max-width:680px; margin:0 auto; padding:0 16px 40px; }
-.section-title { font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px; }
+.section-title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
+.section-title { font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:0; }
+.active-count { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; color:var(--gold-hi); letter-spacing:.06em; }
+.active-count.hidden { display:none; }
+.active-count .offer-live-dot { background:var(--gold-hi); animation:badge-glow-dot 2s ease-in-out infinite; }
+@keyframes badge-glow-dot { 0%,100% { opacity:1; } 50% { opacity:.35; } }
 
 /* ── Offers ── */
+@keyframes badge-glow { 0%,100% { box-shadow:0 0 0 0 rgba(201,168,76,.5); } 50% { box-shadow:0 0 0 7px rgba(201,168,76,0); } }
 .offers-grid { display:flex; flex-direction:column; gap:12px; }
-.offer-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:18px 20px; display:flex; align-items:center; gap:16px; }
-.offer-pct-badge { flex-shrink:0; width:56px; height:56px; background:var(--gold-dim); border:1.5px solid var(--gold); border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:17px; font-weight:800; color:var(--gold-hi); }
+.offer-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:18px 20px; display:flex; align-items:center; gap:16px; transition:opacity .2s,filter .2s; }
+.offer-card.inactive { opacity:.62; filter:grayscale(.5); }
+.offer-mono { flex-shrink:0; width:52px; height:52px; background:var(--gold-dim); border:1.5px solid var(--gold); border-radius:12px; display:flex; align-items:center; justify-content:center; font-family:'Playfair Display',serif; font-size:19px; font-weight:700; color:var(--gold-hi); }
 .offer-body { flex:1; min-width:0; }
 .offer-name { font-size:15px; font-weight:700; color:var(--text); margin-bottom:3px; }
 .offer-restaurant { font-size:12px; color:var(--muted); margin-bottom:6px; }
+.offer-meta-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .offer-meta { font-size:12px; color:var(--text2); }
 .offer-badge-member { display:inline-flex; align-items:center; gap:4px; background:var(--gold-dim); border:1px solid var(--gold); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold-hi); letter-spacing:.06em; margin-left:6px; }
-.offer-status-live { display:inline-block; width:6px; height:6px; border-radius:50%; background:#22c55e; margin-right:4px; }
+.offer-pct-chip { flex-shrink:0; font-size:14px; font-weight:800; color:var(--gold-hi); }
+.offer-live-pill { display:inline-flex; align-items:center; gap:5px; background:var(--gold); color:#000; font-size:10px; font-weight:800; letter-spacing:.05em; border-radius:99px; padding:3px 9px; text-transform:uppercase; animation:badge-glow 2s ease-in-out infinite; }
+.offer-live-dot { width:5px; height:5px; border-radius:50%; background:#000; }
+.offer-inactive-pill { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.05em; border-radius:99px; padding:3px 9px; text-transform:uppercase; }
 .offers-empty { text-align:center; color:var(--muted); padding:40px 20px; font-size:14px; }
+
+/* ── Membership CTA (logged-out only) ── */
+.membership-cta { text-align:center; margin-top:36px; padding:28px 22px; border-radius:var(--rl);
+  border:1px solid var(--border); background:var(--surface); }
+.membership-cta.hidden { display:none; }
+.membership-title { font-family:'Playfair Display',serif; font-size:22px; color:#fff; margin-bottom:8px; }
+.membership-sub { font-size:13px; color:var(--text2); margin-bottom:20px; max-width:360px; margin-left:auto; margin-right:auto; }
+.btn-membership-primary { display:block; width:100%; max-width:320px; margin:0 auto 10px; background:var(--gold); border:none;
+  border-radius:10px; color:#000; font-size:14.5px; font-weight:700; padding:13px; cursor:pointer; font-family:inherit; transition:.15s; }
+.btn-membership-primary:hover { background:var(--gold-hi); }
+.btn-membership-secondary { display:block; width:100%; max-width:320px; margin:0 auto; background:none; border:1px solid var(--border);
+  border-radius:10px; color:var(--text2); font-size:14.5px; font-weight:600; padding:13px; cursor:pointer; font-family:inherit; transition:.15s; }
+.btn-membership-secondary:hover { border-color:var(--gold-dim); color:var(--gold-hi); }
 
 /* ── Auth modal ── */
 .modal-overlay { position:fixed; inset:0; background:#000a; display:flex; align-items:flex-end; justify-content:center; z-index:100; padding:0; }
@@ -100,13 +140,13 @@ a { color:inherit; text-decoration:none; }
 @keyframes spin { to { transform:rotate(360deg); } }
 
 /* ── Referral section ── */
-.referral-section { background:linear-gradient(135deg,#1a1508,#161620); border:1px solid var(--gold); border-radius:var(--rl); padding:22px 20px; margin-bottom:24px; }
+.referral-section { background:rgba(201,168,76,.06); backdrop-filter:blur(8px); border:1px solid var(--gold); border-radius:var(--rl); padding:22px 20px; margin-bottom:24px; margin-top:18px; box-shadow:0 8px 28px rgba(0,0,0,.25); }
 .referral-section.hidden { display:none; }
 .referral-title { font-size:15px; font-weight:700; color:var(--gold-hi); margin-bottom:4px; }
 .referral-sub   { font-size:12px; color:var(--text2); margin-bottom:16px; }
 .referral-link-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
 .referral-link-box { flex:1; min-width:0; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:12px; color:var(--gold-hi); font-family:'Manrope',monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.btn-share-referral { background:var(--gold); border:none; border-radius:8px; color:#000; font-size:13px; font-weight:700; padding:9px 16px; cursor:pointer; font-family:inherit; transition:.15s; white-space:nowrap; }
+.btn-share-referral { background:var(--gold); border:none; border-radius:50%; width:38px; height:38px; flex-shrink:0; color:#000; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; transition:.15s; display:flex; align-items:center; justify-content:center; }
 .btn-share-referral:hover { background:var(--gold-hi); }
 .btn-copy-referral  { background:none; border:1px solid var(--border); border-radius:8px; color:var(--text2); font-size:12px; font-weight:600; padding:9px 14px; cursor:pointer; font-family:inherit; transition:.15s; white-space:nowrap; }
 .btn-copy-referral:hover { border-color:var(--gold); color:var(--gold-hi); }
@@ -126,8 +166,9 @@ a { color:inherit; text-decoration:none; }
 
 <!-- ── Navigation ── -->
 <nav class="nav">
-  <div>
-    <div class="nav-brand">Club Eats <span>by nota.</span></div>
+  <div class="nav-brand-row">
+    <div class="nav-brand">nota<span>.</span></div>
+    <div class="nav-pill">Club Eats</div>
   </div>
   <div class="nav-lang">
     <button class="lang-btn active" data-lang="ro">RO</button>
@@ -164,7 +205,9 @@ a { color:inherit; text-decoration:none; }
     <div class="referral-sub" id="ref-sub">Când prietenul tău face prima plată, amândoi primiți +5% bonus la următoarea comandă.</div>
     <div class="referral-link-row">
       <div class="referral-link-box" id="ref-link-box">—</div>
-      <button class="btn-share-referral" id="btn-share-ref">Distribuie</button>
+      <button class="btn-share-referral" id="btn-share-ref" aria-label="Distribuie" title="Distribuie">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5"/></svg>
+      </button>
       <button class="btn-copy-referral" id="btn-copy-ref">Copiază</button>
     </div>
     <div class="referral-stats">
@@ -182,9 +225,19 @@ a { color:inherit; text-decoration:none; }
     </div>
   </div>
 
-  <div class="section-title" id="offers-section-title">Oferte active</div>
+  <div class="section-title-row">
+    <div class="section-title" id="offers-section-title">Oferte active</div>
+    <div class="active-count hidden" id="active-count"><span class="offer-live-dot"></span><span id="active-count-num">0</span></div>
+  </div>
   <div class="offers-grid" id="offers-grid">
     <div class="offers-empty"><span class="spinner"></span></div>
+  </div>
+
+  <div class="membership-cta hidden" id="membership-cta">
+    <div class="membership-title" id="membership-title">Ești gata pentru nota?</div>
+    <div class="membership-sub" id="membership-sub">Alătură-te Club Eats — reduceri automate la restaurantele partenere, fără coduri.</div>
+    <button class="btn-membership-primary" id="btn-membership-signup">Creează cont nou</button>
+    <button class="btn-membership-secondary" id="btn-membership-login">Autentificare</button>
   </div>
 </main>
 
@@ -212,6 +265,18 @@ a { color:inherit; text-decoration:none; }
 
 <!-- ── Toast ── -->
 <div class="toast" id="toast"></div>
+
+<!-- ── Bottom nav — only real destinations ── -->
+<nav class="bottom-nav">
+  <a class="bottom-nav-item" href="/">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+    <span id="bn-home">Acasă</span>
+  </a>
+  <a class="bottom-nav-item active" href="/club">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8-6.2 3.8 1.6-7-5.4-4.7 7.1-.6z"/></svg>
+    <span id="bn-club">Club Eats</span>
+  </a>
+</nav>
 
 <script src="/socket.io/socket.io.js"></script>
 <script>
@@ -242,9 +307,11 @@ const TRANS = {
     switch_to_reg_btn: 'Înregistrează-te gratuit',
     switch_to_login:    'Ai deja cont?',
     switch_to_login_btn: 'Autentifică-te',
-    offers_empty:   'Nicio ofertă activă momentan. Revino în curând!',
+    offers_empty:   'Rețeaua Club Eats se extinde în Chișinău — primele restaurante partenere apar aici.',
     badge_member_only: '★ Membri',
     badge_live:     'Activ acum',
+    badge_inactive: 'Inactiv',
+    active_now_label: 'ACTIVE ACUM',
     days: ['Dum','Lun','Mar','Mie','Joi','Vin','Sâm'],
     ref_title:      'Invită prietenii',
     ref_sub:        'Când prietenul tău face prima plată prin nota., amândoi primiți +5% bonus la următoarea comandă.',
@@ -256,6 +323,10 @@ const TRANS = {
     ref_bonus:      'Ai un bonus de 5% activ la următoarea comandă!',
     ref_share_title: 'Club Eats — nota.',
     ref_share_text:  'Alătură-te Club Eats și primești reduceri automate la restaurante. Folosește linkul meu:',
+    membership_title: 'Ești gata pentru nota?',
+    membership_sub:  'Alătură-te Club Eats — reduceri automate la restaurantele partenere, fără coduri sau cupoane.',
+    bn_home: 'Acasă',
+    bn_club: 'Club Eats',
   },
   ru: {
     nav_login:      'Войти',
@@ -281,9 +352,11 @@ const TRANS = {
     switch_to_reg_btn: 'Зарегистрироваться бесплатно',
     switch_to_login:    'Уже есть аккаунт?',
     switch_to_login_btn: 'Войти',
-    offers_empty:   'Нет активных предложений. Загляните позже!',
+    offers_empty:   'Сеть Club Eats расширяется в Кишинёве — первые рестораны-партнёры появятся здесь.',
     badge_member_only: '★ Участники',
     badge_live:     'Активно сейчас',
+    badge_inactive: 'Неактивно',
+    active_now_label: 'АКТИВНО СЕЙЧАС',
     days: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
     ref_title:      'Пригласи друзей',
     ref_sub:        'Когда твой друг сделает первый платёж через nota., вы оба получите +5% бонус к следующему заказу.',
@@ -295,6 +368,10 @@ const TRANS = {
     ref_bonus:      'У тебя есть бонус 5% на следующий заказ!',
     ref_share_title: 'Club Eats — nota.',
     ref_share_text:  'Присоединяйся к Club Eats и получай скидки в ресторанах автоматически. Используй мою ссылку:',
+    membership_title: 'Готов к nota?',
+    membership_sub:  'Присоединяйся к Club Eats — автоматические скидки в ресторанах-партнёрах, без кодов и купонов.',
+    bn_home: 'Главная',
+    bn_club: 'Club Eats',
   },
 };
 
@@ -323,8 +400,15 @@ function applyLang() {
   document.getElementById('ref-sub').textContent           = t('ref_sub');
   document.getElementById('ref-invited-lbl').textContent   = t('ref_invited_lbl');
   document.getElementById('ref-converted-lbl').textContent = t('ref_converted_lbl');
-  document.getElementById('btn-share-ref').textContent     = t('ref_share');
+  document.getElementById('btn-share-ref').setAttribute('aria-label', t('ref_share'));
+  document.getElementById('btn-share-ref').setAttribute('title', t('ref_share'));
   document.getElementById('btn-copy-ref').textContent      = t('ref_copy');
+  document.getElementById('membership-title').textContent  = t('membership_title');
+  document.getElementById('membership-sub').textContent    = t('membership_sub');
+  document.getElementById('btn-membership-signup').textContent = t('nav_signup');
+  document.getElementById('btn-membership-login').textContent  = t('nav_login');
+  document.getElementById('bn-home').textContent = t('bn_home');
+  document.getElementById('bn-club').textContent = t('bn_club');
   refreshModalText();
   renderOffers(lastOffers);
   refreshNavAuth();
@@ -375,12 +459,14 @@ function refreshNavAuth() {
   const heroEl   = document.getElementById('hero-section');
   const bannerEl = document.getElementById('member-banner');
   const refEl    = document.getElementById('referral-section');
+  const ctaEl    = document.getElementById('membership-cta');
   if (member) {
     authEl.innerHTML = `<span class="nav-user">${esc(member.email)}</span><button class="btn-logout" id="btn-logout-dyn">${t('nav_logout')}</button>`;
     document.getElementById('btn-logout-dyn').addEventListener('click', logout);
     heroEl.style.display = 'none';
     bannerEl.classList.remove('hidden');
     refEl.classList.remove('hidden');
+    ctaEl.classList.add('hidden');
     loadReferralData();
   } else {
     authEl.innerHTML = `<button class="btn-login" id="btn-nav-login-dyn">${t('nav_login')}</button><button class="btn-signup" id="btn-nav-signup-dyn">${t('nav_signup')}</button>`;
@@ -389,6 +475,7 @@ function refreshNavAuth() {
     heroEl.style.display = '';
     bannerEl.classList.add('hidden');
     refEl.classList.add('hidden');
+    ctaEl.classList.remove('hidden');
   }
 }
 
@@ -503,6 +590,14 @@ function isOfferLiveNow(o) {
 function renderOffers(offers) {
   lastOffers = offers;
   const grid = document.getElementById('offers-grid');
+  const activeCountEl = document.getElementById('active-count');
+  const activeCount = offers.filter(isOfferLiveNow).length;
+  if (activeCount > 0) {
+    document.getElementById('active-count-num').textContent = `${activeCount} ${t('active_now_label')}`;
+    activeCountEl.classList.remove('hidden');
+  } else {
+    activeCountEl.classList.add('hidden');
+  }
   if (!offers.length) {
     grid.innerHTML = `<div class="offers-empty">${t('offers_empty')}</div>`;
     return;
@@ -510,19 +605,24 @@ function renderOffers(offers) {
   grid.innerHTML = offers.map(o => {
     const live = isOfferLiveNow(o);
     const memberBadge = o.member_only
-      ? `<span class="offer-badge-member">★ ${t('badge_member_only')}</span>`
+      ? `<span class="offer-badge-member">${t('badge_member_only')}</span>`
       : '';
+    const initial = esc((o.restaurant_name || '?').trim().charAt(0).toUpperCase());
+    const statusPill = live
+      ? `<span class="offer-live-pill"><span class="offer-live-dot"></span>${t('badge_live')}</span>`
+      : `<span class="offer-inactive-pill">${t('badge_inactive')}</span>`;
     return `
-    <div class="offer-card">
-      <div class="offer-pct-badge">−${o.discount_pct}%</div>
+    <div class="offer-card${live ? '' : ' inactive'}">
+      <div class="offer-mono">${initial}</div>
       <div class="offer-body">
         <div class="offer-name">${esc(o.name)}${memberBadge}</div>
         <div class="offer-restaurant">${esc(o.restaurant_name)}</div>
-        <div class="offer-meta">
-          ${live ? `<span class="offer-status-live"></span><strong style="color:#22c55e">${t('badge_live')}</strong> · ` : ''}
-          ${fmtTime(o.start_time)} – ${fmtTime(o.end_time)} · ${fmtDays(o.days_of_week || [])}
+        <div class="offer-meta-row">
+          ${statusPill}
+          <span class="offer-meta">${fmtTime(o.start_time)} – ${fmtTime(o.end_time)} · ${fmtDays(o.days_of_week || [])}</span>
         </div>
       </div>
+      <div class="offer-pct-chip">−${o.discount_pct}%</div>
     </div>`;
   }).join('');
 }
@@ -562,6 +662,9 @@ document.addEventListener('click', e => {
   }
   // Hero CTA
   if (e.target.id === 'btn-hero-cta') { openModal(false); return; }
+  // Membership CTA
+  if (e.target.id === 'btn-membership-signup') { openModal(false); return; }
+  if (e.target.id === 'btn-membership-login')  { openModal(true);  return; }
   // Nav auth buttons (static — only present when logged-out initially)
   if (e.target.id === 'btn-nav-login')  { openModal(true);  return; }
   if (e.target.id === 'btn-nav-signup') { openModal(false); return; }

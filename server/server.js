@@ -1935,6 +1935,7 @@ app.get('/qrcodes', requireAuthOrQuery, async (req, res) => {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>QR Mese — nota.</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&display=swap" rel="stylesheet">
 <style>
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: Georgia, 'Times New Roman', serif; background: #f0ede8; padding: 28px; }
@@ -1975,7 +1976,8 @@ body { font-family: Georgia, 'Times New Roman', serif; background: #f0ede8; padd
   padding: 14px 20px 12px;
   display: flex; align-items: center; justify-content: space-between;
 }
-.tent-brand { font-size: 22px; font-weight: 700; color: #fed488; letter-spacing: -0.5px; }
+.tent-brand { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: #fff; letter-spacing: -0.5px; }
+.tent-brand span { color: #fed488; }
 .tent-tagline { font-size: 9px; color: rgba(255,255,255,.55); text-transform: uppercase; letter-spacing: .14em; margin-top: 2px; }
 .tent-num-badge {
   background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.2);
@@ -2041,7 +2043,7 @@ ${qrs.map(({ n, url, svg }) => `
   <div class="tent">
     <div class="tent-top">
       <div>
-        <div class="tent-brand">nota.</div>
+        <div class="tent-brand">nota<span>.</span></div>
         <div class="tent-tagline">QR Table Payment</div>
       </div>
       <div class="tent-num-badge">
