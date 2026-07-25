@@ -18,6 +18,7 @@
  */
 
 import 'dotenv/config';
+import crypto            from 'crypto';
 import express          from 'express';
 import { createServer } from 'http';
 import { Server }       from 'socket.io';
@@ -30,11 +31,36 @@ import QRCode           from 'qrcode';
 
 import { pool } from './db.js';
 import { getOpenOrder, parseIikoWebhook } from './iiko.js';
-import { requestPayment, getPaymentStatus, verifyAndParseCallback, cancelPayment, refundPayment,
-         simulatePayment, setMockFailNext, MIA_MODE } from './mia.js';
+import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCallback, cancelPayment,
+         refundPayment, simulatePayment, setMockFailNext, MIA_MODE } from './mia.js';
 import { register, login, me, requireAuth, verifyJWT } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT } from './members.js';
+import { encryptSecret, decryptSecret } from './secrets.js';
+
+// Per-restaurant maib credentials, decrypted — or null to force mock (see mia.js doc comment).
+// A restaurant is only ever taken out of demo mode by its own maib_status='active' + stored
+// credentials; there is no server-wide fallback that could put a restaurant live by accident.
+async function getRestaurantMiaCreds(restaurantId) {
+  if (!restaurantId) return null;
+  const { rows: [rest] } = await pool.query(
+    `SELECT maib_status, maib_env, maib_client_id, maib_client_secret_enc, maib_signature_key_enc
+     FROM restaurants WHERE id=$1`,
+    [restaurantId]
+  );
+  if (!rest || rest.maib_status !== 'active' || !rest.maib_client_id || !rest.maib_client_secret_enc) return null;
+  return {
+    clientId:     rest.maib_client_id,
+    clientSecret: decryptSecret(rest.maib_client_secret_enc),
+    signatureKey: decryptSecret(rest.maib_signature_key_enc),
+    env:          rest.maib_env,
+  };
+}
+
+async function getRestaurantForQrId(qrId) {
+  const { rows: [row] } = await pool.query(`SELECT restaurant_id FROM payments WHERE mia_payment_id=$1`, [qrId]);
+  return row?.restaurant_id ?? null;
+}
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
 
@@ -45,7 +71,6 @@ const PORT      = process.env.PORT || 3000;
 const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\/$/, '');
 
 const DEV_API_KEY = process.env.DEV_API_KEY || null;
-const MIA_LIVE    = MIA_MODE !== 'mock'; // 'mock' | 'sandbox' | 'production' — see server/mia.js
 const IIKO_LIVE   = !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID);
 
 const roundLei = v => Math.round(Number(v) * 100) / 100;
@@ -282,11 +307,21 @@ app.get('/api/table/by-token/:token', async (req, res) => {
 // ─── payment webhook ──────────────────────────────────────────────────────────
 
 app.post('/api/payment/webhook', limiterPaymentHttp, async (req, res) => {
-  // Mock mode: settlements happen via internal timers only — reject external webhooks.
-  if (!MIA_LIVE) return res.status(403).json({ error: 'Webhook indisponibil în modul demo' });
   try {
     // maib embeds the signature inside the JSON body itself (result + signature), not a header.
-    const payload = verifyAndParseCallback(req.body);
+    // Credentials are per-restaurant now, so we must find which restaurant this qrId belongs to
+    // BEFORE we know which signature key to verify with — that's a metadata lookup, not a trust
+    // decision; the actual trust decision is still the signature check below. A restaurant that
+    // isn't maib_status='active' has no signature key to resolve, so this fails closed for it
+    // exactly like it did for the whole server before credentials were per-restaurant.
+    const parsed = parseCallbackFields(req.body);
+    if (!parsed) return res.status(401).send('Bad payload');
+
+    const restaurantId = parsed.result?.qrId ? await getRestaurantForQrId(parsed.result.qrId) : null;
+    const creds = restaurantId ? await getRestaurantMiaCreds(restaurantId) : null;
+    if (!creds) return res.status(401).send('Bad signature');
+
+    const payload = verifyAndParseCallback(parsed, creds.signatureKey);
     if (!payload) return res.status(401).send('Bad signature');
 
     // We only ever act on an explicit "paid" signal. Any other terminal state (expired/cancelled)
@@ -439,10 +474,11 @@ app.post('/api/dashboard/payments/:id/refund', requireAuth, async (req, res) => 
 
     let refund;
     try {
+      const miaCreds = await getRestaurantMiaCreds(rId);
       refund = await refundPayment({
         payId:  pmt.mia_pay_id,
         reason: (req.body && req.body.reason) || 'Refund solicitat de restaurant',
-      });
+      }, miaCreds);
     } catch (err) {
       await client.query('ROLLBACK');
       console.error('[refund]', err.message);
@@ -1114,6 +1150,194 @@ app.put('/api/dashboard/settings', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Onboarding wizard ──────────────────────────────────────────────────────
+// Progress lives on the restaurant record itself (onboarding_step / onboarding_complete), so
+// leaving and coming back just re-fetches this — no separate session/draft state to lose.
+
+const MAIB_STATUSES = ['not_started', 'in_progress', 'active'];
+
+app.get('/api/dashboard/onboarding', requireAuth, async (req, res) => {
+  try {
+    const rId = req.restaurant.restaurantId;
+    const [{ rows: [rest] }, { rows: tables }, { rows: [menuCount] }] = await Promise.all([
+      pool.query(
+        `SELECT name, email, address, city, phone, timezone, logo_url, google_review_url,
+                opening_hours, table_count, onboarding_step, onboarding_complete, menu_skipped,
+                menu_published, qr_downloaded, maib_status, maib_env, maib_client_id,
+                (maib_client_secret_enc IS NOT NULL) AS maib_has_credentials
+         FROM restaurants WHERE id=$1`,
+        [rId]
+      ),
+      pool.query('SELECT id, number, label, token FROM tables WHERE restaurant_id=$1 ORDER BY number', [rId]),
+      pool.query('SELECT COUNT(*)::int AS n FROM menu_categories WHERE restaurant_id=$1', [rId]),
+    ]);
+    if (!rest) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...rest, tables, menuCategoryCount: menuCount.n });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/onboarding/profile', requireAuth, async (req, res) => {
+  const { name, address, city, phone, timezone, logo_url, google_review_url, opening_hours } = req.body || {};
+  // Light validation only — nothing here should block a restaurant from moving on.
+  if (name != null && (typeof name !== 'string' || !name.trim() || name.length > 200)) {
+    return res.status(400).json({ error: 'Nume invalid' });
+  }
+  if (logo_url && (typeof logo_url !== 'string' || logo_url.length > 1000)) {
+    return res.status(400).json({ error: 'Logo URL invalid' });
+  }
+  if (google_review_url && (typeof google_review_url !== 'string' || google_review_url.length > 500)) {
+    return res.status(400).json({ error: 'Google review URL invalid' });
+  }
+  try {
+    await pool.query(
+      `UPDATE restaurants SET
+         name = COALESCE($1, name), address = $2, city = $3, phone = $4,
+         timezone = COALESCE($5, timezone), logo_url = $6, google_review_url = $7,
+         opening_hours = $8
+       WHERE id = $9`,
+      [
+        name?.trim() || null, (address || '').trim() || null, (city || '').trim() || null,
+        (phone || '').trim() || null, timezone || null, (logo_url || '').trim() || null,
+        (google_review_url || '').trim() || null,
+        opening_hours ? JSON.stringify(opening_hours) : null,
+        req.restaurant.restaurantId,
+      ]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/onboarding/step', requireAuth, async (req, res) => {
+  const step = Number(req.body?.step);
+  const complete = !!req.body?.complete;
+  if (!Number.isInteger(step) || step < 1 || step > 6) return res.status(400).json({ error: 'Invalid step' });
+  try {
+    await pool.query(
+      `UPDATE restaurants SET onboarding_step = GREATEST(onboarding_step, $1), onboarding_complete = onboarding_complete OR $2 WHERE id=$3`,
+      [step, complete, req.restaurant.restaurantId]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/onboarding/menu-skip', requireAuth, async (req, res) => {
+  try {
+    await pool.query(`UPDATE restaurants SET menu_skipped=true WHERE id=$1`, [req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/onboarding/qr-downloaded', requireAuth, async (req, res) => {
+  try {
+    await pool.query(`UPDATE restaurants SET qr_downloaded=true WHERE id=$1`, [req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Grows the table count to exactly `count`, creating any missing tables with fresh unguessable
+// tokens using the same generation as registration. Never shrinks — reducing here could orphan
+// an open order or a QR tent already printed and placed on a physical table.
+app.put('/api/dashboard/tables/count', requireAuth, async (req, res) => {
+  const count = Number(req.body?.count);
+  if (!Number.isInteger(count) || count < 1 || count > 200) return res.status(400).json({ error: 'Invalid count' });
+  const rId = req.restaurant.restaurantId;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: existing } = await client.query('SELECT number FROM tables WHERE restaurant_id=$1', [rId]);
+    const existingNumbers = new Set(existing.map(r => r.number));
+    const toCreate = [];
+    for (let n = 1; n <= count; n++) if (!existingNumbers.has(n)) toCreate.push(n);
+
+    if (toCreate.length) {
+      const params = [rId];
+      const placeholders = toCreate.map(n => {
+        const tok = crypto.randomBytes(8).toString('hex');
+        params.push(n, tok);
+        return `($1, $${params.length - 1}, $${params.length})`;
+      }).join(', ');
+      await client.query(`INSERT INTO tables (restaurant_id, number, token) VALUES ${placeholders}`, params);
+    }
+    const finalCount = Math.max(count, existingNumbers.size ? Math.max(...existingNumbers) : 0);
+    await client.query('UPDATE restaurants SET table_count=$1 WHERE id=$2', [finalCount, rId]);
+    await client.query('COMMIT');
+    res.json({ ok: true, created: toCreate.length, table_count: finalCount });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put('/api/dashboard/tables/:id', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  const label = typeof req.body?.label === 'string' ? req.body.label.trim().slice(0, 60) || null : undefined;
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const { rows: [row] } = await pool.query(
+      `UPDATE tables SET label = COALESCE($1, label) WHERE id=$2 AND restaurant_id=$3 RETURNING id, number, label`,
+      [label, id, req.restaurant.restaurantId]
+    );
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json(row);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// maib credentials — tenant-scoped, encrypted at rest, never echoed back (not even encrypted
+// form). clientSecret/signatureKey omitted on an update keep whatever's already stored, so a
+// restaurant can change just its status (e.g. confirm activation) without re-pasting secrets.
+app.post('/api/dashboard/maib-credentials', requireAuth, async (req, res) => {
+  const { clientId, clientSecret, signatureKey, env, status } = req.body || {};
+  if (env && !['sandbox', 'production'].includes(env)) return res.status(400).json({ error: 'Invalid env' });
+  if (status && !MAIB_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  if (clientId && (typeof clientId !== 'string' || clientId.length > 200)) return res.status(400).json({ error: 'Invalid clientId' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    const sets = [];
+    const params = [];
+    const push = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+
+    if (clientId !== undefined) push('maib_client_id', clientId || null);
+    if (clientSecret) push('maib_client_secret_enc', encryptSecret(clientSecret));
+    if (signatureKey) push('maib_signature_key_enc', encryptSecret(signatureKey));
+    if (env) push('maib_env', env);
+    if (status) {
+      push('maib_status', status);
+    } else if (clientId && clientSecret) {
+      // Submitting real credentials for the first time is itself evidence of progress.
+      push(`maib_status`, 'in_progress');
+    }
+    if (!sets.length) return res.status(400).json({ error: 'Nimic de salvat' });
+
+    params.push(rId);
+    await pool.query(`UPDATE restaurants SET ${sets.join(', ')} WHERE id=$${params.length}`, params);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[maib-credentials]', err.message); // never log clientSecret/signatureKey themselves
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// ─── Admin (internal — DEV_API_KEY only, no JWT fallback) ────────────────────
+// Deliberately NOT built on requireDevAuth: that falls back to any restaurant's own JWT, which
+// would let one restaurant list every other restaurant. This must only ever accept the dev key.
+function requireAdminAuth(req, res, next) {
+  if (DEV_API_KEY && req.headers['x-dev-key'] === DEV_API_KEY) return next();
+  return res.status(401).json({ error: 'Unauthorized' });
+}
+
+app.get('/api/admin/restaurants', requireAdminAuth, async (_req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT id, name, email, table_count, onboarding_step, onboarding_complete,
+             menu_published, menu_skipped, qr_downloaded, maib_status, maib_env, created_at
+      FROM restaurants ORDER BY created_at DESC
+    `);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Feedback: submit (public, rate-limited) ──────────────────────────────────
 
 app.post('/api/feedback', limiterAuth, async (req, res) => {
@@ -1431,15 +1655,18 @@ app.post('/api/dev/mock-fail-next', requireDevAuth, (req, res) => {
 });
 
 // Sandbox-only: trigger maib's test-pay endpoint to complete a live sandbox QR, so the full
-// webhook → settlement loop can be exercised end-to-end before real credentials exist.
+// webhook → settlement loop can be exercised end-to-end before real credentials exist. Uses the
+// calling restaurant's own sandbox credentials (JWT auth), or an explicit restaurantId in the
+// body (dev-key auth), or falls back to env-configured credentials for bare module testing.
 app.post('/api/dev/simulate-mia-payment', requireDevAuth, async (req, res) => {
-  if (MIA_MODE !== 'sandbox') return res.status(403).json({ error: 'Only available in sandbox mode' });
   try {
-    const { qrId, amountLei, iban, payerName } = req.body || {};
+    const { qrId, amountLei, iban, payerName, restaurantId: bodyRid } = req.body || {};
     if (!qrId || !amountLei || !iban || !payerName) {
       return res.status(400).json({ error: 'qrId, amountLei, iban, payerName required' });
     }
-    const result = await simulatePayment({ qrId, amountLei, iban, payerName });
+    const rId = req.restaurant.restaurantId ?? bodyRid ?? null;
+    const creds = rId ? await getRestaurantMiaCreds(rId) : undefined;
+    const result = await simulatePayment({ qrId, amountLei, iban, payerName }, creds);
     res.json({ ok: true, result });
   } catch (err) {
     console.error('[simulate-mia-payment]', err.message);
@@ -1853,7 +2080,8 @@ io.on('connection', socket => {
 
       let payment;
       try {
-        payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
+        const miaCreds = await getRestaurantMiaCreds(currentRestaurantId);
+        payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl }, miaCreds);
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         // Initiation itself failed (before any provider payment exists) — no settlement can ever
@@ -1948,7 +2176,8 @@ io.on('connection', socket => {
 
       let payment;
       try {
-        payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl });
+        const miaCreds = await getRestaurantMiaCreds(currentRestaurantId);
+        payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl }, miaCreds);
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
@@ -2270,7 +2499,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     await client.query('COMMIT');
 
     // Best-effort: tell maib this QR is dead so it can't be paid after we've released the items.
-    if (MIA_LIVE) cancelPayment(miaPaymentId, reason);
+    getRestaurantMiaCreds(restaurantId).then(creds => cancelPayment(miaPaymentId, reason, creds));
 
     const s = io.sockets.sockets.get(socketId);
     if (s) s.emit('payment-failed', { reason });
@@ -2393,7 +2622,7 @@ async function releaseFromDB(pmt, reason = '') {
     }
     await client.query('COMMIT');
 
-    if (MIA_LIVE && pmt.mia_payment_id) cancelPayment(pmt.mia_payment_id, reason);
+    if (pmt.mia_payment_id) getRestaurantMiaCreds(pmt.restaurant_id).then(creds => cancelPayment(pmt.mia_payment_id, reason, creds));
 
     const [order, activeOffer] = await Promise.all([
       getOpenOrder(pmt.table_number, pmt.restaurant_id),
@@ -2442,10 +2671,11 @@ async function reconcilePendingPayments() {
         continue;
       }
 
-      // 30s–3min and live MIA → poll for status
-      if (ageMs > 30_000 && miaId && MIA_LIVE) {
+      // 30s–3min and this restaurant has an active maib merchant → poll for status
+      const miaCreds = miaId ? await getRestaurantMiaCreds(pmt.restaurant_id) : null;
+      if (ageMs > 30_000 && miaId && miaCreds) {
         try {
-          const { status, payId } = await getPaymentStatus(miaId);
+          const { status, payId } = await getPaymentStatus(miaId, miaCreds);
           if (status === 'PAID') {
             if (paymentMeta.has(miaId)) await settlePayment(miaId, miaId, payId);
             else await settleFromDB(pmt, miaId, payId);

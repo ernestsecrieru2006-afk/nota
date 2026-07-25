@@ -281,6 +281,34 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_menu_items_restaurant ON menu_items(restaurant_id)`);
     } catch { /* already exist */ }
 
+    // ── Self-serve onboarding wizard ──────────────────────────────────────────
+    // onboarding_step: which step to resume at (1-6). onboarding_complete: whether
+    // they've reached "Gata" — drives whether the dashboard shows the setup banner.
+    // menu_skipped / qr_downloaded: explicit user choices, distinct from "hasn't gotten there yet".
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS address TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS city TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS phone TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT 'Europe/Chisinau'`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS logo_url TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS opening_hours JSONB`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS onboarding_step INT NOT NULL DEFAULT 1`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS onboarding_complete BOOLEAN NOT NULL DEFAULT false`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS menu_skipped BOOLEAN NOT NULL DEFAULT false`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS qr_downloaded BOOLEAN NOT NULL DEFAULT false`);
+    } catch { /* already exist */ }
+
+    // ── Per-restaurant maib MIA credentials (encrypted at rest, tenant-scoped) ──
+    // maib_status: not_started | in_progress | active — explicitly tracked, never inferred,
+    // so a restaurant is only ever taken out of demo mode by a deliberate status change.
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_client_id TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_client_secret_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_signature_key_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_env TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_status TEXT NOT NULL DEFAULT 'not_started'`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

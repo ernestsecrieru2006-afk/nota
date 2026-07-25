@@ -662,6 +662,68 @@ html, body {
 .attr-table tr:hover td { background: var(--surface); }
 .export-csv-btn { background:transparent; border:1px solid var(--border); color:var(--muted); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
 .export-csv-btn:hover { border-color:var(--em); color:var(--em); }
+/* ── Onboarding banners ──────────────────────────────────────────────────── */
+#demo-mode-banner, #setup-banner {
+  display: none; align-items: center; justify-content: center; gap: 14px;
+  padding: 9px 16px; font-size: 12.5px; font-weight: 600; text-align: center;
+}
+#demo-mode-banner { background: var(--amber-bg); color: var(--amber-hi); border-bottom: 1px solid rgba(217,119,6,.3); }
+#setup-banner { background: var(--blue-bg); color: var(--blue); border-bottom: 1px solid rgba(59,130,246,.3); }
+#setup-banner button, #demo-mode-banner button {
+  background: none; border: 1px solid currentColor; color: inherit; font-family: inherit;
+  font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 6px; cursor: pointer;
+}
+
+/* ── Onboarding wizard overlay ───────────────────────────────────────────── */
+#onboarding-wizard {
+  display: none; position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,.7); align-items: center; justify-content: center; padding: 20px;
+}
+.ob-modal {
+  background: var(--panel); border: 1px solid var(--border2); border-radius: var(--rxl);
+  width: 100%; max-width: 720px; max-height: 90vh; overflow-y: auto; padding: 0;
+}
+.ob-progress { display: flex; gap: 6px; padding: 20px 28px 0; }
+.ob-dot { flex: 1; height: 4px; border-radius: 2px; background: var(--border); }
+.ob-dot.done { background: var(--em); }
+.ob-dot.current { background: var(--em-hi); }
+.ob-steps-lbl { display: flex; justify-content: space-between; padding: 8px 28px 0; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.ob-body { padding: 24px 28px 28px; }
+.ob-step { display: none; }
+.ob-step.active { display: block; }
+.ob-title { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+.ob-sub { font-size: 13px; color: var(--muted); margin-bottom: 20px; line-height: 1.5; }
+.ob-actions { display: flex; gap: 10px; margin-top: 22px; justify-content: space-between; }
+.ob-actions-right { display: flex; gap: 10px; }
+.ob-skip-btn { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 12.5px; font-weight: 600; cursor: pointer; text-decoration: underline; }
+
+.ob-tables-list { display: flex; flex-direction: column; gap: 8px; margin: 16px 0; max-height: 220px; overflow-y: auto; }
+.ob-table-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.ob-table-row .num { font-size: 12px; font-weight: 700; color: var(--muted); width: 50px; flex-shrink: 0; }
+.ob-table-row input { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-family: inherit; font-size: 12.5px; padding: 6px 10px; outline: none; }
+
+.ob-menu-choices { display: flex; flex-direction: column; gap: 12px; }
+.ob-choice-card { background: var(--card); border: 1.5px solid var(--border); border-radius: var(--rl); padding: 18px; cursor: pointer; transition: border-color .15s; }
+.ob-choice-card:hover { border-color: var(--em-dim); }
+.ob-choice-card.disabled { cursor: default; opacity: .55; }
+.ob-choice-card.disabled:hover { border-color: var(--border); }
+.ob-choice-title { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.ob-choice-desc { font-size: 12.5px; color: var(--muted); line-height: 1.5; }
+.ob-choice-badge { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); background: var(--surface); padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+
+.ob-maib-checklist { background: var(--card); border: 1px solid var(--border); border-radius: var(--rl); padding: 16px 18px; margin-bottom: 18px; font-size: 12.5px; color: var(--text2); line-height: 1.9; }
+.ob-status-select { display: flex; gap: 8px; margin-bottom: 18px; }
+.ob-status-opt { flex: 1; text-align: center; padding: 10px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 12px; font-weight: 700; cursor: pointer; color: var(--muted); }
+.ob-status-opt.sel { border-color: var(--em); color: var(--em-hi); background: var(--em-bg); }
+.ob-demo-notice { background: var(--amber-bg); border: 1px solid rgba(217,119,6,.35); color: var(--amber-hi); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
+
+.ob-summary-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.ob-summary-item { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
+.ob-summary-icon { width: 20px; text-align: center; }
+.ob-summary-item.ok .ob-summary-icon { color: var(--em); }
+.ob-summary-item.pending .ob-summary-icon { color: var(--amber-hi); }
+.ob-link-box { display: flex; gap: 8px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; color: var(--text2); word-break: break-all; }
+
 /* Offer table with kit column */
 .offers-table-hd { grid-template-columns: 1fr 70px 130px 90px 70px 70px 72px !important; }
 .offer-row       { grid-template-columns: 1fr 70px 130px 90px 70px 70px 72px !important; }
@@ -748,6 +810,16 @@ html, body {
 
 <!-- ══ DASHBOARD ══════════════════════════════════════════ -->
 <div id="dashboard">
+
+  <div id="demo-mode-banner">
+    <span>⚠️ Mod demo — plățile nu sunt reale</span>
+    <button id="demo-mode-btn">Activează plăți reale</button>
+  </div>
+  <div id="setup-banner">
+    <span>Configurarea contului nu e completă.</span>
+    <button id="setup-banner-btn">Continuă configurarea →</button>
+  </div>
+
   <div class="dash-layout">
 
     <!-- ── Sidebar ──────────────────────────────────────── -->
@@ -1260,6 +1332,165 @@ html, body {
   </div>
 </div>
 
+<!-- ══ ONBOARDING WIZARD ═══════════════════════════════════ -->
+<div id="onboarding-wizard">
+  <div class="ob-modal">
+    <div style="display:flex;justify-content:flex-end;padding:14px 18px 0">
+      <button id="ob-close-btn" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:2px 6px">×</button>
+    </div>
+    <div class="ob-progress">
+      <div class="ob-dot" data-ob-dot="1"></div>
+      <div class="ob-dot" data-ob-dot="2"></div>
+      <div class="ob-dot" data-ob-dot="3"></div>
+      <div class="ob-dot" data-ob-dot="4"></div>
+      <div class="ob-dot" data-ob-dot="5"></div>
+      <div class="ob-dot" data-ob-dot="6"></div>
+    </div>
+    <div class="ob-steps-lbl">
+      <span>Profil</span><span>Mese</span><span>Meniu</span><span>QR</span><span>Plăți</span><span>Gata</span>
+    </div>
+
+    <div class="ob-body">
+
+      <!-- Step 1 — Profil -->
+      <div class="ob-step" data-ob-step="1">
+        <div class="ob-title">Profilul restaurantului</div>
+        <div class="ob-sub">Aceste date apar pe bonuri, în comunicarea cu oaspeții și te ajută să configurezi contul corect. Nimic aici nu blochează — poți completa mai târziu.</div>
+        <div class="offer-form-grid">
+          <div class="offer-field"><label>Nume restaurant</label><input type="text" id="ob-name"></div>
+          <div class="offer-field"><label>Telefon contact</label><input type="text" id="ob-phone" placeholder="+373 6..."></div>
+          <div class="offer-field"><label>Oraș</label><input type="text" id="ob-city" placeholder="Chișinău"></div>
+          <div class="offer-field"><label>Adresă</label><input type="text" id="ob-address" placeholder="Str. ..., nr. ..."></div>
+          <div class="offer-field"><label>Fus orar</label>
+            <select id="ob-timezone">
+              <option value="Europe/Chisinau">Europe/Chisinau</option>
+            </select>
+          </div>
+          <div class="offer-field"><label>Logo URL — opțional</label><input type="text" id="ob-logo"></div>
+        </div>
+        <div class="offer-field"><label>Link recenzii Google — opțional</label><input type="text" id="ob-google-url" placeholder="https://g.page/r/..."></div>
+        <div class="ob-actions">
+          <span></span>
+          <div class="ob-actions-right"><button class="btn-save-offer" data-ob-next="1">Continuă</button></div>
+        </div>
+      </div>
+
+      <!-- Step 2 — Mese -->
+      <div class="ob-step" data-ob-step="2">
+        <div class="ob-title">Mesele restaurantului</div>
+        <div class="ob-sub">Fiecare masă primește un cod QR unic și greu de ghicit. Poți adăuga mese oricând mai târziu — micșorarea numărului nu șterge mesele existente.</div>
+        <div class="offer-form-grid" style="grid-template-columns:1fr auto;align-items:end">
+          <div class="offer-field"><label>Număr de mese</label><input type="number" id="ob-table-count" min="1" max="200"></div>
+          <button class="btn-cancel-offer" id="btn-ob-update-tables" style="height:36px">Actualizează</button>
+        </div>
+        <div class="ob-tables-list" id="ob-tables-list"></div>
+        <div class="ob-actions">
+          <button class="ob-skip-btn" data-ob-next="2">Sari peste</button>
+          <div class="ob-actions-right"><button class="btn-save-offer" data-ob-next="2">Continuă</button></div>
+        </div>
+      </div>
+
+      <!-- Step 3 — Meniu -->
+      <div class="ob-step" data-ob-step="3">
+        <div class="ob-title">Meniul</div>
+        <div class="ob-sub">Alege cum vrei să gestionezi meniul afișat oaspeților la scanarea codului QR.</div>
+        <div class="ob-menu-choices">
+          <div class="ob-choice-card" id="ob-menu-build">
+            <div class="ob-choice-title">📖 Construiește meniul acum</div>
+            <div class="ob-choice-desc">Deschide editorul de meniu (categorii, feluri, prețuri, poze) — te poți întoarce la configurare oricând.</div>
+          </div>
+          <div class="ob-choice-card" id="ob-menu-skip">
+            <div class="ob-choice-title">Sari peste pentru moment</div>
+            <div class="ob-choice-desc">Codul QR duce direct la notă, exact ca astăzi. Poți construi meniul mai târziu din secțiunea „Meniu”.</div>
+          </div>
+          <div class="ob-choice-card disabled">
+            <div class="ob-choice-title">Sincronizează din POS-ul tău <span class="ob-choice-badge">În curând</span></div>
+            <div class="ob-choice-desc">Import automat din Poster sau iiko. Nu este disponibil încă — spune-ne dacă folosești unul dintre ele și te anunțăm când e gata.</div>
+          </div>
+        </div>
+        <div class="ob-actions">
+          <span></span>
+          <div class="ob-actions-right"></div>
+        </div>
+      </div>
+
+      <!-- Step 4 — Coduri QR -->
+      <div class="ob-step" data-ob-step="4">
+        <div class="ob-title">Codurile QR pentru mese</div>
+        <div class="ob-sub">Descarcă și printează afișele cu codul QR pentru fiecare masă — le poți pune pe mese chiar și înainte ca plățile reale să fie active.</div>
+        <div class="offer-form-actions" style="margin-bottom:18px">
+          <a class="btn-save-offer" id="ob-open-qr" href="/qrcodes" target="_blank" style="text-decoration:none;display:inline-block">Deschide codurile QR</a>
+        </div>
+        <div class="ob-actions">
+          <button class="ob-skip-btn" data-ob-next="4">Sari peste</button>
+          <div class="ob-actions-right"><button class="btn-save-offer" id="btn-ob-qr-done">Le-am descărcat — Continuă</button></div>
+        </div>
+      </div>
+
+      <!-- Step 5 — Plăți -->
+      <div class="ob-step" data-ob-step="5">
+        <div class="ob-title">Plăți reale prin MIA</div>
+        <div class="ob-sub">Pentru a accepta plăți reale, restaurantul trebuie să activeze serviciul MIA QR cu maib (banca ta). Acest pas depinde de maib, nu de noi — îl urmărim separat, nu te blocăm.</div>
+
+        <div class="ob-demo-notice" id="ob-demo-notice">⚠️ Mod demo — plățile nu sunt reale până când activarea maib e confirmată.</div>
+
+        <div class="ob-maib-checklist">
+          <strong>Ce îți cere maib:</strong><br>
+          • Cont de business activ la maib (IDNO)<br>
+          • Cerere de activare serviciu MIA QR Merchant<br>
+          • Datele de acces (Client ID / Client Secret / Signature Key) primite de la maib
+        </div>
+
+        <div class="offer-field" style="margin-bottom:14px">
+          <label>Status activare</label>
+          <div class="ob-status-select">
+            <div class="ob-status-opt" data-ob-status="not_started">Nu a început</div>
+            <div class="ob-status-opt" data-ob-status="in_progress">În curs</div>
+            <div class="ob-status-opt" data-ob-status="active">Activ</div>
+          </div>
+        </div>
+
+        <div class="offer-form-grid">
+          <div class="offer-field"><label>Mediu</label>
+            <select id="ob-maib-env">
+              <option value="sandbox">Sandbox (testare)</option>
+              <option value="production">Producție</option>
+            </select>
+          </div>
+          <div class="offer-field"><label>Client ID</label><input type="text" id="ob-maib-client-id" placeholder="de la maib"></div>
+          <div class="offer-field"><label>Client Secret</label><input type="password" id="ob-maib-client-secret" placeholder="•••••• (lasă gol ca să păstrezi valoarea salvată)"></div>
+          <div class="offer-field"><label>Signature Key</label><input type="password" id="ob-maib-signature-key" placeholder="•••••• (lasă gol ca să păstrezi valoarea salvată)"></div>
+        </div>
+        <div id="ob-maib-saved-note" style="font-size:11.5px;color:var(--muted);margin-bottom:10px"></div>
+
+        <div class="offer-form-actions" style="margin-bottom:18px">
+          <button class="btn-save-offer" id="btn-ob-save-maib">Salvează</button>
+          <a class="btn-cancel-offer" style="text-decoration:none" href="mailto:ernest@paynota.com?subject=Ajutor%20activare%20MIA%20QR">Contactează-ne pentru ajutor</a>
+        </div>
+
+        <div class="ob-actions">
+          <button class="ob-skip-btn" data-ob-next="5">Continuă mai târziu</button>
+          <div class="ob-actions-right"><button class="btn-save-offer" data-ob-next="5">Continuă</button></div>
+        </div>
+      </div>
+
+      <!-- Step 6 — Gata -->
+      <div class="ob-step" data-ob-step="6">
+        <div class="ob-title">Gata de testare</div>
+        <div class="ob-sub">Iată ce ai configurat până acum. Poți testa fluxul complet chiar acum pe masa 1.</div>
+        <div class="ob-summary-list" id="ob-summary-list"></div>
+        <div class="offer-field" style="margin-bottom:8px"><label>Link masa 1 (test)</label></div>
+        <div class="ob-link-box" id="ob-table1-link">—</div>
+        <div class="ob-actions">
+          <span></span>
+          <div class="ob-actions-right"><button class="btn-save-offer" id="btn-ob-finish">Finalizează configurarea</button></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <!-- ── Promo-Kit Modal ──────────────────────────────────── -->
@@ -1356,12 +1587,21 @@ document.getElementById('main-date').textContent = new Date().toLocaleDateString
   weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
 });
 
-if (token && restaurant) {
-  showDashboard();
-} else {
-  document.getElementById('login-screen').style.display = 'flex';
-  document.getElementById('dashboard').style.display    = 'none';
-}
+// Deferred to the next tick: showDashboard() (via loadAll()) reaches functions like loadMenu()
+// that reference `let` bindings (menuState, currentView, ceCurrentPeriod) declared further down
+// in this same script. Calling it synchronously here — before those declarations are reached in
+// the top-to-bottom pass — hits their temporal dead zone. The login-form path never hit this
+// (it only calls showDashboard() after an async fetch resolves, by which point the whole script
+// has already finished its first pass), but a returning user with a token already in localStorage
+// took this branch immediately on page load and hit it every time.
+setTimeout(() => {
+  if (token && restaurant) {
+    showDashboard();
+  } else {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('dashboard').style.display    = 'none';
+  }
+}, 0);
 
 // ── Login / Register ──────────────────────────────────────────────────────────
 document.getElementById('mode-toggle').addEventListener('click', () => {
@@ -1441,6 +1681,7 @@ function showDashboard() {
   loadAll();
   connectSocket();
   switchView('dashboard');
+  loadOnboarding(true);
 }
 
 // ── View switching ────────────────────────────────────────────────────────────
@@ -1480,6 +1721,221 @@ document.querySelector('.sidebar-nav').addEventListener('click', e => {
   if (!item) return; // external links (Coduri QR) fall through untouched
   e.preventDefault();
   switchView(item.dataset.view);
+});
+
+// ── Onboarding wizard ──────────────────────────────────────────────────────────
+// Progress lives on the restaurant record (onboarding_step / onboarding_complete), fetched
+// fresh here — leaving and coming back just re-fetches this, nothing to lose.
+let onboardingData = null;
+let obCurrentStep = 1;
+let obSelectedStatus = 'not_started';
+
+async function loadOnboarding(autoOpen) {
+  try {
+    onboardingData = await api('/api/dashboard/onboarding');
+    updateOnboardingBanners();
+    if (autoOpen && !onboardingData.onboarding_complete) {
+      openWizard(onboardingData.onboarding_step || 1);
+    }
+  } catch (err) { console.error('[onboarding]', err); }
+}
+
+function updateOnboardingBanners() {
+  if (!onboardingData) return;
+  document.getElementById('setup-banner').style.display = onboardingData.onboarding_complete ? 'none' : 'flex';
+  document.getElementById('demo-mode-banner').style.display = onboardingData.maib_status !== 'active' ? 'flex' : 'none';
+}
+
+document.getElementById('setup-banner-btn').addEventListener('click', () => openWizard(onboardingData?.onboarding_step || 1));
+document.getElementById('demo-mode-btn').addEventListener('click', () => openWizard(5));
+
+function openWizard(step) {
+  document.getElementById('onboarding-wizard').style.display = 'flex';
+  showObStep(step || 1);
+}
+function closeWizard() {
+  document.getElementById('onboarding-wizard').style.display = 'none';
+}
+document.getElementById('ob-close-btn').addEventListener('click', closeWizard);
+
+function showObStep(step) {
+  obCurrentStep = step;
+  document.querySelectorAll('.ob-step').forEach(el => el.classList.toggle('active', Number(el.dataset.obStep) === step));
+  document.querySelectorAll('.ob-dot').forEach(el => {
+    const n = Number(el.dataset.obDot);
+    el.classList.toggle('done', n < step);
+    el.classList.toggle('current', n === step);
+  });
+  if (step === 1) renderObProfile();
+  if (step === 2) renderObTables();
+  if (step === 4) document.getElementById('ob-open-qr').href = `/qrcodes?token=${encodeURIComponent(token)}`;
+  if (step === 5) renderObMaib();
+  if (step === 6) renderObSummary();
+}
+
+async function saveObStep(step, opts = {}) {
+  try { await apiMut('PUT', '/api/dashboard/onboarding/step', { step, complete: !!opts.complete }); } catch {}
+}
+
+// ── Step 1: Profil ──────────────────────────────────────────────────────────
+function renderObProfile() {
+  const d = onboardingData || {};
+  document.getElementById('ob-name').value = d.name || '';
+  document.getElementById('ob-phone').value = d.phone || '';
+  document.getElementById('ob-city').value = d.city || '';
+  document.getElementById('ob-address').value = d.address || '';
+  document.getElementById('ob-logo').value = d.logo_url || '';
+  document.getElementById('ob-google-url').value = d.google_review_url || '';
+}
+
+async function saveObProfile() {
+  const body = {
+    name: document.getElementById('ob-name').value.trim(),
+    phone: document.getElementById('ob-phone').value.trim(),
+    city: document.getElementById('ob-city').value.trim(),
+    address: document.getElementById('ob-address').value.trim(),
+    timezone: document.getElementById('ob-timezone').value,
+    logo_url: document.getElementById('ob-logo').value.trim(),
+    google_review_url: document.getElementById('ob-google-url').value.trim(),
+  };
+  try {
+    const res = await apiMut('PUT', '/api/dashboard/onboarding/profile', body);
+    if (res.error) { toast('Eroare: ' + res.error); return false; }
+    if (body.name) { restaurant.name = body.name; document.getElementById('rest-name').textContent = body.name; }
+    return true;
+  } catch { toast('Eroare la salvare.'); return false; }
+}
+
+// ── Step 2: Mese ─────────────────────────────────────────────────────────────
+function renderObTables() {
+  const d = onboardingData || {};
+  document.getElementById('ob-table-count').value = d.table_count || (d.tables || []).length || 1;
+  document.getElementById('ob-tables-list').innerHTML = (d.tables || []).map(t => `
+    <div class="ob-table-row">
+      <span class="num">Masa ${t.number}</span>
+      <input type="text" placeholder="Etichetă opțională (ex: Terasă 1)" value="${esc(t.label || '')}" data-ob-table-label="${t.id}">
+    </div>`).join('');
+}
+
+document.getElementById('btn-ob-update-tables').addEventListener('click', async () => {
+  const count = Number(document.getElementById('ob-table-count').value);
+  if (!count || count < 1) return toast('Introdu un număr valid de mese.');
+  try {
+    const res = await apiMut('PUT', '/api/dashboard/tables/count', { count });
+    if (res.error) return toast('Eroare: ' + res.error);
+    await loadOnboarding(false);
+    renderObTables();
+    toast(res.created ? `${res.created} masă/mese noi adăugate.` : 'Actualizat.', 'success');
+  } catch { toast('Eroare la actualizare.'); }
+});
+
+document.getElementById('ob-tables-list').addEventListener('change', async e => {
+  const inp = e.target.closest('[data-ob-table-label]');
+  if (!inp) return;
+  try { await apiMut('PUT', `/api/dashboard/tables/${inp.dataset.obTableLabel}`, { label: inp.value.trim() }); }
+  catch { toast('Eroare la salvarea etichetei.'); }
+});
+
+// ── Step 3: Meniu ────────────────────────────────────────────────────────────
+document.getElementById('ob-menu-build').addEventListener('click', async () => {
+  await saveObStep(3);
+  closeWizard();
+  switchView('menu');
+});
+document.getElementById('ob-menu-skip').addEventListener('click', async () => {
+  try { await apiMut('POST', '/api/dashboard/onboarding/menu-skip', {}); } catch {}
+  await loadOnboarding(false);
+  showObStep(4);
+});
+
+// ── Step 4: QR ───────────────────────────────────────────────────────────────
+document.getElementById('btn-ob-qr-done').addEventListener('click', async () => {
+  try { await apiMut('POST', '/api/dashboard/onboarding/qr-downloaded', {}); } catch {}
+  await loadOnboarding(false);
+  showObStep(5);
+});
+
+// ── Step 5: Plăți (maib) ─────────────────────────────────────────────────────
+function renderObMaib() {
+  const d = onboardingData || {};
+  obSelectedStatus = d.maib_status || 'not_started';
+  document.querySelectorAll('.ob-status-opt').forEach(el => el.classList.toggle('sel', el.dataset.obStatus === obSelectedStatus));
+  document.getElementById('ob-maib-env').value = d.maib_env || 'sandbox';
+  document.getElementById('ob-maib-client-id').value = d.maib_client_id || '';
+  document.getElementById('ob-maib-client-secret').value = '';
+  document.getElementById('ob-maib-signature-key').value = '';
+  document.getElementById('ob-maib-saved-note').textContent = d.maib_has_credentials
+    ? 'Client Secret și Signature Key sunt deja salvate — lasă câmpurile goale ca să le păstrezi.'
+    : '';
+  document.getElementById('ob-demo-notice').style.display = d.maib_status === 'active' ? 'none' : '';
+}
+
+document.querySelectorAll('.ob-status-opt').forEach(el => {
+  el.addEventListener('click', () => {
+    obSelectedStatus = el.dataset.obStatus;
+    document.querySelectorAll('.ob-status-opt').forEach(o => o.classList.toggle('sel', o === el));
+  });
+});
+
+document.getElementById('btn-ob-save-maib').addEventListener('click', async () => {
+  const body = {
+    clientId: document.getElementById('ob-maib-client-id').value.trim(),
+    clientSecret: document.getElementById('ob-maib-client-secret').value.trim(),
+    signatureKey: document.getElementById('ob-maib-signature-key').value.trim(),
+    env: document.getElementById('ob-maib-env').value,
+    status: obSelectedStatus,
+  };
+  try {
+    const res = await apiMut('POST', '/api/dashboard/maib-credentials', body);
+    if (res.error) return toast('Eroare: ' + res.error);
+    await loadOnboarding(false);
+    renderObMaib();
+    updateOnboardingBanners();
+    toast('Salvat.', 'success');
+  } catch { toast('Eroare la salvare.'); }
+});
+
+// ── Step 6: Gata ─────────────────────────────────────────────────────────────
+function renderObSummary() {
+  const d = onboardingData || {};
+  const items = [
+    { ok: !!(d.name && d.city && d.phone), label: 'Profil restaurant' },
+    { ok: (d.tables || []).length > 0, label: `Mese configurate (${(d.tables || []).length})` },
+    { ok: d.menu_published || d.menu_skipped, label: d.menu_published ? 'Meniu publicat' : (d.menu_skipped ? 'Meniu sărit — QR merge direct la notă' : 'Meniu neconfigurat încă') },
+    { ok: d.qr_downloaded, label: 'Coduri QR descărcate' },
+    { ok: d.maib_status === 'active', label: `Plăți maib: ${d.maib_status === 'active' ? 'active' : d.maib_status === 'in_progress' ? 'în curs' : 'nu a început'}` },
+  ];
+  document.getElementById('ob-summary-list').innerHTML = items.map(it => `
+    <div class="ob-summary-item ${it.ok ? 'ok' : 'pending'}">
+      <span class="ob-summary-icon">${it.ok ? '✓' : '○'}</span><span>${esc(it.label)}</span>
+    </div>`).join('');
+
+  const t1 = (d.tables || []).find(t => t.number === 1);
+  document.getElementById('ob-table1-link').textContent = t1
+    ? `${location.origin}/?t=${t1.token}`
+    : 'Nicio masă configurată încă.';
+}
+
+document.getElementById('btn-ob-finish').addEventListener('click', async () => {
+  await saveObStep(6, { complete: true });
+  await loadOnboarding(false);
+  updateOnboardingBanners();
+  closeWizard();
+  toast('Configurare finalizată!', 'success');
+});
+
+// Step navigation: "Continuă" / "Sari peste" buttons carry data-ob-next="<step just finished>"
+document.getElementById('onboarding-wizard').addEventListener('click', async e => {
+  const nextBtn = e.target.closest('[data-ob-next]');
+  if (!nextBtn) return;
+  const fromStep = Number(nextBtn.dataset.obNext);
+  if (fromStep === 1 && nextBtn.classList.contains('btn-save-offer')) {
+    const ok = await saveObProfile();
+    if (!ok) return;
+  }
+  await saveObStep(fromStep + 1);
+  await loadOnboarding(false);
+  showObStep(Math.min(fromStep + 1, 6));
 });
 
 async function loadAll() {
