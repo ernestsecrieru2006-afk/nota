@@ -77,9 +77,16 @@ function resolveCreds(creds) {
   return { mode: 'mock', clientId: null, clientSecret: null, signatureKey: null, base: null };
 }
 
-// Reported by /health as the *default* (env-fallback) mode only — never restaurant-specific,
-// since /health has no restaurant context and must never leak per-tenant config.
-export const MIA_MODE = resolveCreds(undefined).mode;
+// Reported by /health and the startup banner as the *default* (env-fallback) mode only — never
+// restaurant-specific, since /health has no restaurant context and must never leak per-tenant
+// config. Distinguishes 'off' (no MAIB_MIA_ENV set at all — nothing configured, not even
+// attempted) from 'mock' (MAIB_MIA_ENV was set to sandbox/production but credentials are missing
+// or incomplete, so it fell back) — both behave identically (mock), but "off" vs "misconfigured"
+// is a meaningfully different signal to read on a status page.
+export const MIA_DEFAULT_MODE = (() => {
+  if (ENV_RAW_ENV !== 'sandbox' && ENV_RAW_ENV !== 'production') return 'off';
+  return resolveCreds(undefined).mode; // 'sandbox' | 'production' if creds are complete, else 'mock'
+})();
 
 // One-shot flag: set via /api/dev/mock-fail-next to make next mock payment fail
 let _mockFailNext = false;

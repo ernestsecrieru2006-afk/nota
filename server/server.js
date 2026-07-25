@@ -19,6 +19,7 @@
 
 import 'dotenv/config';
 import crypto            from 'crypto';
+import { readFileSync }  from 'fs';
 import express          from 'express';
 import { createServer } from 'http';
 import { Server }       from 'socket.io';
@@ -32,7 +33,7 @@ import QRCode           from 'qrcode';
 import { pool } from './db.js';
 import { getOpenOrder, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCallback, cancelPayment,
-         refundPayment, simulatePayment, setMockFailNext, MIA_MODE } from './mia.js';
+         refundPayment, simulatePayment, setMockFailNext, MIA_DEFAULT_MODE } from './mia.js';
 import { register, login, me, requireAuth, verifyJWT } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT } from './members.js';
@@ -72,6 +73,38 @@ const APP_URL   = (process.env.APP_URL || `http://localhost:${PORT}`).replace(/\
 
 const DEV_API_KEY = process.env.DEV_API_KEY || null;
 const IIKO_LIVE   = !!(process.env.IIKO_API_LOGIN && process.env.IIKO_ORG_ID);
+
+// Build fingerprint — makes "is prod running the latest code?" a 5-second /health check instead
+// of guesswork. Railway sets RAILWAY_GIT_COMMIT_SHA at build time; anywhere that doesn't (local
+// dev, other hosts) falls back to package.json's version + the process start time, so this is
+// never blank.
+const BUILD = process.env.RAILWAY_GIT_COMMIT_SHA
+  ? process.env.RAILWAY_GIT_COMMIT_SHA.slice(0, 7)
+  : (() => {
+      try {
+        const pkg = JSON.parse(readFileSync(join(__dirname, '../package.json'), 'utf8'));
+        return `${pkg.version}-${Date.now()}`;
+      } catch {
+        return `unknown-${Date.now()}`;
+      }
+    })();
+
+// Serves a static HTML file with a <meta name="build"> tag injected right before </head>, so
+// view-source on any of these pages also shows what build is live — not just /health. Read fresh
+// per request (these files are small; matches the existing /qrcodes route's pattern of building
+// HTML per-request rather than caching) so it always reflects the file actually on disk.
+function sendHtmlWithBuild(res, filePath) {
+  try {
+    const html = readFileSync(filePath, 'utf8');
+    const injected = html.includes('</head>')
+      ? html.replace('</head>', `  <meta name="build" content="${BUILD}">\n</head>`)
+      : html;
+    res.type('html').send(injected);
+  } catch (err) {
+    console.error('[sendHtmlWithBuild]', err.message);
+    res.sendFile(filePath); // fail safe — the page still loads even if injection breaks
+  }
+}
 
 const roundLei = v => Math.round(Number(v) * 100) / 100;
 
@@ -187,9 +220,12 @@ async function resolveTableByToken(token) {
 app.get('/', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache'); // same as static HTML — deploys go live immediately
   const tbl = await resolveTableByToken(req.query.t);
-  if (tbl === 'error') return res.sendFile(join(__dirname, '../public/index.html'));
-  if (tbl) return res.sendFile(join(__dirname, tbl.menu_published ? '../public/choice.html' : '../public/index.html'));
-  res.sendFile(join(__dirname, '../public/home.html'));
+  if (tbl === 'error') return sendHtmlWithBuild(res, join(__dirname, '../public/index.html'));
+  if (tbl) {
+    if (tbl.menu_published) return res.sendFile(join(__dirname, '../public/choice.html'));
+    return sendHtmlWithBuild(res, join(__dirname, '../public/index.html'));
+  }
+  sendHtmlWithBuild(res, join(__dirname, '../public/home.html'));
 });
 
 // Always the bill, regardless of menu — reached from the choice screen's pay button and from
@@ -197,8 +233,8 @@ app.get('/', async (req, res) => {
 app.get('/bill', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   const tbl = await resolveTableByToken(req.query.t);
-  if (tbl === 'error' || tbl) return res.sendFile(join(__dirname, '../public/index.html'));
-  res.sendFile(join(__dirname, '../public/home.html'));
+  if (tbl === 'error' || tbl) return sendHtmlWithBuild(res, join(__dirname, '../public/index.html'));
+  sendHtmlWithBuild(res, join(__dirname, '../public/home.html'));
 });
 
 // The menu — only reachable when a menu is actually published; falls back to the bill if a
@@ -206,9 +242,21 @@ app.get('/bill', async (req, res) => {
 app.get('/menu', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   const tbl = await resolveTableByToken(req.query.t);
-  if (tbl === 'error') return res.sendFile(join(__dirname, '../public/index.html'));
-  if (tbl) return res.sendFile(join(__dirname, tbl.menu_published ? '../public/menu.html' : '../public/index.html'));
-  res.sendFile(join(__dirname, '../public/home.html'));
+  if (tbl === 'error') return sendHtmlWithBuild(res, join(__dirname, '../public/index.html'));
+  if (tbl) {
+    if (tbl.menu_published) return res.sendFile(join(__dirname, '../public/menu.html'));
+    return sendHtmlWithBuild(res, join(__dirname, '../public/index.html'));
+  }
+  sendHtmlWithBuild(res, join(__dirname, '../public/home.html'));
+});
+
+// /dashboard has no client-side token/auth logic to resolve server-side — it's always the same
+// file, gated by the JWT the page itself asks for after load. Registered before express.static
+// so the build meta gets injected; previously this path only worked via static's extensions
+// fallback (dashboard → dashboard.html), which is preserved as a side effect of matching here.
+app.get(['/dashboard', '/dashboard.html'], (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  sendHtmlWithBuild(res, join(__dirname, '../public/dashboard.html'));
 });
 
 app.use(express.static(join(__dirname, '../public'), {
@@ -1847,10 +1895,11 @@ ${qrs.map(({ n, url, svg }) => `
 // ─── health ───────────────────────────────────────────────────────────────────
 
 app.get('/health', (_, res) => res.json({
-  ok:   true,
-  iiko: IIKO_LIVE,
-  mia:  MIA_MODE, // 'mock' | 'sandbox' | 'production' — no secrets, just which mode is active
-  db:   !!process.env.DATABASE_URL,
+  ok:    true,
+  iiko:  IIKO_LIVE,
+  mia:   MIA_DEFAULT_MODE, // 'off' | 'mock' | 'sandbox' | 'production' — no secrets, just the env-fallback mode
+  db:    !!process.env.DATABASE_URL,
+  build: BUILD,
 }));
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2820,9 +2869,10 @@ async function autoSeedDemoTables() {
 
 httpServer.listen(PORT, async () => {
   console.log(`\n🍽  nota. server running on port ${PORT}`);
+  console.log(`   Build:    ${BUILD}`);
   console.log(`   App URL:  ${APP_URL}`);
   console.log(`   iiko:     ${IIKO_LIVE ? '✅ LIVE' : '⚠️  mock'}`);
-  console.log(`   MIA:      ${MIA_MODE === 'production' ? '✅ LIVE (production)' : MIA_MODE === 'sandbox' ? '🧪 sandbox' : '⚠️  mock'}`);
+  console.log(`   MIA:      ${MIA_DEFAULT_MODE === 'production' ? '✅ LIVE (production)' : MIA_DEFAULT_MODE === 'sandbox' ? '🧪 sandbox' : MIA_DEFAULT_MODE === 'mock' ? '⚠️  mock (misconfigured env)' : '◯ off'}`);
   console.log(`   DB:       ${process.env.DATABASE_URL ? '✅ connected' : '❌ DATABASE_URL missing'}`);
 
   // Release any items that were left claimed by a socket from the previous process
