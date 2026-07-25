@@ -38,6 +38,8 @@ import { register, login, me, requireAuth, verifyJWT } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT } from './members.js';
 import { encryptSecret, decryptSecret } from './secrets.js';
+import multer from 'multer';
+import { processAndStore } from './storage.js';
 
 // Per-restaurant maib credentials, decrypted — or null to force mock (see mia.js doc comment).
 // A restaurant is only ever taken out of demo mode by its own maib_status='active' + stored
@@ -104,6 +106,26 @@ function sendHtmlWithBuild(res, filePath) {
     console.error('[sendHtmlWithBuild]', err.message);
     res.sendFile(filePath); // fail safe — the page still loads even if injection breaks
   }
+}
+
+// Menu photo upload: memory storage (we process with sharp before persisting — no need to touch
+// disk), 8MB input cap, image MIME types only. Multer's own errors (too large / wrong type) are
+// caught by the wrapper below rather than crashing the request.
+const menuImageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!/^image\//.test(file.mimetype)) return cb(new Error('invalid-type'));
+    cb(null, true);
+  },
+});
+function uploadMenuImage(req, res, next) {
+  menuImageUpload.single('photo')(req, res, err => {
+    if (!err) return next();
+    if (err.message === 'invalid-type') return res.status(400).json({ error: 'Fișierul trebuie să fie o imagine (JPEG, PNG sau WebP).' });
+    if (err.code === 'LIMIT_FILE_SIZE') return res.status(400).json({ error: 'Imaginea este prea mare (max 8MB).' });
+    res.status(400).json({ error: 'Fișier invalid.' });
+  });
 }
 
 const roundLei = v => Math.round(Number(v) * 100) / 100;
@@ -241,6 +263,11 @@ app.get('/bill', async (req, res) => {
 // stale /menu link is visited right after the restaurant unpublishes.
 app.get('/menu', async (req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
+  // Dashboard editor's live phone preview — no table token involved at all, menu.html itself
+  // authenticates the actual data request with the owner's own JWT (see /api/dashboard/menu/preview).
+  // Bypassing the token/published check here is safe because it grants nothing by itself — it
+  // only serves the same static shell every guest menu page already is.
+  if (req.query.preview === '1') return res.sendFile(join(__dirname, '../public/menu.html'));
   const tbl = await resolveTableByToken(req.query.t);
   if (tbl === 'error') return sendHtmlWithBuild(res, join(__dirname, '../public/index.html'));
   if (tbl) {
@@ -676,19 +703,80 @@ app.delete('/api/dashboard/offers/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Menu images (upload tenant-scoped; serving is public — guests need to see them) ──────────
+
+app.post('/api/dashboard/menu/images', requireAuth, uploadMenuImage, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nicio imagine primită.' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    const processed = await processAndStore({ buffer: req.file.buffer, restaurantId: rId });
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO menu_images (restaurant_id, mime_type, full_data, thumb_data, full_url, thumb_url, width, height)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [rId, processed.mime_type, processed.full_data, processed.thumb_data, processed.full_url, processed.thumb_url, processed.width, processed.height]
+    );
+    res.json({ id: row.id, url: `/api/images/${row.id}`, thumbUrl: `/api/images/${row.id}/thumb` });
+  } catch (err) {
+    console.error('[menu image upload]', err.message);
+    res.status(400).json({ error: 'Imaginea nu a putut fi procesată. Încearcă alt fișier.' });
+  }
+});
+
+async function serveMenuImage(req, res, variant) {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(404).end();
+  try {
+    const column = variant === 'thumb' ? 'thumb' : 'full'; // fixed internal values only, never user input
+    const { rows: [row] } = await pool.query(
+      `SELECT mime_type, ${column}_data AS data, ${column}_url AS url FROM menu_images WHERE id=$1`, [id]
+    );
+    if (!row) return res.status(404).end();
+    if (row.url) return res.redirect(302, row.url);
+    if (!row.data) return res.status(404).end();
+    res.set('Content-Type', row.mime_type);
+    res.set('Cache-Control', 'public, max-age=31536000, immutable'); // uploads are never mutated in place
+    res.send(row.data);
+  } catch (err) {
+    console.error('[serveMenuImage]', err.message);
+    res.status(500).end();
+  }
+}
+app.get('/api/images/:id', (req, res) => serveMenuImage(req, res, 'full'));
+app.get('/api/images/:id/thumb', (req, res) => serveMenuImage(req, res, 'thumb'));
+
 // ─── Menu (dashboard CRUD, tenant-scoped) ──────────────────────────────────────
+
+const DIETARY_TAGS = ['vegetarian', 'vegan', 'gluten_free', 'spicy'];
+const MENU_STYLES = ['elegant', 'vizual'];
+
+function imageUrls(imageId) {
+  return imageId ? { imageId, url: `/api/images/${imageId}`, thumbUrl: `/api/images/${imageId}/thumb` } : null;
+}
+
+function cleanDietaryTags(input) {
+  if (!Array.isArray(input)) return [];
+  return [...new Set(input.filter(t => DIETARY_TAGS.includes(t)))];
+}
 
 app.get('/api/dashboard/menu', requireAuth, async (req, res) => {
   try {
     const rId = req.restaurant.restaurantId;
     const [{ rows: rest }, { rows: categories }, { rows: items }] = await Promise.all([
-      pool.query(`SELECT menu_published FROM restaurants WHERE id=$1`, [rId]),
+      pool.query(`SELECT menu_published, menu_style FROM restaurants WHERE id=$1`, [rId]),
       pool.query(`SELECT * FROM menu_categories WHERE restaurant_id=$1 ORDER BY sort_order, id`, [rId]),
       pool.query(`SELECT * FROM menu_items WHERE restaurant_id=$1 ORDER BY sort_order, id`, [rId]),
     ]);
-    const byCategory = new Map(categories.map(c => [c.id, { ...c, items: [] }]));
-    for (const it of items) byCategory.get(it.category_id)?.items.push(it);
-    res.json({ published: !!rest[0]?.menu_published, categories: [...byCategory.values()] });
+    const byCategory = new Map(categories.map(c => [c.id, {
+      ...c, heroImage: imageUrls(c.hero_image_id), items: [],
+    }]));
+    for (const it of items) {
+      byCategory.get(it.category_id)?.items.push({ ...it, photo: imageUrls(it.photo_id) });
+    }
+    res.json({
+      published: !!rest[0]?.menu_published,
+      style: rest[0]?.menu_style || 'elegant',
+      categories: [...byCategory.values()],
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -700,34 +788,56 @@ app.post('/api/dashboard/menu/publish', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+app.post('/api/dashboard/menu/style', requireAuth, async (req, res) => {
+  const { style } = req.body || {};
+  if (!MENU_STYLES.includes(style)) return res.status(400).json({ error: 'Invalid style' });
+  try {
+    await pool.query(`UPDATE restaurants SET menu_style=$1 WHERE id=$2`, [style, req.restaurant.restaurantId]);
+    res.json({ ok: true, style });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// Tenant check reused by category/item saves: an image can only be attached if it was uploaded
+// by this same restaurant — prevents referencing another tenant's already-uploaded photo id.
+async function ownsImage(restaurantId, imageId) {
+  if (!imageId) return true;
+  const { rows } = await pool.query(`SELECT 1 FROM menu_images WHERE id=$1 AND restaurant_id=$2`, [imageId, restaurantId]);
+  return rows.length > 0;
+}
+
 app.post('/api/dashboard/menu/categories', requireAuth, async (req, res) => {
-  const { name_ro, name_ru } = req.body;
+  const { name_ro, name_ru, hero_image_id } = req.body;
   if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 120) return res.status(400).json({ error: 'Invalid name_ro' });
   try {
     const rId = req.restaurant.restaurantId;
+    if (!(await ownsImage(rId, hero_image_id))) return res.status(404).json({ error: 'Image not found' });
     const { rows: [row] } = await pool.query(
-      `INSERT INTO menu_categories (restaurant_id, name_ro, name_ru, sort_order)
-       SELECT $1, $2, $3, COALESCE(MAX(sort_order), 0) + 1 FROM menu_categories WHERE restaurant_id=$1
+      `INSERT INTO menu_categories (restaurant_id, name_ro, name_ru, hero_image_id, sort_order)
+       SELECT $1, $2, $3, $4, COALESCE(MAX(sort_order), 0) + 1 FROM menu_categories WHERE restaurant_id=$1
        RETURNING *`,
-      [rId, name_ro.trim(), (name_ru || '').trim() || null]
+      [rId, name_ro.trim(), (name_ru || '').trim() || null, hero_image_id || null]
     );
-    res.json(row);
+    res.json({ ...row, heroImage: imageUrls(row.hero_image_id) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/dashboard/menu/categories/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { name_ro, name_ru, sort_order } = req.body;
+  const { name_ro, name_ru, sort_order, hero_image_id } = req.body;
   if (!id) return res.status(400).json({ error: 'Invalid id' });
   if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 120) return res.status(400).json({ error: 'Invalid name_ro' });
   try {
+    const rId = req.restaurant.restaurantId;
+    if (hero_image_id !== undefined && !(await ownsImage(rId, hero_image_id))) return res.status(404).json({ error: 'Image not found' });
     const { rows: [row] } = await pool.query(
-      `UPDATE menu_categories SET name_ro=$1, name_ru=$2, sort_order=COALESCE($3, sort_order)
-       WHERE id=$4 AND restaurant_id=$5 RETURNING *`,
-      [name_ro.trim(), (name_ru || '').trim() || null, Number.isInteger(sort_order) ? sort_order : null, id, req.restaurant.restaurantId]
+      `UPDATE menu_categories SET name_ro=$1, name_ru=$2, sort_order=COALESCE($3, sort_order),
+              hero_image_id=$4
+       WHERE id=$5 AND restaurant_id=$6 RETURNING *`,
+      [name_ro.trim(), (name_ru || '').trim() || null, Number.isInteger(sort_order) ? sort_order : null,
+       hero_image_id !== undefined ? (hero_image_id || null) : null, id, rId]
     );
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
+    res.json({ ...row, heroImage: imageUrls(row.hero_image_id) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -740,51 +850,86 @@ app.delete('/api/dashboard/menu/categories/:id', requireAuth, async (req, res) =
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-app.post('/api/dashboard/menu/items', requireAuth, async (req, res) => {
-  const { category_id, name_ro, name_ru, description_ro, description_ru, price, available = true, photo_url } = req.body;
-  const catId = parseInt(category_id);
-  if (!catId) return res.status(400).json({ error: 'Invalid category_id' });
-  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 160) return res.status(400).json({ error: 'Invalid name_ro' });
+function validateItemBody(body) {
+  const { category_id, name_ro, price, photo_url } = body;
+  if (!parseInt(category_id)) return 'Invalid category_id';
+  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 160) return 'Invalid name_ro';
   const priceNum = Number(price);
-  if (!Number.isFinite(priceNum) || priceNum <= 0 || priceNum > 100000) return res.status(400).json({ error: 'Invalid price' });
-  if (photo_url && (typeof photo_url !== 'string' || photo_url.length > 1000)) return res.status(400).json({ error: 'Invalid photo_url' });
+  if (!Number.isFinite(priceNum) || priceNum <= 0 || priceNum > 100000) return 'Invalid price';
+  if (photo_url && (typeof photo_url !== 'string' || photo_url.length > 1000)) return 'Invalid photo_url';
+  return null;
+}
+
+app.post('/api/dashboard/menu/items', requireAuth, async (req, res) => {
+  const err0 = validateItemBody(req.body);
+  if (err0) return res.status(400).json({ error: err0 });
+  const { category_id, name_ro, name_ru, description_ro, description_ru, price, available = true,
+          photo_url, photo_id, dietary_tags, is_featured = false } = req.body;
+  const catId = parseInt(category_id);
   try {
     const rId = req.restaurant.restaurantId;
     // Tenant check: the category must belong to this restaurant before we attach an item to it.
     const { rows: [cat] } = await pool.query(`SELECT id FROM menu_categories WHERE id=$1 AND restaurant_id=$2`, [catId, rId]);
     if (!cat) return res.status(404).json({ error: 'Category not found' });
+    if (!(await ownsImage(rId, photo_id))) return res.status(404).json({ error: 'Image not found' });
     const { rows: [row] } = await pool.query(
-      `INSERT INTO menu_items (category_id, restaurant_id, name_ro, name_ru, description_ro, description_ru, price, available, photo_url, sort_order)
-       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, COALESCE(MAX(sort_order), 0) + 1 FROM menu_items WHERE category_id=$1
+      `INSERT INTO menu_items (category_id, restaurant_id, name_ro, name_ru, description_ro, description_ru,
+                                price, available, photo_url, photo_id, dietary_tags, is_featured, sort_order)
+       SELECT $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, COALESCE(MAX(sort_order), 0) + 1
+       FROM menu_items WHERE category_id=$1
        RETURNING *`,
       [catId, rId, name_ro.trim(), (name_ru || '').trim() || null,
        (description_ro || '').trim() || null, (description_ru || '').trim() || null,
-       priceNum, !!available, (photo_url || '').trim() || null]
+       Number(price), !!available, (photo_url || '').trim() || null, photo_id || null,
+       cleanDietaryTags(dietary_tags), !!is_featured]
     );
-    res.json(row);
+    res.json({ ...row, photo: imageUrls(row.photo_id) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 app.put('/api/dashboard/menu/items/:id', requireAuth, async (req, res) => {
   const id = parseInt(req.params.id);
-  const { name_ro, name_ru, description_ro, description_ru, price, available, photo_url, sort_order } = req.body;
   if (!id) return res.status(400).json({ error: 'Invalid id' });
-  if (!name_ro || typeof name_ro !== 'string' || name_ro.length > 160) return res.status(400).json({ error: 'Invalid name_ro' });
-  const priceNum = Number(price);
-  if (!Number.isFinite(priceNum) || priceNum <= 0 || priceNum > 100000) return res.status(400).json({ error: 'Invalid price' });
-  if (photo_url && (typeof photo_url !== 'string' || photo_url.length > 1000)) return res.status(400).json({ error: 'Invalid photo_url' });
+  const err0 = validateItemBody(req.body);
+  if (err0) return res.status(400).json({ error: err0 });
+  const { name_ro, name_ru, description_ro, description_ru, price, available, photo_url, photo_id,
+          dietary_tags, is_featured, sort_order } = req.body;
   try {
+    const rId = req.restaurant.restaurantId;
+    if (!(await ownsImage(rId, photo_id))) return res.status(404).json({ error: 'Image not found' });
     const { rows: [row] } = await pool.query(
       `UPDATE menu_items SET name_ro=$1, name_ru=$2, description_ro=$3, description_ru=$4,
-              price=$5, available=$6, photo_url=$7, sort_order=COALESCE($8, sort_order)
-       WHERE id=$9 AND restaurant_id=$10 RETURNING *`,
+              price=$5, available=$6, photo_url=$7, photo_id=$8, dietary_tags=$9, is_featured=$10,
+              sort_order=COALESCE($11, sort_order)
+       WHERE id=$12 AND restaurant_id=$13 RETURNING *`,
       [name_ro.trim(), (name_ru || '').trim() || null,
        (description_ro || '').trim() || null, (description_ru || '').trim() || null,
-       priceNum, !!available, (photo_url || '').trim() || null,
-       Number.isInteger(sort_order) ? sort_order : null, id, req.restaurant.restaurantId]
+       Number(price), !!available, (photo_url || '').trim() || null, photo_id || null,
+       cleanDietaryTags(dietary_tags), !!is_featured,
+       Number.isInteger(sort_order) ? sort_order : null, id, rId]
     );
     if (!row) return res.status(404).json({ error: 'Not found' });
-    res.json(row);
+    res.json({ ...row, photo: imageUrls(row.photo_id) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.post('/api/dashboard/menu/items/:id/duplicate', requireAuth, async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) return res.status(400).json({ error: 'Invalid id' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO menu_items (category_id, restaurant_id, name_ro, name_ru, description_ro, description_ru,
+                                price, available, photo_url, photo_id, dietary_tags, is_featured, sort_order)
+       SELECT category_id, restaurant_id, name_ro || ' (copie)', name_ru, description_ro, description_ru,
+              price, available, photo_url, photo_id, dietary_tags, is_featured,
+              (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM menu_items WHERE category_id = src.category_id)
+       FROM menu_items src WHERE id=$1 AND restaurant_id=$2
+       RETURNING *`,
+      [id, rId]
+    );
+    if (!row) return res.status(404).json({ error: 'Not found' });
+    res.json({ ...row, photo: imageUrls(row.photo_id) });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -801,6 +946,44 @@ app.delete('/api/dashboard/menu/items/:id', requireAuth, async (req, res) => {
 // No auth — but the only thing a token unlocks is that one table's own restaurant's published
 // menu, exactly like /api/table/by-token/:token already does for the bill. No restaurant_id is
 // ever accepted directly from the client, only resolved from the token server-side.
+// Returns ALL items including unavailable ones (sold-out is shown, not hidden, per the guest UI).
+
+async function buildGuestMenuPayload(restaurantId) {
+  const { rows: [rest] } = await pool.query(`SELECT name, menu_style FROM restaurants WHERE id=$1`, [restaurantId]);
+  const [{ rows: categories }, { rows: items }] = await Promise.all([
+    pool.query(`SELECT id, name_ro, name_ru, hero_image_id FROM menu_categories WHERE restaurant_id=$1 ORDER BY sort_order, id`, [restaurantId]),
+    pool.query(
+      `SELECT category_id, name_ro, name_ru, description_ro, description_ru, price, photo_url, photo_id,
+              dietary_tags, is_featured, available
+       FROM menu_items WHERE restaurant_id=$1 ORDER BY sort_order, id`,
+      [restaurantId]
+    ),
+  ]);
+  const byCategory = new Map(categories.map(c => [c.id, {
+    name_ro: c.name_ro, name_ru: c.name_ru, heroImage: imageUrls(c.hero_image_id), items: [],
+  }]));
+  for (const it of items) {
+    byCategory.get(it.category_id)?.items.push({
+      name_ro: it.name_ro, name_ru: it.name_ru,
+      description_ro: it.description_ro, description_ru: it.description_ru,
+      price: it.price, photo_url: it.photo_url, photo: imageUrls(it.photo_id),
+      dietary_tags: it.dietary_tags || [], is_featured: it.is_featured, available: it.available,
+    });
+  }
+  const nonEmptyCategories = [...byCategory.values()].filter(c => c.items.length > 0);
+  return { restaurantName: rest?.name || 'nota.', style: rest?.menu_style || 'elegant', categories: nonEmptyCategories };
+}
+
+// Owner-only preview: same shape as the public payload, but always current DB state regardless
+// of publish status — powers the live phone-frame preview in the dashboard editor.
+app.get('/api/dashboard/menu/preview', requireAuth, async (req, res) => {
+  try {
+    res.json(await buildGuestMenuPayload(req.restaurant.restaurantId));
+  } catch (err) {
+    console.error('[GET /api/dashboard/menu/preview]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
 
 app.get('/api/menu/by-token/:token', async (req, res) => {
   const token = req.params.token;
@@ -808,24 +991,10 @@ app.get('/api/menu/by-token/:token', async (req, res) => {
   try {
     const { rows: [tbl] } = await pool.query('SELECT restaurant_id FROM tables WHERE token=$1', [token]);
     if (!tbl) return res.status(404).json({ error: 'Masă invalidă' });
-    const { rows: [rest] } = await pool.query(
-      `SELECT name, menu_published FROM restaurants WHERE id=$1`, [tbl.restaurant_id]
-    );
+    const { rows: [rest] } = await pool.query(`SELECT menu_published FROM restaurants WHERE id=$1`, [tbl.restaurant_id]);
     if (!rest?.menu_published) return res.status(404).json({ error: 'Meniul nu este disponibil' });
 
-    const [{ rows: categories }, { rows: items }] = await Promise.all([
-      pool.query(`SELECT id, name_ro, name_ru FROM menu_categories WHERE restaurant_id=$1 ORDER BY sort_order, id`, [tbl.restaurant_id]),
-      pool.query(
-        `SELECT category_id, name_ro, name_ru, description_ro, description_ru, price, photo_url
-         FROM menu_items WHERE restaurant_id=$1 AND available=true ORDER BY sort_order, id`,
-        [tbl.restaurant_id]
-      ),
-    ]);
-    const byCategory = new Map(categories.map(c => [c.id, { name_ro: c.name_ro, name_ru: c.name_ru, items: [] }]));
-    for (const it of items) byCategory.get(it.category_id)?.items.push(it);
-    const nonEmptyCategories = [...byCategory.values()].filter(c => c.items.length > 0);
-
-    res.json({ restaurantName: rest.name, categories: nonEmptyCategories });
+    res.json(await buildGuestMenuPayload(tbl.restaurant_id));
   } catch (err) {
     console.error('[GET /api/menu/by-token]', err);
     res.status(500).json({ error: 'Eroare internă' });

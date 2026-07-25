@@ -309,6 +309,33 @@ async function setup() {
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_status TEXT NOT NULL DEFAULT 'not_started'`);
     } catch { /* already exist */ }
 
+    // ── Premium menu: images, dietary tags, featured items, presentation style ──
+    // menu_images holds either DB-stored bytes (full_data/thumb_data) or, when an S3-compatible
+    // backend is configured, just the public URLs (full_url/thumb_url) — see server/storage.js.
+    // Exactly one of the two pairs is populated per row, decided at upload time by IMAGE_STORAGE.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS menu_images (
+        id            SERIAL       PRIMARY KEY,
+        restaurant_id INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        mime_type     TEXT         NOT NULL,
+        full_data     BYTEA,
+        thumb_data    BYTEA,
+        full_url      TEXT,
+        thumb_url     TEXT,
+        width         INT,
+        height        INT,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+      )
+    `);
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS menu_style TEXT NOT NULL DEFAULT 'elegant'`); // 'elegant' | 'vizual'
+      await client.query(`ALTER TABLE menu_categories ADD COLUMN IF NOT EXISTS hero_image_id INT REFERENCES menu_images(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS photo_id INT REFERENCES menu_images(id) ON DELETE SET NULL`);
+      await client.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS dietary_tags TEXT[] NOT NULL DEFAULT '{}'`); // vegetarian|vegan|gluten_free|spicy
+      await client.query(`ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS is_featured BOOLEAN NOT NULL DEFAULT false`); // "recomandarea casei"
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_menu_images_restaurant ON menu_images(restaurant_id)`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

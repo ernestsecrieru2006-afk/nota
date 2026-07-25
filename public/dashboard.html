@@ -640,6 +640,43 @@ html, body {
 .menu-mini-btn { background: none; border: 1px solid var(--border); color: var(--muted); font-family: inherit; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 6px; cursor: pointer; transition: all .15s; }
 .menu-mini-btn:hover:not(:disabled) { border-color: var(--em-dim); color: var(--em-hi); }
 .menu-mini-btn:disabled { opacity: .3; cursor: default; }
+
+/* Style toggle (Elegant / Vizual) */
+.style-toggle { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2px; }
+.style-opt { background: none; border: none; color: var(--muted); font-family: inherit; font-size: 12px; font-weight: 700; padding: 6px 14px; border-radius: 6px; cursor: pointer; }
+.style-opt.sel { background: var(--em); color: #000; }
+
+/* Photo drop zone */
+.photo-drop { border: 1.5px dashed var(--border2); border-radius: 10px; background: var(--surface);
+  min-height: 90px; display: flex; align-items: center; justify-content: center; cursor: pointer;
+  overflow: hidden; transition: border-color .15s; }
+.photo-drop:hover, .photo-drop.dragover { border-color: var(--em-dim); }
+.photo-drop-empty { font-size: 12px; color: var(--muted); text-align: center; padding: 14px; }
+.photo-drop-preview { width: 100%; max-height: 160px; object-fit: cover; display: block; }
+
+/* Dietary tag checkboxes in the item form */
+.diet-tag-check { display: flex; gap: 14px; flex-wrap: wrap; }
+.diet-tag-check label { display: flex; align-items: center; gap: 6px; font-size: 12.5px; cursor: pointer; color: var(--text2); }
+
+/* Item card thumbnail + tags in the category list */
+.mi-list-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--surface); }
+.mi-list-tags { display: flex; gap: 3px; margin-top: 3px; }
+.mi-featured-badge { font-size: 10px; font-weight: 700; color: var(--amber-hi); background: rgba(217,119,6,.12); border: 1px solid rgba(217,119,6,.3); border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
+
+/* Editor + live preview two-column layout */
+.menu-editor-layout { display: flex; gap: 28px; align-items: flex-start; margin-top: 16px; }
+.menu-editor-col { flex: 1; min-width: 0; }
+.menu-preview-col { flex-shrink: 0; width: 300px; }
+.menu-preview-sticky { position: sticky; top: 20px; }
+.menu-preview-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin-bottom: 10px; text-align: center; }
+.phone-frame { background: #111; border-radius: 34px; padding: 10px; box-shadow: var(--shd); }
+.phone-frame iframe { width: 100%; height: 560px; border: none; border-radius: 22px; background: #f8f9fa; display: block; }
+@media (max-width: 1100px) {
+  .menu-editor-layout { flex-direction: column; }
+  .menu-preview-col { width: 100%; }
+  .menu-preview-sticky { position: static; }
+  .phone-frame { max-width: 300px; margin: 0 auto; }
+}
 .offers-empty { padding: 32px; text-align: center; color: var(--muted); font-size: 13px; }
 /* Offer form */
 .offer-form-panel { background: var(--card); border: 1px solid var(--em-dim); border-radius: var(--rl); padding: 20px; margin-bottom: 20px; }
@@ -1123,6 +1160,10 @@ html, body {
             <div style="font-size:12px;color:var(--muted)">Meniul restaurantului, afișat în codul QR de pe masă</div>
           </div>
           <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+            <div class="style-toggle" id="style-toggle">
+              <button class="style-opt" data-style="elegant">Elegant</button>
+              <button class="style-opt" data-style="vizual">Vizual</button>
+            </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer">
               <input type="checkbox" id="menu-publish-toggle" style="accent-color:var(--em)">
               <span id="menu-publish-lbl">Meniu ascuns</span>
@@ -1131,10 +1172,14 @@ html, body {
           </div>
         </div>
 
+        <div class="menu-editor-layout">
+        <div class="menu-editor-col">
+
         <!-- Category form (hidden) -->
         <div class="offer-form-panel" id="cat-form-panel" style="display:none">
           <div class="offer-form-title" id="cat-form-title">Categorie nouă</div>
           <input type="hidden" id="cat-edit-id">
+          <input type="hidden" id="cat-hero-image-id">
           <div class="offer-form-grid">
             <div class="offer-field">
               <label>Nume (RO)</label>
@@ -1144,6 +1189,14 @@ html, body {
               <label>Nume (RU) — opțional</label>
               <input type="text" id="cat-name-ru" placeholder="ex: Основные блюда">
             </div>
+          </div>
+          <div class="offer-field" style="margin-bottom:16px">
+            <label>Imagine hero — opțional, doar în modul Elegant</label>
+            <div class="photo-drop" id="cat-hero-drop" tabindex="0">
+              <div class="photo-drop-empty" id="cat-hero-empty">📷 Trage o poză aici sau apasă pentru a încărca</div>
+              <img class="photo-drop-preview" id="cat-hero-preview" style="display:none">
+            </div>
+            <input type="file" accept="image/*" id="cat-hero-file" style="display:none">
           </div>
           <div class="offer-form-actions">
             <button class="btn-save-offer" id="btn-save-category">Salvează categoria</button>
@@ -1156,6 +1209,7 @@ html, body {
           <div class="offer-form-title" id="item-form-title">Fel nou</div>
           <input type="hidden" id="item-edit-id">
           <input type="hidden" id="item-category-id">
+          <input type="hidden" id="item-photo-id">
           <div class="offer-form-grid">
             <div class="offer-field">
               <label>Nume (RO)</label>
@@ -1170,9 +1224,17 @@ html, body {
               <input type="number" id="item-price" min="0.01" step="0.01" placeholder="185">
             </div>
             <div class="offer-field">
-              <label>Foto URL — opțional</label>
+              <label>Foto URL — alternativă la încărcare</label>
               <input type="text" id="item-photo" placeholder="https://...">
             </div>
+          </div>
+          <div class="offer-field" style="margin-bottom:16px">
+            <label>Poză fel — opțional</label>
+            <div class="photo-drop" id="item-photo-drop" tabindex="0">
+              <div class="photo-drop-empty" id="item-photo-empty">📷 Trage o poză aici sau apasă pentru a încărca</div>
+              <img class="photo-drop-preview" id="item-photo-preview" style="display:none">
+            </div>
+            <input type="file" accept="image/*" id="item-photo-file" style="display:none">
           </div>
           <div class="offer-field" style="margin-bottom:10px">
             <label>Descriere RO — opțional</label>
@@ -1182,10 +1244,23 @@ html, body {
             <label>Descriere RU — opțional</label>
             <input type="text" id="item-desc-ru">
           </div>
-          <div style="margin-bottom:16px">
+          <div class="offer-field" style="margin-bottom:16px">
+            <label>Etichete dietetice — opțional</label>
+            <div class="diet-tag-check" id="item-diet-tags">
+              <label><input type="checkbox" value="vegetarian"> 🌱 Vegetarian</label>
+              <label><input type="checkbox" value="vegan"> 🌿 Vegan</label>
+              <label><input type="checkbox" value="gluten_free"> 🌾 Fără gluten</label>
+              <label><input type="checkbox" value="spicy"> 🌶 Picant</label>
+            </div>
+          </div>
+          <div style="display:flex;gap:22px;flex-wrap:wrap;margin-bottom:16px">
             <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
               <input type="checkbox" id="item-available" checked style="accent-color:var(--em)">
               Disponibil
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+              <input type="checkbox" id="item-featured" style="accent-color:var(--amber)">
+              ✦ Recomandarea casei
             </label>
           </div>
           <div class="offer-form-actions">
@@ -1195,6 +1270,19 @@ html, body {
         </div>
 
         <div id="menu-categories-list"></div>
+
+        </div>
+        <!-- Live phone-frame preview — reflects current saved state (see loadMenu()/save
+             handlers, all of which call refreshMenuPreview() after a successful save). -->
+        <div class="menu-preview-col">
+          <div class="menu-preview-sticky">
+            <div class="menu-preview-label">Previzualizare live</div>
+            <div class="phone-frame">
+              <iframe id="menu-preview-frame" src="about:blank" title="Previzualizare meniu"></iframe>
+            </div>
+          </div>
+        </div>
+        </div>
       </div>
 
       <!-- ── Feedback & Reviews ────────────────────────────────────────── -->
@@ -2730,20 +2818,34 @@ document.getElementById('ce-card-shortcut')?.addEventListener('click', () => {
 });
 
 // ── Meniu ─────────────────────────────────────────────────────────────────────
-let menuState = { published: false, categories: [] };
+let menuState = { published: false, style: 'elegant', categories: [] };
 
 async function loadMenu() {
   try {
     menuState = await api('/api/dashboard/menu');
     document.getElementById('menu-publish-toggle').checked = menuState.published;
     updateMenuPublishLabel();
+    updateStyleToggle();
     renderMenu();
+    refreshMenuPreview();
   } catch (err) { console.error('[menu]', err); }
+}
+
+// The preview iframe is same-origin (/menu?preview=1), so it reads the owner's own JWT straight
+// out of localStorage — no postMessage plumbing needed. Called after every save so "live" means
+// what it says; a cache-busting query param forces a real reload rather than a no-op same-URL nav.
+function refreshMenuPreview() {
+  const frame = document.getElementById('menu-preview-frame');
+  frame.src = `/menu?preview=1&_=${Date.now()}`;
 }
 
 function updateMenuPublishLabel() {
   document.getElementById('menu-publish-lbl').textContent = menuState.published
     ? 'Meniu publicat (vizibil oaspeților)' : 'Meniu ascuns';
+}
+
+function updateStyleToggle() {
+  document.querySelectorAll('.style-opt').forEach(b => b.classList.toggle('sel', b.dataset.style === (menuState.style || 'elegant')));
 }
 
 function findCategory(id) { return menuState.categories.find(c => c.id === id); }
@@ -2755,6 +2857,8 @@ function findItem(id) {
   return null;
 }
 
+const DIET_LABELS = { vegetarian: '🌱', vegan: '🌿', gluten_free: '🌾', spicy: '🌶' };
+
 function renderMenu() {
   const list = document.getElementById('menu-categories-list');
   if (!menuState.categories.length) {
@@ -2764,7 +2868,10 @@ function renderMenu() {
   list.innerHTML = menuState.categories.map((c, ci) => `
     <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 18px;margin-bottom:14px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;flex-wrap:wrap">
-        <div style="font-weight:700;font-size:14px">${esc(c.name_ro)}${c.name_ru ? ` <span style="color:var(--muted);font-weight:400">/ ${esc(c.name_ru)}</span>` : ''}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${c.heroImage ? `<img class="mi-list-thumb" src="${c.heroImage.thumbUrl}" alt="">` : ''}
+          <div style="font-weight:700;font-size:14px">${esc(c.name_ro)}${c.name_ru ? ` <span style="color:var(--muted);font-weight:400">/ ${esc(c.name_ru)}</span>` : ''}</div>
+        </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
           <button class="menu-mini-btn" data-cat-up="${c.id}" ${ci === 0 ? 'disabled' : ''}>↑</button>
           <button class="menu-mini-btn" data-cat-down="${c.id}" ${ci === menuState.categories.length - 1 ? 'disabled' : ''}>↓</button>
@@ -2775,9 +2882,13 @@ function renderMenu() {
       </div>
       ${c.items.length ? c.items.map((it, ii) => `
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-top:1px solid var(--border);flex-wrap:wrap">
+          ${it.photo ? `<img class="mi-list-thumb" src="${it.photo.thumbUrl}" alt="">` : ''}
           <div style="flex:1;min-width:120px">
-            <div style="font-size:13px;font-weight:600;${it.available ? '' : 'color:var(--muted);text-decoration:line-through'}">${esc(it.name_ro)}</div>
+            <div style="font-size:13px;font-weight:600;${it.available ? '' : 'color:var(--muted);text-decoration:line-through'}">
+              ${esc(it.name_ro)}${it.is_featured ? '<span class="mi-featured-badge">✦ recomandare</span>' : ''}
+            </div>
             ${it.description_ro ? `<div style="font-size:11.5px;color:var(--muted)">${esc(it.description_ro)}</div>` : ''}
+            ${(it.dietary_tags || []).length ? `<div class="mi-list-tags">${it.dietary_tags.map(tg => `<span title="${tg}">${DIET_LABELS[tg] || ''}</span>`).join('')}</div>` : ''}
           </div>
           <div style="font-size:13px;font-weight:700;white-space:nowrap">${Number(it.price).toFixed(0)} lei</div>
           <div style="display:flex;gap:5px;align-items:center;flex-shrink:0">
@@ -2787,6 +2898,7 @@ function renderMenu() {
             <button class="menu-mini-btn" data-item-up="${it.id}" ${ii === 0 ? 'disabled' : ''}>↑</button>
             <button class="menu-mini-btn" data-item-down="${it.id}" ${ii === c.items.length - 1 ? 'disabled' : ''}>↓</button>
             <button class="menu-mini-btn" data-item-edit="${it.id}">Edit</button>
+            <button class="menu-mini-btn" data-item-dup="${it.id}">Duplică</button>
             <button class="menu-mini-btn" data-item-del="${it.id}">×</button>
           </div>
         </div>
@@ -2795,11 +2907,70 @@ function renderMenu() {
   `).join('');
 }
 
+// ── Photo upload (shared by category hero + item photo dropzones) ──────────────
+async function uploadPhoto(file, { hiddenId, previewId, emptyId }) {
+  if (!file.type.startsWith('image/')) return toast('Fișierul trebuie să fie o imagine.');
+  const form = new FormData();
+  form.append('photo', file);
+  const emptyEl = document.getElementById(emptyId);
+  const originalText = emptyEl.textContent;
+  emptyEl.textContent = 'Se încarcă…';
+  try {
+    const res = await fetch('/api/dashboard/menu/images', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { toast('Eroare: ' + (data.error || 'upload eșuat')); emptyEl.textContent = originalText; return; }
+    document.getElementById(hiddenId).value = data.id;
+    const previewEl = document.getElementById(previewId);
+    previewEl.src = data.thumbUrl;
+    previewEl.style.display = '';
+    emptyEl.style.display = 'none';
+  } catch {
+    toast('Eroare la încărcarea imaginii.');
+    emptyEl.textContent = originalText;
+  }
+}
+
+function wireDropzone(dropId, fileId, hiddenId, previewId, emptyId) {
+  const drop = document.getElementById(dropId);
+  const fileInp = document.getElementById(fileId);
+  drop.addEventListener('click', () => fileInp.click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInp.click(); });
+  fileInp.addEventListener('change', () => { if (fileInp.files[0]) uploadPhoto(fileInp.files[0], { hiddenId, previewId, emptyId }); });
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('dragover'));
+  drop.addEventListener('drop', e => {
+    e.preventDefault();
+    drop.classList.remove('dragover');
+    const file = e.dataTransfer.files?.[0];
+    if (file) uploadPhoto(file, { hiddenId, previewId, emptyId });
+  });
+}
+wireDropzone('cat-hero-drop', 'cat-hero-file', 'cat-hero-image-id', 'cat-hero-preview', 'cat-hero-empty');
+wireDropzone('item-photo-drop', 'item-photo-file', 'item-photo-id', 'item-photo-preview', 'item-photo-empty');
+
+function resetDropzone(previewId, emptyId, existingThumbUrl) {
+  const previewEl = document.getElementById(previewId);
+  const emptyEl = document.getElementById(emptyId);
+  if (existingThumbUrl) {
+    previewEl.src = existingThumbUrl;
+    previewEl.style.display = '';
+    emptyEl.style.display = 'none';
+  } else {
+    previewEl.style.display = 'none';
+    emptyEl.style.display = '';
+    emptyEl.textContent = '📷 Trage o poză aici sau apasă pentru a încărca';
+  }
+}
+
 function showCategoryForm(cat) {
   document.getElementById('cat-form-title').textContent = cat ? 'Editează categoria' : 'Categorie nouă';
   document.getElementById('cat-edit-id').value = cat ? cat.id : '';
   document.getElementById('cat-name-ro').value = cat ? cat.name_ro : '';
   document.getElementById('cat-name-ru').value = cat ? (cat.name_ru || '') : '';
+  document.getElementById('cat-hero-image-id').value = cat?.hero_image_id || '';
+  resetDropzone('cat-hero-preview', 'cat-hero-empty', cat?.heroImage?.thumbUrl);
   document.getElementById('item-form-panel').style.display = 'none';
   document.getElementById('cat-form-panel').style.display = '';
   document.getElementById('cat-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -2810,11 +2981,12 @@ async function saveCategory() {
   const id = document.getElementById('cat-edit-id').value;
   const name_ro = document.getElementById('cat-name-ro').value.trim();
   const name_ru = document.getElementById('cat-name-ru').value.trim();
+  const hero_image_id = Number(document.getElementById('cat-hero-image-id').value) || null;
   if (!name_ro) return toast('Introdu o denumire pentru categorie.');
   try {
     const res = id
-      ? await apiMut('PUT', `/api/dashboard/menu/categories/${id}`, { name_ro, name_ru })
-      : await apiMut('POST', '/api/dashboard/menu/categories', { name_ro, name_ru });
+      ? await apiMut('PUT', `/api/dashboard/menu/categories/${id}`, { name_ro, name_ru, hero_image_id })
+      : await apiMut('POST', '/api/dashboard/menu/categories', { name_ro, name_ru, hero_image_id });
     if (res.error) return toast('Eroare: ' + res.error);
     hideCategoryForm();
     await loadMenu();
@@ -2837,8 +3009,8 @@ async function moveCategory(id, dir) {
   if (idx < 0 || swapIdx < 0 || swapIdx >= menuState.categories.length) return;
   const a = menuState.categories[idx], b = menuState.categories[swapIdx];
   await Promise.all([
-    apiMut('PUT', `/api/dashboard/menu/categories/${a.id}`, { name_ro: a.name_ro, name_ru: a.name_ru, sort_order: b.sort_order }),
-    apiMut('PUT', `/api/dashboard/menu/categories/${b.id}`, { name_ro: b.name_ro, name_ru: b.name_ru, sort_order: a.sort_order }),
+    apiMut('PUT', `/api/dashboard/menu/categories/${a.id}`, { name_ro: a.name_ro, name_ru: a.name_ru, hero_image_id: a.hero_image_id, sort_order: b.sort_order }),
+    apiMut('PUT', `/api/dashboard/menu/categories/${b.id}`, { name_ro: b.name_ro, name_ru: b.name_ru, hero_image_id: b.hero_image_id, sort_order: a.sort_order }),
   ]);
   await loadMenu();
 }
@@ -2851,14 +3023,23 @@ function showItemForm(categoryId, item) {
   document.getElementById('item-name-ru').value = item ? (item.name_ru || '') : '';
   document.getElementById('item-price').value = item ? item.price : '';
   document.getElementById('item-photo').value = item ? (item.photo_url || '') : '';
+  document.getElementById('item-photo-id').value = item?.photo_id || '';
+  resetDropzone('item-photo-preview', 'item-photo-empty', item?.photo?.thumbUrl);
   document.getElementById('item-desc-ro').value = item ? (item.description_ro || '') : '';
   document.getElementById('item-desc-ru').value = item ? (item.description_ru || '') : '';
   document.getElementById('item-available').checked = item ? !!item.available : true;
+  document.getElementById('item-featured').checked = item ? !!item.is_featured : false;
+  const activeTags = new Set(item?.dietary_tags || []);
+  document.querySelectorAll('#item-diet-tags input[type=checkbox]').forEach(cb => { cb.checked = activeTags.has(cb.value); });
   document.getElementById('cat-form-panel').style.display = 'none';
   document.getElementById('item-form-panel').style.display = '';
   document.getElementById('item-form-panel').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 function hideItemForm() { document.getElementById('item-form-panel').style.display = 'none'; }
+
+function currentDietTags() {
+  return [...document.querySelectorAll('#item-diet-tags input[type=checkbox]:checked')].map(cb => cb.value);
+}
 
 async function saveItem() {
   const id = document.getElementById('item-edit-id').value;
@@ -2867,12 +3048,15 @@ async function saveItem() {
   const name_ru = document.getElementById('item-name-ru').value.trim();
   const price = Number(document.getElementById('item-price').value);
   const photo_url = document.getElementById('item-photo').value.trim();
+  const photo_id = Number(document.getElementById('item-photo-id').value) || null;
   const description_ro = document.getElementById('item-desc-ro').value.trim();
   const description_ru = document.getElementById('item-desc-ru').value.trim();
   const available = document.getElementById('item-available').checked;
+  const is_featured = document.getElementById('item-featured').checked;
+  const dietary_tags = currentDietTags();
   if (!name_ro) return toast('Introdu o denumire pentru fel.');
   if (!price || price <= 0) return toast('Introdu un preț valid.');
-  const body = { category_id, name_ro, name_ru, description_ro, description_ru, price, available, photo_url };
+  const body = { category_id, name_ro, name_ru, description_ro, description_ru, price, available, photo_url, photo_id, dietary_tags, is_featured };
   try {
     const res = id
       ? await apiMut('PUT', `/api/dashboard/menu/items/${id}`, body)
@@ -2893,6 +3077,27 @@ async function deleteItem(id) {
   } catch { toast('Eroare la ștergere.'); }
 }
 
+async function duplicateItem(id) {
+  try {
+    const res = await apiMut('POST', `/api/dashboard/menu/items/${id}/duplicate`, {});
+    if (res.error) return toast('Eroare: ' + res.error);
+    await loadMenu();
+    toast('Fel duplicat.', 'success');
+  } catch { toast('Eroare la duplicare.'); }
+}
+
+// Full body preserved on every re-save (move/toggle) — dropping photo_id/dietary_tags/is_featured
+// here would silently erase them, since PUT replaces the whole row.
+function itemFullBody(it, overrides = {}) {
+  return {
+    category_id: it.category_id, name_ro: it.name_ro, name_ru: it.name_ru,
+    description_ro: it.description_ro, description_ru: it.description_ru,
+    price: it.price, available: it.available, photo_url: it.photo_url, photo_id: it.photo_id,
+    dietary_tags: it.dietary_tags || [], is_featured: it.is_featured,
+    ...overrides,
+  };
+}
+
 async function moveItem(id, dir) {
   const found = findItem(id);
   if (!found) return;
@@ -2901,11 +3106,10 @@ async function moveItem(id, dir) {
   const swapIdx = idx + dir;
   if (swapIdx < 0 || swapIdx >= category.items.length) return;
   const a = category.items[idx], b = category.items[swapIdx];
-  const putItem = (it, sortOrder) => apiMut('PUT', `/api/dashboard/menu/items/${it.id}`, {
-    name_ro: it.name_ro, name_ru: it.name_ru, description_ro: it.description_ro, description_ru: it.description_ru,
-    price: it.price, available: it.available, photo_url: it.photo_url, sort_order: sortOrder,
-  });
-  await Promise.all([putItem(a, b.sort_order), putItem(b, a.sort_order)]);
+  await Promise.all([
+    apiMut('PUT', `/api/dashboard/menu/items/${a.id}`, itemFullBody(a, { sort_order: b.sort_order })),
+    apiMut('PUT', `/api/dashboard/menu/items/${b.id}`, itemFullBody(b, { sort_order: a.sort_order })),
+  ]);
   await loadMenu();
 }
 
@@ -2913,12 +3117,10 @@ async function toggleItemAvailable(id, available) {
   const found = findItem(id);
   if (!found) return;
   const it = found.item;
-  await apiMut('PUT', `/api/dashboard/menu/items/${id}`, {
-    name_ro: it.name_ro, name_ru: it.name_ru, description_ro: it.description_ro, description_ru: it.description_ru,
-    price: it.price, available, photo_url: it.photo_url,
-  });
+  await apiMut('PUT', `/api/dashboard/menu/items/${id}`, itemFullBody(it, { available }));
   it.available = available; // optimistic local update — avoids a full reload flicker
   renderMenu();
+  refreshMenuPreview();
 }
 
 async function toggleMenuPublish(published) {
@@ -2929,6 +3131,21 @@ async function toggleMenuPublish(published) {
     toast(published ? 'Meniu publicat — vizibil acum oaspeților.' : 'Meniu ascuns.', 'success');
   } catch { toast('Eroare la salvare.'); }
 }
+
+async function setMenuStyle(style) {
+  try {
+    await apiMut('POST', '/api/dashboard/menu/style', { style });
+    menuState.style = style;
+    updateStyleToggle();
+    refreshMenuPreview();
+    toast(`Stil: ${style === 'vizual' ? 'Vizual' : 'Elegant'}`, 'success');
+  } catch { toast('Eroare la salvare.'); }
+}
+
+document.getElementById('style-toggle').addEventListener('click', e => {
+  const btn = e.target.closest('.style-opt');
+  if (btn) setMenuStyle(btn.dataset.style);
+});
 
 document.getElementById('menu-section').addEventListener('click', e => {
   if (e.target.closest('#btn-add-category')) { showCategoryForm(null); return; }
@@ -2952,6 +3169,8 @@ document.getElementById('menu-section').addEventListener('click', e => {
     if (found) showItemForm(found.category.id, found.item);
     return;
   }
+  const itemDup = e.target.closest('[data-item-dup]');
+  if (itemDup) { duplicateItem(Number(itemDup.dataset.itemDup)); return; }
   const itemDel = e.target.closest('[data-item-del]');
   if (itemDel) { deleteItem(Number(itemDel.dataset.itemDel)); return; }
   const itemUp = e.target.closest('[data-item-up]');

@@ -16,41 +16,90 @@
   --radius: 0.75rem; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
 }
 html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: var(--bg);
-  color: var(--on-surface); -webkit-font-smoothing: antialiased; }
-.col { max-width: 560px; margin: 0 auto; padding: 0 16px calc(96px + var(--safe-b)); }
+  color: var(--on-surface); -webkit-font-smoothing: antialiased; font-size: 15px; line-height: 1.5; }
+.col { max-width: 600px; margin: 0 auto; padding: 0 16px calc(100px + var(--safe-b)); }
 
-#hdr { position: sticky; top: 0; z-index: 100; background: rgba(248,249,250,0.94);
+#hdr { position: sticky; top: 0; z-index: 100; background: rgba(248,249,250,0.96);
   backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-  border-bottom: 1px solid rgba(197,160,89,0.22); padding: calc(12px + var(--safe-t)) 16px 10px; }
-.hdr-inner { max-width: 560px; margin: 0 auto; display: flex; align-items: center; gap: 10px; }
-.hdr-title { font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700; color: var(--primary); flex: 1; min-width: 0;
+  border-bottom: 1px solid rgba(197,160,89,0.22); padding: calc(12px + var(--safe-t)) 16px 0; }
+.hdr-inner { max-width: 600px; margin: 0 auto; display: flex; align-items: center; gap: 10px; padding-bottom: 10px; }
+.hdr-title { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; color: var(--primary); flex: 1; min-width: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lang-toggle { background: rgba(197,160,89,0.12); border: 1px solid rgba(197,160,89,0.3); border-radius: 6px;
-  padding: 5px 10px; font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700;
-  color: var(--secondary); cursor: pointer; letter-spacing: 0.1em; }
+.lang-toggle { min-height: 36px; background: rgba(197,160,89,0.12); border: 1px solid rgba(197,160,89,0.3); border-radius: 8px;
+  padding: 8px 12px; font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 700;
+  color: var(--secondary); cursor: pointer; letter-spacing: 0.08em; }
 
-#cat-nav { display: flex; gap: 8px; overflow-x: auto; padding: 14px 16px 4px; scrollbar-width: none; }
+/* Search */
+#search-row { max-width: 600px; margin: 0 auto; padding-bottom: 10px; }
+#search-inp { width: 100%; min-height: 44px; background: #fff; border: 1px solid rgba(197,160,89,0.28);
+  border-radius: 999px; padding: 10px 16px; font-family: 'Manrope', sans-serif; font-size: 14px;
+  color: var(--on-surface); outline: none; }
+#search-inp:focus { border-color: var(--brass); }
+#search-inp::placeholder { color: var(--outline); }
+
+/* Dietary filter chips */
+#diet-filters { max-width: 600px; margin: 0 auto; display: flex; gap: 7px; overflow-x: auto; padding-bottom: 10px; scrollbar-width: none; }
+#diet-filters::-webkit-scrollbar { display: none; }
+.diet-chip { flex-shrink: 0; min-height: 34px; display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px; border-radius: 999px; border: 1px solid rgba(197,160,89,0.28); background: #fff;
+  font-family: 'Manrope', sans-serif; font-size: 12px; font-weight: 600; color: var(--on-sv); cursor: pointer; white-space: nowrap; }
+.diet-chip.sel { background: var(--primary); color: #fff; border-color: var(--primary); }
+
+/* Category nav */
+#cat-nav { max-width: 600px; margin: 0 auto; display: flex; gap: 8px; overflow-x: auto; padding: 0 0 12px; scrollbar-width: none; }
 #cat-nav::-webkit-scrollbar { display: none; }
-.cat-tab { flex-shrink: 0; padding: 7px 14px; border-radius: 999px; border: 1px solid rgba(197,160,89,0.3);
-  background: #fff; font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600;
-  color: var(--secondary); cursor: pointer; white-space: nowrap; }
+.cat-tab { flex-shrink: 0; min-height: 38px; padding: 8px 16px; border-radius: 999px; border: 1px solid rgba(197,160,89,0.3);
+  background: #fff; font-family: 'Manrope', sans-serif; font-size: 13px; font-weight: 600;
+  color: var(--secondary); cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
 .cat-tab.sel { background: var(--primary); color: #fff; border-color: var(--primary); }
 
-.cat-section { padding-top: 22px; scroll-margin-top: 100px; }
-.cat-title { font-family: 'Playfair Display', serif; font-size: 19px; font-weight: 700; color: var(--primary); margin-bottom: 10px; }
-.menu-item { display: flex; justify-content: space-between; gap: 14px; padding: 12px 0;
-  border-bottom: 1px solid rgba(197,160,89,0.16); }
-.mi-name { font-weight: 700; font-size: 14.5px; color: var(--on-surface); }
-.mi-desc { font-size: 12.5px; color: var(--on-sv); margin-top: 3px; line-height: 1.4; }
-.mi-price { font-weight: 700; font-size: 14px; color: var(--primary); white-space: nowrap; flex-shrink: 0; }
+.cat-section { padding-top: 28px; scroll-margin-top: 190px; }
+.cat-section:first-child { padding-top: 18px; }
+.cat-title { font-family: 'Playfair Display', serif; font-size: 21px; font-weight: 700; color: var(--primary); margin-bottom: 14px; }
 
-.empty-msg { color: var(--outline); font-size: 13.5px; text-align: center; padding: 40px 16px; }
+/* Category hero image — Elegant mode only, one per category, full-bleed */
+.cat-hero { width: 100%; aspect-ratio: 16/7; border-radius: var(--radius); overflow: hidden; margin-bottom: 16px; background: #e9e4da; }
+.cat-hero img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* ── Elegant: editorial list, no per-dish photo grid ─────────────────────── */
+.mi-row { display: flex; justify-content: space-between; gap: 16px; padding: 14px 0;
+  border-bottom: 1px solid rgba(197,160,89,0.16); min-height: 44px; }
+.mi-row.unavailable { opacity: 0.5; }
+.mi-name-line { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.mi-name { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 16px; color: var(--on-surface); }
+.mi-desc { font-size: 13px; color: var(--on-sv); margin-top: 4px; line-height: 1.55; }
+.mi-price { font-weight: 700; font-size: 15px; color: var(--primary); white-space: nowrap; flex-shrink: 0; }
+.mi-tags { display: flex; gap: 4px; margin-top: 6px; }
+
+/* ── Vizual: photo-forward cards ─────────────────────────────────────────── */
+.grid-vizual { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (min-width: 420px) { .grid-vizual { grid-template-columns: 1fr 1fr; } }
+.mi-card { background: #fff; border: 1px solid rgba(197,160,89,0.18); border-radius: var(--radius); overflow: hidden; position: relative; }
+.mi-card.unavailable { opacity: 0.55; }
+.mi-card-img { width: 100%; aspect-ratio: 1/1; background: #e9e4da; position: relative; overflow: hidden; }
+.mi-card-img img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.mi-card-img.placeholder { display: flex; align-items: center; justify-content: center; font-size: 28px; color: rgba(0,51,60,0.2); }
+.mi-card-body { padding: 10px 12px 12px; }
+.mi-card .mi-name { font-size: 14px; }
+.mi-card .mi-desc { font-size: 12px; -webkit-line-clamp: 2; display: -webkit-box; -webkit-box-orient: vertical; overflow: hidden; }
+.mi-card .mi-price { display: block; margin-top: 6px; font-size: 14px; }
+.mi-card .mi-tags { margin-top: 6px; }
+
+.soldout-pill { display: inline-flex; align-items: center; font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .04em; color: #a33; background: rgba(170,51,51,0.1); border: 1px solid rgba(170,51,51,0.25);
+  border-radius: 5px; padding: 2px 7px; white-space: nowrap; }
+.featured-pill { display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; font-weight: 700;
+  color: var(--secondary); background: rgba(197,160,89,0.14); border: 1px solid rgba(197,160,89,0.35);
+  border-radius: 5px; padding: 2px 7px; white-space: nowrap; }
+.diet-tag { font-size: 13px; line-height: 1; }
+
+.empty-msg { color: var(--outline); font-size: 14px; text-align: center; padding: 48px 16px; line-height: 1.6; }
 
 #pay-bar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
   padding: 10px 16px calc(14px + var(--safe-b));
   background: linear-gradient(to top, var(--bg) 60%, rgba(248,249,250,0)); }
-.pay-bar-inner { max-width: 560px; margin: 0 auto; }
-.btn-pay { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+.pay-bar-inner { max-width: 600px; margin: 0 auto; }
+.btn-pay { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 50px;
   padding: 15px 20px; background: var(--primary); color: #fff; border: none; border-radius: var(--radius);
   font-family: 'Manrope', sans-serif; font-size: 15px; font-weight: 700; text-decoration: none;
   box-shadow: 0 10px 24px rgba(0,51,60,0.22); }
@@ -62,6 +111,15 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   <div class="hdr-inner">
     <div class="hdr-title" id="rname">nota.</div>
     <button class="lang-toggle" id="lang-btn">RU</button>
+  </div>
+  <div id="search-row">
+    <input type="search" id="search-inp" data-i18n-ph="search_ph" placeholder="Caută în meniu…">
+  </div>
+  <div id="diet-filters">
+    <button class="diet-chip" data-tag="vegetarian">🌱 <span data-i18n="tag_vegetarian">Vegetarian</span></button>
+    <button class="diet-chip" data-tag="vegan">🌿 <span data-i18n="tag_vegan">Vegan</span></button>
+    <button class="diet-chip" data-tag="gluten_free">🌾 <span data-i18n="tag_gluten_free">Fără gluten</span></button>
+    <button class="diet-chip" data-tag="spicy">🌶 <span data-i18n="tag_spicy">Picant</span></button>
   </div>
   <nav id="cat-nav"></nav>
 </header>
@@ -78,57 +136,181 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
 
 <script>
   const TRANS = {
-    ro: { pay_bill: 'Plătește nota', empty: 'Meniul nu este încă disponibil.', loading: 'Se încarcă meniul…' },
-    ru: { pay_bill: 'Оплатить счёт', empty: 'Меню пока недоступно.', loading: 'Загружаем меню…' },
+    ro: {
+      pay_bill: 'Plătește nota', empty: 'Meniul nu este încă disponibil.', loading: 'Se încarcă meniul…',
+      no_results: 'Niciun fel nu corespunde căutării.', search_ph: 'Caută în meniu…',
+      tag_vegetarian: 'Vegetarian', tag_vegan: 'Vegan', tag_gluten_free: 'Fără gluten', tag_spicy: 'Picant',
+      soldout: 'Indisponibil', featured: 'Recomandarea casei',
+    },
+    ru: {
+      pay_bill: 'Оплатить счёт', empty: 'Меню пока недоступно.', loading: 'Загружаем меню…',
+      no_results: 'Ничего не найдено.', search_ph: 'Поиск в меню…',
+      tag_vegetarian: 'Вегетарианское', tag_vegan: 'Веганское', tag_gluten_free: 'Без глютена', tag_spicy: 'Острое',
+      soldout: 'Недоступно', featured: 'Рекомендация шефа',
+    },
   };
+  const DIET_ICON = { vegetarian: '🌱', vegan: '🌿', gluten_free: '🌾', spicy: '🌶' };
   let lang = localStorage.getItem('nota_lang') || 'ro';
   const t = key => TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
 
   const token = new URLSearchParams(location.search).get('t') || '';
+  const isPreview = new URLSearchParams(location.search).get('preview') === '1';
   document.getElementById('btn-pay').href = `/bill?t=${encodeURIComponent(token)}`;
 
   let menuData = null;
   let lastUnpaidLei = 0;
+  let searchQuery = '';
+  let activeTags = new Set();
+  let scrollSpyObserver = null;
 
   function localized(obj, roKey, ruKey) {
     if (lang === 'ru' && obj[ruKey]) return obj[ruKey];
     return obj[roKey];
   }
-
   function fmtMDL(n) { return Number(n).toFixed(0) + ' lei'; }
   function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
-  function render() {
-    document.getElementById('lang-btn').textContent = lang === 'ro' ? 'RU' : 'RO';
-    const lbl = document.getElementById('pay-lbl');
-    lbl.textContent = lastUnpaidLei > 0 ? `${t('pay_bill')} · ${Math.round(lastUnpaidLei)} lei` : t('pay_bill');
-    if (!menuData) return;
-    document.getElementById('rname').textContent = menuData.restaurantName;
-
-    const cats = menuData.categories || [];
-    if (!cats.length) {
-      document.getElementById('menu-body').innerHTML = `<div class="empty-msg">${t('empty')}</div>`;
-      document.getElementById('cat-nav').innerHTML = '';
-      return;
+  function itemMatchesFilters(it) {
+    if (activeTags.size > 0 && ![...activeTags].every(tag => (it.dietary_tags || []).includes(tag))) return false;
+    if (searchQuery) {
+      const hay = `${localized(it, 'name_ro', 'name_ru')} ${localized(it, 'description_ro', 'description_ru') || ''}`.toLowerCase();
+      if (!hay.includes(searchQuery)) return false;
     }
+    return true;
+  }
 
-    document.getElementById('cat-nav').innerHTML = cats.map((c, i) =>
-      `<button class="cat-tab ${i === 0 ? 'sel' : ''}" data-cat="cat-${i}">${esc(localized(c, 'name_ro', 'name_ru'))}</button>`
-    ).join('');
+  function tagsHTML(it) {
+    if (!(it.dietary_tags || []).length) return '';
+    return `<div class="mi-tags">${it.dietary_tags.map(tg => `<span class="diet-tag" title="${esc(t('tag_' + tg))}">${DIET_ICON[tg] || ''}</span>`).join('')}</div>`;
+  }
+  function badgesHTML(it) {
+    const badges = [];
+    if (!it.available) badges.push(`<span class="soldout-pill">${esc(t('soldout'))}</span>`);
+    if (it.is_featured) badges.push(`<span class="featured-pill">✦ ${esc(t('featured'))}</span>`);
+    return badges.join(' ');
+  }
+  function imgTag(photo, alt, cls) {
+    if (!photo) return `<div class="mi-card-img placeholder">🍽</div>`;
+    return `<div class="${cls || 'mi-card-img'}"><img src="${photo.thumbUrl}" alt="${esc(alt)}" loading="lazy" decoding="async"></div>`;
+  }
 
-    document.getElementById('menu-body').innerHTML = cats.map((c, i) => `
-      <section class="cat-section" id="cat-${i}">
+  function renderElegant(cats) {
+    return cats.map((c, i) => `
+      <section class="cat-section" id="cat-${i}" data-cat-idx="${i}">
         <div class="cat-title">${esc(localized(c, 'name_ro', 'name_ru'))}</div>
+        ${c.heroImage ? `<div class="cat-hero"><img src="${c.heroImage.url}" alt="${esc(localized(c, 'name_ro', 'name_ru'))}" loading="lazy" decoding="async"></div>` : ''}
         ${c.items.map(it => `
-          <div class="menu-item">
+          <div class="mi-row ${it.available ? '' : 'unavailable'}">
             <div>
-              <div class="mi-name">${esc(localized(it, 'name_ro', 'name_ru'))}</div>
+              <div class="mi-name-line">
+                <span class="mi-name">${esc(localized(it, 'name_ro', 'name_ru'))}</span>
+                ${badgesHTML(it)}
+              </div>
               ${(localized(it, 'description_ro', 'description_ru') || '') ? `<div class="mi-desc">${esc(localized(it, 'description_ro', 'description_ru'))}</div>` : ''}
+              ${tagsHTML(it)}
             </div>
             <div class="mi-price">${fmtMDL(it.price)}</div>
           </div>`).join('')}
       </section>
     `).join('');
+  }
+
+  function renderVizual(cats) {
+    return cats.map((c, i) => `
+      <section class="cat-section" id="cat-${i}" data-cat-idx="${i}">
+        <div class="cat-title">${esc(localized(c, 'name_ro', 'name_ru'))}</div>
+        <div class="grid-vizual">
+          ${c.items.map(it => `
+            <div class="mi-card ${it.available ? '' : 'unavailable'}">
+              ${imgTag(it.photo, localized(it, 'name_ro', 'name_ru'), 'mi-card-img')}
+              <div class="mi-card-body">
+                <div class="mi-name-line">
+                  <span class="mi-name">${esc(localized(it, 'name_ro', 'name_ru'))}</span>
+                </div>
+                ${(localized(it, 'description_ro', 'description_ru') || '') ? `<div class="mi-desc">${esc(localized(it, 'description_ro', 'description_ru'))}</div>` : ''}
+                <span class="mi-price">${fmtMDL(it.price)}</span>
+                ${tagsHTML(it)}
+                <div style="margin-top:6px">${badgesHTML(it)}</div>
+              </div>
+            </div>`).join('')}
+        </div>
+      </section>
+    `).join('');
+  }
+
+  function render() {
+    document.getElementById('lang-btn').textContent = lang === 'ro' ? 'RU' : 'RO';
+    document.getElementById('search-inp').placeholder = t('search_ph');
+    document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
+    const lbl = document.getElementById('pay-lbl');
+    lbl.textContent = lastUnpaidLei > 0 ? `${t('pay_bill')} · ${Math.round(lastUnpaidLei)} lei` : t('pay_bill');
+    if (!menuData) return;
+    document.getElementById('rname').textContent = menuData.restaurantName;
+
+    const allCats = menuData.categories || [];
+    if (!allCats.length) {
+      document.getElementById('menu-body').innerHTML = `<div class="empty-msg">${t('empty')}</div>`;
+      document.getElementById('cat-nav').innerHTML = '';
+      return;
+    }
+
+    // Filter items by search + dietary tags; drop categories left with nothing.
+    const filteredCats = allCats
+      .map(c => ({ ...c, items: c.items.filter(itemMatchesFilters) }))
+      .filter(c => c.items.length > 0);
+
+    if (!filteredCats.length) {
+      document.getElementById('menu-body').innerHTML = `<div class="empty-msg">${t('no_results')}</div>`;
+      document.getElementById('cat-nav').innerHTML = '';
+      return;
+    }
+
+    document.getElementById('cat-nav').innerHTML = filteredCats.map((c, i) =>
+      `<button class="cat-tab ${i === 0 ? 'sel' : ''}" data-cat="cat-${i}">${esc(localized(c, 'name_ro', 'name_ru'))}</button>`
+    ).join('');
+
+    const style = menuData.style === 'vizual' ? 'vizual' : 'elegant';
+    document.getElementById('menu-body').innerHTML = style === 'vizual' ? renderVizual(filteredCats) : renderElegant(filteredCats);
+
+    setupScrollSpy();
+  }
+
+  // Classic scrollspy: on scroll, find the last section whose top has crossed just below the
+  // sticky header, and mark it active. Tried an IntersectionObserver threshold-band first, but
+  // the band was too easy to skip past entirely (e.g. jumping straight to a section via the nav,
+  // or a short section on a tall screen) — this position-based approach can't miss a section.
+  let scrollSpySections = [];
+  let scrollSpyTicking = false;
+  function updateScrollSpy() {
+    scrollSpyTicking = false;
+    const headerH = document.getElementById('hdr').offsetHeight;
+    // A short last category on a short page can never scroll its own top past the header line —
+    // the page simply runs out of room to scroll. Treat "scrolled to (near) the bottom" as "last
+    // category is active", same as most scrollspy implementations handle this edge case.
+    const atBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 4;
+    let activeIdx = 0;
+    if (atBottom) {
+      activeIdx = scrollSpySections[scrollSpySections.length - 1].idx;
+    } else {
+      for (const s of scrollSpySections) {
+        if (s.el.getBoundingClientRect().top - headerH <= 1) activeIdx = s.idx; else break;
+      }
+    }
+    document.querySelectorAll('.cat-tab').forEach((tab, i) => tab.classList.toggle('sel', i === activeIdx));
+    const activeTab = document.querySelectorAll('.cat-tab')[activeIdx];
+    activeTab?.scrollIntoView({ behavior: 'smooth', inline: 'center', block: 'nearest' });
+  }
+  function onScroll() {
+    if (scrollSpyTicking) return;
+    scrollSpyTicking = true;
+    requestAnimationFrame(updateScrollSpy);
+  }
+  function setupScrollSpy() {
+    window.removeEventListener('scroll', onScroll);
+    scrollSpySections = [...document.querySelectorAll('.cat-section')].map((el, idx) => ({ el, idx }));
+    if (!scrollSpySections.length) return;
+    window.addEventListener('scroll', onScroll, { passive: true });
+    updateScrollSpy();
   }
 
   document.getElementById('lang-btn').addEventListener('click', () => {
@@ -137,7 +319,22 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
     render();
   });
 
-  // CSP-safe delegated click handler (no inline onclick) — scrolls to the tapped category.
+  let searchDebounce = null;
+  document.getElementById('search-inp').addEventListener('input', e => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(() => { searchQuery = e.target.value.trim().toLowerCase(); render(); }, 150);
+  });
+
+  // CSP-safe delegated click handlers (no inline onclick).
+  document.getElementById('diet-filters').addEventListener('click', e => {
+    const chip = e.target.closest('.diet-chip');
+    if (!chip) return;
+    const tag = chip.dataset.tag;
+    if (activeTags.has(tag)) activeTags.delete(tag); else activeTags.add(tag);
+    chip.classList.toggle('sel', activeTags.has(tag));
+    render();
+  });
+
   document.getElementById('cat-nav').addEventListener('click', e => {
     const btn = e.target.closest('.cat-tab');
     if (!btn) return;
@@ -148,8 +345,18 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   async function loadMenu() {
     document.getElementById('menu-body').innerHTML = `<div class="empty-msg">${t('loading')}</div>`;
     try {
-      const res = await fetch(`/api/menu/by-token/${encodeURIComponent(token)}`);
-      if (!res.ok) { location.href = `/bill?t=${encodeURIComponent(token)}`; return; }
+      let res;
+      if (isPreview) {
+        const ownerToken = localStorage.getItem('nota_token');
+        res = await fetch('/api/dashboard/menu/preview', { headers: { Authorization: `Bearer ${ownerToken}` } });
+      } else {
+        res = await fetch(`/api/menu/by-token/${encodeURIComponent(token)}`);
+      }
+      if (!res.ok) {
+        if (isPreview) { document.getElementById('menu-body').innerHTML = `<div class="empty-msg">${t('empty')}</div>`; return; }
+        location.href = `/bill?t=${encodeURIComponent(token)}`;
+        return;
+      }
       menuData = await res.json();
       render();
     } catch {
@@ -158,6 +365,7 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   }
 
   async function refreshUnpaidTotal() {
+    if (isPreview) { document.getElementById('pay-bar').style.display = 'none'; return; }
     try {
       const res = await fetch(`/api/table/by-token/${encodeURIComponent(token)}`);
       if (!res.ok) return;
@@ -172,7 +380,7 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
 
   loadMenu();
   refreshUnpaidTotal();
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshUnpaidTotal(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshUnpaidTotal(); if (isPreview) loadMenu(); } });
 </script>
 </body>
 </html>
