@@ -130,21 +130,22 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
 <div id="pay-bar">
   <div class="pay-bar-inner">
     <a class="btn-pay" id="btn-pay" href="#">
-      <span>💳</span><span id="pay-lbl" data-i18n="pay_bill">Plătește nota</span>
+      <span>💳</span><span id="pay-lbl" data-i18n="pay_bill">Plătește comanda</span>
     </a>
   </div>
 </div>
 
+<script src="/socket.io/socket.io.js"></script>
 <script>
   const TRANS = {
     ro: {
-      pay_bill: 'Plătește nota', empty: 'Meniul nu este încă disponibil.', loading: 'Se încarcă meniul…',
+      pay_bill: 'Plătește comanda', empty: 'Meniul nu este încă disponibil.', loading: 'Se încarcă meniul…',
       no_results: 'Niciun fel nu corespunde căutării.', search_ph: 'Caută în meniu…',
       tag_vegetarian: 'Vegetarian', tag_vegan: 'Vegan', tag_gluten_free: 'Fără gluten', tag_spicy: 'Picant',
       soldout: 'Indisponibil', featured: 'Recomandarea casei',
     },
     ru: {
-      pay_bill: 'Оплатить счёт', empty: 'Меню пока недоступно.', loading: 'Загружаем меню…',
+      pay_bill: 'Оплатить заказ', empty: 'Меню пока недоступно.', loading: 'Загружаем меню…',
       no_results: 'Ничего не найдено.', search_ph: 'Поиск в меню…',
       tag_vegetarian: 'Вегетарианское', tag_vegan: 'Веганское', tag_gluten_free: 'Без глютена', tag_spicy: 'Острое',
       soldout: 'Недоступно', featured: 'Рекомендация шефа',
@@ -365,22 +366,43 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
     }
   }
 
+  function applyUnpaidItems(items) {
+    lastUnpaidLei = (items || [])
+      .filter(i => i.status !== 'paid')
+      .reduce((s, i) => s + Number(i.price), 0);
+    const lbl = document.getElementById('pay-lbl');
+    lbl.textContent = lastUnpaidLei > 0 ? `${t('pay_bill')} · ${Math.round(lastUnpaidLei)} lei` : t('pay_bill');
+  }
+
   async function refreshUnpaidTotal() {
     if (isPreview) { document.getElementById('pay-bar').style.display = 'none'; return; }
     try {
       const res = await fetch(`/api/table/by-token/${encodeURIComponent(token)}`);
       if (!res.ok) return;
       const order = await res.json();
-      lastUnpaidLei = (order.items || [])
-        .filter(i => i.status !== 'paid')
-        .reduce((s, i) => s + Number(i.price), 0);
-      const lbl = document.getElementById('pay-lbl');
-      lbl.textContent = lastUnpaidLei > 0 ? `${t('pay_bill')} · ${Math.round(lastUnpaidLei)} lei` : t('pay_bill');
+      applyUnpaidItems(order.items);
     } catch {}
+  }
+
+  // Keep the pay bar's total live while the guest browses the menu — same join-table room and
+  // events the bill page uses, but read-only here: this page never claims items or pays.
+  let lastItems = [];
+  function connectLiveTotal() {
+    if (isPreview || !token) return;
+    const socket = io({ transports: ['websocket', 'polling'] });
+    socket.on('connect', () => socket.emit('join-table', { token }));
+    socket.on('order-update', data => { lastItems = data.items || []; applyUnpaidItems(lastItems); });
+    socket.on('items-patch', patches => {
+      const byId = new Map(lastItems.map(i => [i.id, i]));
+      for (const p of patches) { const it = byId.get(p.id); if (it) Object.assign(it, p); }
+      lastItems = [...byId.values()];
+      applyUnpaidItems(lastItems);
+    });
   }
 
   loadMenu();
   refreshUnpaidTotal();
+  connectLiveTotal();
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshUnpaidTotal(); if (isPreview) loadMenu(); } });
 </script>
 </body>

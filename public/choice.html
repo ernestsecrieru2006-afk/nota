@@ -2,60 +2,89 @@
 <html lang="ro">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
 <title>nota.</title>
 <meta name="robots" content="noindex">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2300333c'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='700' fill='%23C5A059' text-anchor='middle'%3En.%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 :root {
-  --primary: #00333c; --secondary: #775a19; --bg: #f8f9fa;
-  --on-surface: #191c1d; --on-sv: #40484a; --brass: #C5A059;
-  --radius: 0.9rem; --safe-b: env(safe-area-inset-bottom, 0px); --safe-t: env(safe-area-inset-top, 0px);
+  --primary:  #00333c;
+  --primary2: #012129;
+  --brass:    #C5A059;
+  --brass-hi: #dcb974;
+  --safe-t:   env(safe-area-inset-top, 0px);
+  --safe-b:   env(safe-area-inset-bottom, 0px);
 }
-html, body { height: 100%; font-family: 'Manrope', system-ui, sans-serif; background-color: var(--bg);
-  background-image: radial-gradient(ellipse at 18% 10%, rgba(0,51,60,0.06) 0%, transparent 55%),
-                     radial-gradient(ellipse at 85% 80%, rgba(197,160,89,0.1) 0%, transparent 55%);
-  color: var(--on-surface); -webkit-font-smoothing: antialiased; }
-.wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: calc(24px + var(--safe-t)) 20px calc(24px + var(--safe-b)); text-align: center; }
-.lang-toggle { position: fixed; top: calc(14px + var(--safe-t)); right: 16px;
-  background: rgba(197,160,89,0.14); border: 1px solid rgba(197,160,89,0.3); border-radius: 6px;
+html, body { height: 100%; overflow: hidden; }
+body { font-family: 'Manrope', system-ui, sans-serif; background: var(--primary);
+  -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+
+.wrap { height: 100dvh; display: flex; flex-direction: column;
+  padding: calc(16px + var(--safe-t)) 16px calc(16px + var(--safe-b)); gap: 14px; }
+
+.lang-toggle { position: fixed; top: calc(14px + var(--safe-t)); right: 16px; z-index: 5;
+  background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); border-radius: 6px;
   padding: 5px 10px; font-family: 'Manrope', sans-serif; font-size: 11px; font-weight: 700;
-  color: var(--secondary); cursor: pointer; letter-spacing: 0.1em; }
-.mark { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--primary); margin-bottom: 4px; }
-.mark span { color: var(--brass); }
-.rname { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 700; color: var(--on-surface);
-  margin: 4px 0 40px; line-height: 1.25; max-width: 420px; }
-.choice-row { display: flex; flex-direction: column; gap: 14px; width: 100%; max-width: 360px; }
-.choice-btn { display: flex; align-items: center; justify-content: center; gap: 10px;
-  padding: 22px 20px; border-radius: var(--radius); font-family: 'Manrope', sans-serif;
-  font-size: 17px; font-weight: 700; text-decoration: none; cursor: pointer; border: none;
-  transition: transform 0.15s, box-shadow 0.15s; }
-.choice-btn:active { transform: scale(0.97); }
-.choice-menu { background: #fff; color: var(--primary); border: 1.5px solid rgba(197,160,89,0.4);
-  box-shadow: 0 8px 20px rgba(0,51,60,0.08); }
-.choice-pay { background: var(--primary); color: #fff; box-shadow: 0 10px 24px rgba(0,51,60,0.24); }
-.choice-icon { font-size: 22px; line-height: 1; }
+  color: #fff; cursor: pointer; letter-spacing: 0.1em; }
+
+.rname-wrap { flex-shrink: 0; text-align: center; padding-top: 8px; }
+.rname { font-family: 'Playfair Display', serif; font-size: clamp(20px, 6vw, 28px); font-weight: 700;
+  color: #fff; line-height: 1.25; }
+.rname-tag { font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(255,255,255,0.55); margin-top: 6px; }
+
+.choice-stack { flex: 1; display: flex; flex-direction: column; gap: 14px; min-height: 0; }
+.choice-btn { flex: 1; display: flex; align-items: center; justify-content: center;
+  border-radius: 22px; border: none; cursor: pointer; transition: transform 0.12s;
+  width: 100%; }
+.choice-btn:active { transform: scale(0.98); }
+.choice-pay { background: linear-gradient(155deg, var(--brass-hi), var(--brass)); }
+.choice-pay .choice-label { font-family: 'Playfair Display', serif; font-size: clamp(40px, 13vw, 64px);
+  font-weight: 700; color: #1e1607; }
+.choice-menu { background: rgba(255,255,255,0.06); border: 1.5px solid rgba(255,255,255,0.18); }
+.choice-menu .choice-label { font-family: 'Manrope', sans-serif; font-size: clamp(24px, 7vw, 34px);
+  font-weight: 800; color: #fff; }
+.choice-sub { display: block; font-family: 'Manrope', sans-serif; font-size: 12.5px; font-weight: 600;
+  margin-top: 8px; letter-spacing: 0.03em; }
+.choice-pay .choice-sub { color: rgba(30,22,7,0.65); }
+.choice-menu .choice-sub { color: rgba(255,255,255,0.55); }
+
+@media (min-width: 640px) and (min-height: 500px) {
+  .choice-stack { flex-direction: row; }
+}
 </style>
 </head>
 <body>
 <button class="lang-toggle" id="lang-btn">RU</button>
 <div class="wrap">
-  <div class="mark">nota<span>.</span></div>
-  <div class="rname" id="rname">&nbsp;</div>
-  <div class="choice-row">
-    <a class="choice-btn choice-menu" id="btn-menu" href="#"><span class="choice-icon">📖</span><span data-i18n="see_menu">Vezi meniul</span></a>
-    <a class="choice-btn choice-pay" id="btn-pay" href="#"><span class="choice-icon">💳</span><span data-i18n="pay_bill">Plătește nota</span></a>
+  <div class="rname-wrap">
+    <div class="rname" id="rname">&nbsp;</div>
+    <div class="rname-tag" data-i18n="tagline">Masa ta</div>
+  </div>
+  <div class="choice-stack">
+    <button class="choice-btn choice-pay" id="btn-pay">
+      <div>
+        <div class="choice-label">nota<span style="color:rgba(30,22,7,0.55)">.</span></div>
+        <span class="choice-sub" data-i18n="pay_bill">Plătește nota</span>
+      </div>
+    </button>
+    <button class="choice-btn choice-menu" id="btn-menu">
+      <div>
+        <div class="choice-label" data-i18n="menu_label">Meniu</div>
+        <span class="choice-sub" data-i18n="see_menu">Vezi preparatele</span>
+      </div>
+    </button>
   </div>
 </div>
 <script>
   const TRANS = {
-    ro: { see_menu: 'Vezi meniul', pay_bill: 'Plătește nota', loading: 'Se încarcă…' },
-    ru: { see_menu: 'Посмотреть меню', pay_bill: 'Оплатить счёт', loading: 'Загрузка…' },
+    ro: { tagline: 'Masa ta', menu_label: 'Meniu', see_menu: 'Vezi preparatele', pay_bill: 'Plătește nota' },
+    ru: { tagline: 'Ваш столик', menu_label: 'Меню', see_menu: 'Смотреть блюда', pay_bill: 'Оплатить счёт' },
   };
   let lang = localStorage.getItem('nota_lang') || 'ro';
   const t = key => TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
@@ -72,8 +101,12 @@ html, body { height: 100%; font-family: 'Manrope', system-ui, sans-serif; backgr
   });
 
   const token = new URLSearchParams(location.search).get('t') || '';
-  document.getElementById('btn-menu').href = `/menu?t=${encodeURIComponent(token)}`;
-  document.getElementById('btn-pay').href  = `/bill?t=${encodeURIComponent(token)}`;
+  document.getElementById('btn-menu').addEventListener('click', () => {
+    location.href = `/menu?t=${encodeURIComponent(token)}`;
+  });
+  document.getElementById('btn-pay').addEventListener('click', () => {
+    location.href = `/bill?t=${encodeURIComponent(token)}`;
+  });
 
   applyLang();
 

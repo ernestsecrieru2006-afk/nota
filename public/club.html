@@ -50,28 +50,19 @@ button, input { font-family: inherit; }
   justify-content: flex-end; padding: 0 28px calc(56px + var(--safe-b)); text-align: center;
   overflow: hidden; z-index: 10;
 }
-/* Abstract, hand-drawn ambience — deliberately NOT photography: no stock image can accidentally
-   depict a real venue, signage, or logo, and this loads instantly with zero network requests. */
-.splash-scene { position: absolute; inset: 0; background:
-  radial-gradient(ellipse 60% 45% at 20% 15%, rgba(201,168,76,.16), transparent 60%),
-  radial-gradient(ellipse 55% 40% at 85% 25%, rgba(139,58,58,.18), transparent 60%),
-  radial-gradient(ellipse 70% 55% at 50% 90%, rgba(0,51,60,.35), transparent 65%),
-  linear-gradient(160deg, #150f0a, #0a0a0f 55%, #0a0a0f);
-  background-size: 180% 180%, 200% 200%, 160% 160%, 100% 100%;
-  animation: scene-drift 22s ease-in-out infinite alternate;
+/* Generic, atmospheric restaurant ambience — three locally-shipped, heavily out-of-focus bokeh
+   compositions (public/img/splash-scene-*.webp). Nothing in them is ever in focus, so there is
+   no subject that could depict a real venue, logo, or signage — same defocus technique real
+   stock photography uses for ambiance shots, generated locally instead of hotlinked. */
+.splash-scene { position: absolute; inset: 0; overflow: hidden; background: #0a0a0f; }
+.splash-strip { display: flex; width: 600vw; height: 100%; will-change: transform;
+  animation: splash-pan 84s linear infinite; }
+.splash-frame { flex: 0 0 100vw; height: 100%; background-size: cover; background-position: center; }
+@keyframes splash-pan { from { transform: translateX(0); } to { transform: translateX(-300vw); } }
+@media (prefers-reduced-motion: reduce) {
+  .splash-strip { animation: none; }
 }
-@keyframes scene-drift {
-  0%   { background-position: 0% 0%, 100% 0%, 50% 100%, 0 0; }
-  100% { background-position: 30% 20%, 70% 30%, 40% 80%, 0 0; }
-}
-.splash-bokeh { position: absolute; border-radius: 50%; filter: blur(1px); opacity: .55; animation: bokeh-float 14s ease-in-out infinite; }
-.splash-bokeh.b1 { width: 90px; height: 90px; left: 12%; top: 22%; background: radial-gradient(circle, rgba(232,201,106,.5), transparent 70%); animation-duration: 16s; }
-.splash-bokeh.b2 { width: 50px; height: 50px; left: 72%; top: 16%; background: radial-gradient(circle, rgba(232,201,106,.35), transparent 70%); animation-duration: 12s; animation-delay: -3s; }
-.splash-bokeh.b3 { width: 130px; height: 130px; left: 60%; top: 55%; background: radial-gradient(circle, rgba(139,58,58,.28), transparent 70%); animation-duration: 20s; animation-delay: -6s; }
-.splash-bokeh.b4 { width: 70px; height: 70px; left: 20%; top: 68%; background: radial-gradient(circle, rgba(0,51,60,.4), transparent 70%); animation-duration: 18s; animation-delay: -9s; }
-@keyframes bokeh-float { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-22px) scale(1.08); } }
-.splash-lines { position: absolute; inset: 0; opacity: .10; stroke: var(--gold-hi); fill: none; stroke-width: 1.2; }
-.splash-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,15,.15) 0%, rgba(10,10,15,.55) 55%, rgba(10,10,15,.92) 100%); }
+.splash-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,15,.25) 0%, rgba(10,10,15,.6) 55%, rgba(10,10,15,.93) 100%); }
 
 .splash-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
 .splash-brand { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--text2); text-transform: uppercase; margin-bottom: 10px; }
@@ -245,17 +236,14 @@ button, input { font-family: inherit; }
 <!-- ══════════════════════════════ Splash ══════════════════════════════ -->
 <section id="screen-splash">
   <div class="splash-scene" aria-hidden="true">
-    <div class="splash-bokeh b1"></div>
-    <div class="splash-bokeh b2"></div>
-    <div class="splash-bokeh b3"></div>
-    <div class="splash-bokeh b4"></div>
-    <svg class="splash-lines" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-      <circle cx="90" cy="140" r="34"/>
-      <path d="M300 90 q10 40 0 80 M300 90 q-10 40 0 80"/>
-      <path d="M60 620 q40 -14 80 0 q10 24 -4 40 q-36 14 -72 0 q-14 -16 -4 -40 z"/>
-      <circle cx="330" cy="650" r="20"/>
-      <path d="M330 630 v-30"/>
-    </svg>
+    <div class="splash-strip">
+      <div class="splash-frame" style="background-image:url('/img/splash-scene-1.webp')"></div>
+      <div class="splash-frame" style="background-image:url('/img/splash-scene-2.webp')"></div>
+      <div class="splash-frame" style="background-image:url('/img/splash-scene-3.webp')"></div>
+      <div class="splash-frame" style="background-image:url('/img/splash-scene-1.webp')"></div>
+      <div class="splash-frame" style="background-image:url('/img/splash-scene-2.webp')"></div>
+      <div class="splash-frame" style="background-image:url('/img/splash-scene-3.webp')"></div>
+    </div>
   </div>
   <div class="splash-overlay" aria-hidden="true"></div>
   <div class="splash-content">

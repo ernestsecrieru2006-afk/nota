@@ -7,7 +7,7 @@
 // Bump CACHE_NAME on any change to the precached file list or caching strategy below — the
 // activate handler deletes every cache that doesn't match, so a version bump is what makes a
 // deploy actually replace the stale shell instead of serving it forever.
-const CACHE_NAME = 'club-eats-shell-v1';
+const CACHE_NAME = 'club-eats-shell-v2';
 
 const SHELL_FILES = [
   '/club',
@@ -16,6 +16,9 @@ const SHELL_FILES = [
   '/vendor/jsqr.js',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/img/splash-scene-1.webp',
+  '/img/splash-scene-2.webp',
+  '/img/splash-scene-3.webp',
 ];
 
 self.addEventListener('install', event => {
