@@ -341,6 +341,32 @@ async function setup() {
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS cover_image_id INT REFERENCES menu_images(id) ON DELETE SET NULL`);
     } catch { /* already exists */ }
 
+    // ── Staff access (floor-staff notification domain — separate auth from owner/member) ──
+    // One active link per restaurant at a time (partial unique index below). Regenerate/revoke
+    // always deactivate the current row rather than updating it in place, so a JWT's embedded
+    // linkId can never point at a row that silently got new credentials underneath it.
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS staff_access_links (
+        id            SERIAL       PRIMARY KEY,
+        restaurant_id INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+        link_token    VARCHAR(64)  NOT NULL UNIQUE,
+        pin_hash      TEXT         NOT NULL,
+        active        BOOLEAN      NOT NULL DEFAULT true,
+        created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+        revoked_at    TIMESTAMPTZ
+      )
+    `);
+    try {
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_links_active_restaurant ON staff_access_links(restaurant_id) WHERE active`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_staff_links_token ON staff_access_links(link_token) WHERE active`);
+    } catch { /* already exist */ }
+
+    // ── Telegram notifications (optional per-restaurant channel; bot token encrypted at rest) ──
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS telegram_bot_token_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

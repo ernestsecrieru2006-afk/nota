@@ -37,6 +37,8 @@ import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCa
 import { register, login, me, requireAuth, verifyJWT } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, memberStats, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT } from './members.js';
+import { hashPin, redeemStaffLink, requireStaffAuth, verifyStaffJWT } from './staff.js';
+import { notifyTelegram, sendTelegramTest } from './telegram.js';
 import { encryptSecret, decryptSecret } from './secrets.js';
 import multer from 'multer';
 import { processAndStore } from './storage.js';
@@ -137,6 +139,10 @@ const roundLei = v => Math.round(Number(v) * 100) / 100;
 function notifyDashboardActivity(restaurantId, tableNumber) {
   if (!restaurantId || !tableNumber) return;
   io.to(`dashboard-${restaurantId}`).emit('table-activity', { tableNumber });
+  // Staff view needs the same "something changed, refetch" nudge to keep unpaid totals fresh
+  // between waiter-calls/payments. Client must NOT alert (sound/vibration) on this event — it
+  // fires constantly during normal service — only a silent debounced re-fetch.
+  io.to(`staff-${restaurantId}`).emit('table-activity', { tableNumber });
 }
 
 // /club is public and cross-tenant, so this only ever carries a nudge to refetch the already-
@@ -286,6 +292,13 @@ app.get(['/dashboard', '/dashboard.html'], (_req, res) => {
   sendHtmlWithBuild(res, join(__dirname, '../public/dashboard.html'));
 });
 
+// /waiter — staff live table view, PIN-gated client-side (see server/staff.js); same rationale
+// as /dashboard for registering ahead of express.static: gets build-meta injection.
+app.get(['/waiter', '/waiter.html'], (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  sendHtmlWithBuild(res, join(__dirname, '../public/waiter.html'));
+});
+
 app.use(express.static(join(__dirname, '../public'), {
   extensions: ['html'],
   setHeaders(res, filePath) {
@@ -360,6 +373,37 @@ app.post('/api/members/login',     limiterAuth,       memberLogin);
 app.get( '/api/members/me',        requireMemberAuth, memberMe);
 app.get( '/api/members/referral',  requireMemberAuth, memberReferral);
 app.get( '/api/members/stats',     requireMemberAuth, memberStats);
+
+// ─── Staff (floor-waiter) routes ───────────────────────────────────────────────
+// Separate auth domain from both restaurant and member — see server/staff.js. Read-only +
+// acknowledge-actions only: nothing here ever returns revenue, analytics, settings, offers,
+// or exports, and every query is scoped by req.staff.restaurantId from the verified JWT.
+
+app.post('/api/staff/redeem', limiterAuth, redeemStaffLink);
+
+app.get('/api/staff/tables', requireStaffAuth, async (req, res) => {
+  try {
+    const rId = req.staff.restaurantId;
+    const tables = await getTablesForRestaurant(rId);
+    const withCalls = tables.map(t => ({
+      ...t,
+      waiter_call_at: activeWaiterCalls.get(`${rId}-${t.number}`) || null,
+    }));
+    res.json(withCalls);
+  } catch (err) {
+    console.error('[staff/tables]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+app.post('/api/staff/tables/:number/ack', requireStaffAuth, (req, res) => {
+  const tableNumber = Number(req.params.number);
+  if (!Number.isInteger(tableNumber) || tableNumber <= 0) {
+    return res.status(400).json({ error: 'Masă invalidă' });
+  }
+  ackWaiterCall(req.staff.restaurantId, tableNumber);
+  res.json({ ok: true });
+});
 
 // ─── /club — Club Eats member web app ────────────────────────────────────────
 
@@ -599,23 +643,28 @@ app.post('/api/dashboard/payments/:id/refund', requireAuth, async (req, res) => 
   }
 });
 
+// Shared by the owner dashboard AND the staff /api/staff/tables route — read-only, no revenue/
+// analytics fields, only each table's own occupancy + unpaid total.
+async function getTablesForRestaurant(restaurantId) {
+  const { rows } = await pool.query(`
+    SELECT t.number,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'available') AS available,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'claimed')   AS claimed,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'paid')      AS paid,
+           COALESCE(SUM(oi.price) FILTER (WHERE oi.status IN ('available','claimed')), 0) AS unpaid_lei,
+           EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.status = 'pending') AS payment_pending
+    FROM tables t
+    LEFT JOIN orders o  ON o.table_id = t.id AND o.status = 'open'
+    LEFT JOIN order_items oi ON oi.order_id = o.id
+    WHERE t.restaurant_id = $1
+    GROUP BY t.number, o.id ORDER BY t.number
+  `, [restaurantId]);
+  return rows;
+}
+
 app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
   try {
-    const rId = req.restaurant.restaurantId;
-    const { rows } = await pool.query(`
-      SELECT t.number,
-             COUNT(oi.id) FILTER (WHERE oi.status = 'available') AS available,
-             COUNT(oi.id) FILTER (WHERE oi.status = 'claimed')   AS claimed,
-             COUNT(oi.id) FILTER (WHERE oi.status = 'paid')      AS paid,
-             COALESCE(SUM(oi.price) FILTER (WHERE oi.status IN ('available','claimed')), 0) AS unpaid_lei,
-             EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.status = 'pending') AS payment_pending
-      FROM tables t
-      LEFT JOIN orders o  ON o.table_id = t.id AND o.status = 'open'
-      LEFT JOIN order_items oi ON oi.order_id = o.id
-      WHERE t.restaurant_id = $1
-      GROUP BY t.number, o.id ORDER BY t.number
-    `, [rId]);
-    res.json(rows);
+    res.json(await getTablesForRestaurant(req.restaurant.restaurantId));
   } catch (err) {
     console.error('[tables]', err);
     res.status(500).json({ error: 'Eroare internă' });
@@ -1588,6 +1637,112 @@ app.post('/api/dashboard/maib-credentials', requireAuth, async (req, res) => {
   }
 });
 
+// ─── Staff access links — owner-side management ──────────────────────────────
+// Generating or regenerating always deactivates the current active row (if any) and inserts a
+// brand-new one, never an in-place UPDATE — a staff JWT's linkId is fixed at issue time, so
+// updating link_token/pin_hash on the same row would leave old tokens still validating against
+// a row that's still active=true, silently defeating "regenerating kills the old link."
+app.post('/api/dashboard/staff-link', requireAuth, async (req, res) => {
+  const rId = req.restaurant.restaurantId;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE staff_access_links SET active=false, revoked_at=NOW() WHERE restaurant_id=$1 AND active`,
+      [rId]
+    );
+    const linkToken = crypto.randomBytes(16).toString('hex'); // 128-bit, url-safe hex
+    const pin       = String(crypto.randomInt(100_000, 1_000_000));
+    const pinHash   = await hashPin(pin);
+    await client.query(
+      `INSERT INTO staff_access_links (restaurant_id, link_token, pin_hash) VALUES ($1,$2,$3)`,
+      [rId, linkToken, pinHash]
+    );
+    await client.query('COMMIT');
+    // Plaintext PIN is returned exactly once, here — never retrievable again after this response.
+    res.json({ link: `${APP_URL}/waiter?link=${linkToken}`, pin });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[staff-link generate]', err.message);
+    res.status(500).json({ error: 'Eroare internă' });
+  } finally {
+    client.release();
+  }
+});
+
+app.get('/api/dashboard/staff-link', requireAuth, async (req, res) => {
+  try {
+    const { rows: [row] } = await pool.query(
+      `SELECT link_token, created_at FROM staff_access_links WHERE restaurant_id=$1 AND active`,
+      [req.restaurant.restaurantId]
+    );
+    if (!row) return res.json({ active: false });
+    res.json({ active: true, link: `${APP_URL}/waiter?link=${row.link_token}`, createdAt: row.created_at });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/dashboard/staff-link/revoke', requireAuth, async (req, res) => {
+  try {
+    await pool.query(
+      `UPDATE staff_access_links SET active=false, revoked_at=NOW() WHERE restaurant_id=$1 AND active`,
+      [req.restaurant.restaurantId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── Telegram notifications — owner-side settings ────────────────────────────
+// Bot token encrypted at rest (same AES-256-GCM helper as maib credentials), chat ID stored
+// plaintext (an identifier, not a credential). Feature is simply off if either is unset.
+app.get('/api/dashboard/telegram-settings', requireAuth, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query(
+      `SELECT (telegram_bot_token_enc IS NOT NULL) AS has_token, telegram_chat_id
+       FROM restaurants WHERE id=$1`,
+      [req.restaurant.restaurantId]
+    );
+    res.json({ has_token: r?.has_token || false, chat_id: r?.telegram_chat_id || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/dashboard/telegram-settings', requireAuth, async (req, res) => {
+  const { botToken, chatId } = req.body || {};
+  if (botToken && (typeof botToken !== 'string' || botToken.length > 200)) {
+    return res.status(400).json({ error: 'Token invalid' });
+  }
+  if (chatId !== undefined && chatId !== null && (typeof chatId !== 'string' || chatId.length > 100)) {
+    return res.status(400).json({ error: 'Chat ID invalid' });
+  }
+  try {
+    const rId = req.restaurant.restaurantId;
+    const sets = [];
+    const params = [];
+    const push = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
+
+    if (botToken) push('telegram_bot_token_enc', encryptSecret(botToken)); // omitted → keeps existing
+    if (chatId !== undefined) push('telegram_chat_id', chatId || null);
+    if (!sets.length) return res.status(400).json({ error: 'Nimic de salvat' });
+
+    params.push(rId);
+    await pool.query(`UPDATE restaurants SET ${sets.join(', ')} WHERE id=$${params.length}`, params);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[telegram-settings]', err.message); // never log botToken itself
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+app.post('/api/dashboard/telegram-test', requireAuth, async (req, res) => {
+  const result = await sendTelegramTest(req.restaurant.restaurantId);
+  res.json(result);
+});
+
 // ─── Admin (internal — DEV_API_KEY only, no JWT fallback) ────────────────────
 // Deliberately NOT built on requireDevAuth: that falls back to any restaurant's own JWT, which
 // would let one restaurant list every other restaurant. This must only ever accept the dev key.
@@ -2142,6 +2297,63 @@ const socketThrottle = new Map();
 // Per-table waiter-call throttle: max 1 call per 60 s
 const waiterCallThrottle = new Map(); // `${restaurantId}-${tableNumber}` → timestamp
 
+// Active (unacknowledged) waiter calls — ephemeral runtime state, same lifetime philosophy as
+// waiterCallThrottle above. There is no durable "acknowledged" concept for waiter calls; this is
+// a transient UI signal, not a business record, so in-memory is the right shape (matches how
+// paymentMeta/socketInflight/etc are already handled elsewhere in this file).
+const activeWaiterCalls = new Map(); // `${restaurantId}-${tableNumber}` → calledAt (ms)
+
+function ackWaiterCall(restaurantId, tableNumber) {
+  const key = `${restaurantId}-${tableNumber}`;
+  if (!activeWaiterCalls.has(key)) return false; // idempotent — already acked/expired
+  activeWaiterCalls.delete(key);
+  io.to(`staff-${restaurantId}`).emit('waiter-call-acked', { tableNumber });
+  io.to(`dashboard-${restaurantId}`).emit('waiter-call-acked', { tableNumber });
+  return true;
+}
+
+// Tracks live staff sockets by linkId so a revoked link can force-disconnect any already-open
+// tab within the periodic sweep below, even if that socket makes no further requests.
+const staffSocketsByLinkId = new Map(); // linkId → Set<socket>
+
+function trackStaffSocket(linkId, socket) {
+  let set = staffSocketsByLinkId.get(linkId);
+  if (!set) { set = new Set(); staffSocketsByLinkId.set(linkId, set); }
+  set.add(socket);
+}
+
+function untrackStaffSocket(linkId, socket) {
+  const set = staffSocketsByLinkId.get(linkId);
+  if (!set) return;
+  set.delete(socket);
+  if (!set.size) staffSocketsByLinkId.delete(linkId);
+}
+
+// Bounds "kill an already-idle open staff tab" to ≤60s after revocation. Instant revocation for
+// active use is already enforced by requireStaffAuth (HTTP) and join-staff's DB check (reconnect)
+// — this sweep only covers a socket that's sitting open without hitting either of those again.
+async function revalidateStaffSockets() {
+  if (!staffSocketsByLinkId.size) return;
+  try {
+    const linkIds = [...staffSocketsByLinkId.keys()];
+    const { rows } = await pool.query(
+      'SELECT id FROM staff_access_links WHERE id = ANY($1) AND active', [linkIds]
+    );
+    const activeSet = new Set(rows.map(r => r.id));
+    for (const linkId of linkIds) {
+      if (activeSet.has(linkId)) continue;
+      for (const s of staffSocketsByLinkId.get(linkId) || []) {
+        s.emit('staff-revoked', {});
+        s.disconnect(true);
+      }
+      staffSocketsByLinkId.delete(linkId);
+    }
+  } catch (err) {
+    console.error('[revalidateStaffSockets]', err.message);
+  }
+}
+setInterval(revalidateStaffSockets, 60_000);
+
 function checkThrottle(socket) {
   const now = Date.now();
   let s = socketThrottle.get(socket.id);
@@ -2163,6 +2375,8 @@ io.on('connection', socket => {
   let currentTable = null;
   let currentRestaurantId = null;
   let currentMemberId     = null;
+  let currentStaffRestaurantId = null;
+  let currentStaffLinkId       = null;
 
   socket.on('join-table', async ({ token, tableNumber, restaurantId, paymentId, memberToken } = {}) => {
     if (checkThrottle(socket)) return;
@@ -2229,6 +2443,39 @@ io.on('connection', socket => {
     const payload = verifyJWT(dashToken);
     if (!payload) return socket.emit('error', { message: 'Unauthorized' });
     socket.join(`dashboard-${payload.restaurantId}`);
+  });
+
+  // Staff (waiter) join — unlike join-dashboard, a bare JWT verify isn't sufficient: revocation
+  // is enforced by a DB check on staff_access_links.active, not by the token's expiry. Throttled
+  // (unlike join-dashboard) since this does a real DB round-trip, not just an in-memory verify.
+  socket.on('join-staff', async ({ token: staffToken } = {}, ack) => {
+    if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
+    const payload = verifyStaffJWT(staffToken);
+    if (!payload) return ack?.({ error: 'Unauthorized' });
+    try {
+      const { rows: [link] } = await pool.query(
+        'SELECT active FROM staff_access_links WHERE id=$1 AND restaurant_id=$2',
+        [payload.linkId, payload.restaurantId]
+      );
+      if (!link || !link.active) return ack?.({ error: 'Acces revocat' });
+      currentStaffRestaurantId = payload.restaurantId;
+      currentStaffLinkId       = payload.linkId;
+      socket.join(`staff-${payload.restaurantId}`);
+      trackStaffSocket(payload.linkId, socket);
+      ack?.({ ok: true });
+    } catch (err) {
+      console.error('[join-staff]', err);
+      ack?.({ error: 'Eroare internă' });
+    }
+  });
+
+  socket.on('waiter-call-ack', ({ tableNumber } = {}, ack) => {
+    if (checkThrottle(socket)) return ack?.({ error: 'Rate limit' });
+    if (!currentStaffRestaurantId) return ack?.({ error: 'Not staff' });
+    const tbl = Number(tableNumber);
+    if (!Number.isInteger(tbl) || tbl <= 0) return ack?.({ error: 'Invalid table' });
+    ackWaiterCall(currentStaffRestaurantId, tbl);
+    ack?.({ ok: true });
   });
 
   // Public, unauthenticated: /club broadcasts to every visitor across all restaurants — the
@@ -2495,12 +2742,17 @@ io.on('connection', socket => {
     const last = waiterCallThrottle.get(key);
     if (last && now - last < 60_000) return ack?.({ error: 'Cooldown' });
     waiterCallThrottle.set(key, now);
+    activeWaiterCalls.set(key, now);
     io.to(`dashboard-${currentRestaurantId}`).emit('waiter-called', { tableNumber: currentTable });
+    io.to(`staff-${currentRestaurantId}`).emit('waiter-called', { tableNumber: currentTable });
+    notifyTelegram(currentRestaurantId, `🔔 Masa ${currentTable} cheamă ospătarul`,
+      { dedupeKey: `${currentRestaurantId}:waiter-call:${currentTable}` });
     ack?.({ ok: true });
   });
 
   socket.on('disconnect', async () => {
     socketThrottle.delete(socket.id);
+    if (currentStaffLinkId) untrackStaffSocket(currentStaffLinkId, socket);
     try {
       // If a payment is in-flight, keep items claimed — settlement/timeout handles them
       if (socketInflight.has(socket.id)) {
@@ -2712,6 +2964,12 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) 
       id: dbPaymentId, table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
       paid_at: new Date().toISOString(),
     });
+    io.to(`staff-${restaurantId}`).emit('payment-made', {
+      id: dbPaymentId, table_number: tableNumber, amount_lei: amountLei, tip_lei: tipLei,
+      paid_at: new Date().toISOString(),
+    });
+    notifyTelegram(restaurantId, `💳 Masa ${tableNumber} · ${Math.round(Number(amountLei) + Number(tipLei))} lei plătit`,
+      { dedupeKey: `${restaurantId}:payment:${dbPaymentId}` });
 
     cleanupMeta(miaPaymentId, socketId);
   } catch (err) {
@@ -2867,6 +3125,12 @@ async function settleFromDB(pmt, confirmedMiaId = null, payId = null) {
       id: pmt.id, table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
       paid_at: new Date().toISOString(),
     });
+    io.to(`staff-${pmt.restaurant_id}`).emit('payment-made', {
+      id: pmt.id, table_number: pmt.table_number, amount_lei: pmt.amount_lei, tip_lei: pmt.tip_lei,
+      paid_at: new Date().toISOString(),
+    });
+    notifyTelegram(pmt.restaurant_id, `💳 Masa ${pmt.table_number} · ${Math.round(Number(pmt.amount_lei) + Number(pmt.tip_lei))} lei plătit`,
+      { dedupeKey: `${pmt.restaurant_id}:payment:${pmt.id}` });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[settleFromDB]', err);

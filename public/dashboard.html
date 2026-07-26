@@ -889,6 +889,9 @@ html, body {
         <a class="nav-item" data-view="feedback">
           <span class="nav-icon">★</span>Feedback
         </a>
+        <a class="nav-item" data-view="team">
+          <span class="nav-icon">👥</span>Echipă & Notificări
+        </a>
 
         <div style="margin-top:20px">
           <div class="ss-label">Azi</div>
@@ -1356,6 +1359,49 @@ html, body {
             </div>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:10px">Apare în feed-ul Club Eats — fără poză, oaspeții văd o siglă cu inițiala restaurantului.</div>
+        </div>
+      </div>
+
+      <!-- ── Echipă & Notificări (staff access + Telegram) ─────────────── -->
+      <div id="team-section" style="margin-top:0" data-view="team">
+        <div style="margin-bottom:20px">
+          <div class="section-title" style="margin-bottom:2px">Echipă & Notificări</div>
+          <div style="font-size:12px;color:var(--muted)">Acces ospătari pentru /waiter și alerte Telegram</div>
+        </div>
+
+        <!-- Staff access -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Acces Ospătari</div>
+          <div id="staff-link-status" style="font-size:13px;color:var(--muted);margin-bottom:12px">Se încarcă…</div>
+          <div id="staff-link-reveal" style="display:none;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:12px">
+            <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Link (deschide o singură dată pe telefonul ospătarului)</div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+              <code id="staff-link-value" style="flex:1;min-width:200px;font-size:12px;word-break:break-all;color:var(--text)"></code>
+              <button id="staff-link-copy" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:12px;font-weight:700;padding:6px 12px;cursor:pointer;font-family:inherit;white-space:nowrap">Copiază link</button>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:4px">PIN (spune-l ospătarului — nu va mai fi afișat)</div>
+            <div id="staff-pin-value" style="font-size:24px;font-weight:800;letter-spacing:2px;color:var(--em)"></div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button id="staff-link-generate" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer;font-family:inherit">Generează link</button>
+            <button id="staff-link-revoke" style="display:none;background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:8px;font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Revocă acces</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Regenerarea sau revocarea deconectează imediat toate telefoanele ospătarilor care folosesc linkul curent — accesul e read-only, fără date de vânzări sau setări.</div>
+        </div>
+
+        <!-- Telegram notifications -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Notificări Telegram</div>
+          <div style="display:flex;flex-direction:column;gap:8px;max-width:420px">
+            <input type="password" id="tg-token-inp" placeholder="Bot token — lasă gol ca să păstrezi valoarea salvată" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;font-family:inherit">
+            <input type="text" id="tg-chatid-inp" placeholder="Chat ID (ex: -100123456789)" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;font-family:inherit">
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
+            <button id="tg-save" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer;font-family:inherit">Salvează</button>
+            <button id="tg-test" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Trimite mesaj de test</button>
+          </div>
+          <div id="tg-status" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Dacă e configurat, primești mesaje pe Telegram când un oaspete cheamă ospătarul sau când o masă e achitată. Fără token/chat ID, funcția e dezactivată.</div>
         </div>
       </div>
 
@@ -2044,7 +2090,7 @@ document.getElementById('onboarding-wizard').addEventListener('click', async e =
 });
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings()]);
 }
 
 // ── API Helper ────────────────────────────────────────────────────────────────
@@ -2385,6 +2431,10 @@ function connectSocket() {
     loadTables();
     toast(`🔔 Masa ${tableNumber} cheamă ospătarul`);
   });
+
+  // A waiter tapped "Preiau" on /waiter — clear it here too, exactly as if the owner had
+  // clicked "Rezolvat" themselves. Purely additive: manual dismiss still works unchanged.
+  socket.on('waiter-call-acked', ({ tableNumber }) => dismissWaiter(tableNumber));
 }
 
 function addWaiterFeedEntry(tableNumber) {
@@ -3325,6 +3375,91 @@ document.getElementById('feedback-section').addEventListener('click', e => {
   }
   if (e.target.id === 'google-url-save') { saveGoogleUrl(); return; }
 });
+
+// ── Staff access (Echipă) ───────────────────────────────────────────────────────
+function renderStaffLinkStatus(data) {
+  const statusEl = document.getElementById('staff-link-status');
+  const revokeBtn = document.getElementById('staff-link-revoke');
+  const generateBtn = document.getElementById('staff-link-generate');
+  if (data.active) {
+    statusEl.textContent = `Link activ — creat ${timeAgo(data.createdAt)}`;
+    revokeBtn.style.display = '';
+    generateBtn.textContent = 'Regenerează';
+  } else {
+    statusEl.textContent = 'Niciun link activ. Generează unul pentru ca ospătarii să acceseze /waiter.';
+    revokeBtn.style.display = 'none';
+    generateBtn.textContent = 'Generează link';
+  }
+}
+
+async function loadStaffLinkStatus() {
+  try {
+    const data = await api('/api/dashboard/staff-link');
+    renderStaffLinkStatus(data);
+  } catch { /* non-critical */ }
+}
+
+async function generateStaffLink(isRegenerate) {
+  if (isRegenerate && !confirm('Regenerarea va deconecta imediat toate telefoanele ospătarilor care folosesc linkul curent. Continui?')) return;
+  const res = await apiMut('POST', '/api/dashboard/staff-link', {});
+  if (res.error) return toast('Eroare: ' + res.error);
+  document.getElementById('staff-link-value').textContent = res.link;
+  document.getElementById('staff-pin-value').textContent = res.pin;
+  document.getElementById('staff-link-reveal').style.display = '';
+  document.getElementById('staff-link-generate').textContent = 'Regenerează';
+  loadStaffLinkStatus();
+}
+
+async function revokeStaffLink() {
+  if (!confirm('Revocarea deconectează imediat toate telefoanele ospătarilor care folosesc linkul curent. Continui?')) return;
+  const res = await apiMut('POST', '/api/dashboard/staff-link/revoke', {});
+  if (res.error) return toast('Eroare: ' + res.error);
+  document.getElementById('staff-link-reveal').style.display = 'none';
+  document.getElementById('staff-link-generate').textContent = 'Generează link';
+  toast('Acces ospătari revocat.', 'success');
+  loadStaffLinkStatus();
+}
+
+// ── Telegram notifications ──────────────────────────────────────────────────────
+async function loadTelegramSettings() {
+  try {
+    const data = await api('/api/dashboard/telegram-settings');
+    document.getElementById('tg-token-inp').placeholder = data.has_token
+      ? 'Bot token configurat — lasă gol ca să păstrezi valoarea salvată'
+      : 'Bot token — obținut de la @BotFather';
+    document.getElementById('tg-chatid-inp').value = data.chat_id || '';
+  } catch { /* non-critical */ }
+}
+
+async function saveTelegramSettings() {
+  const botToken = document.getElementById('tg-token-inp').value.trim();
+  const chatId   = document.getElementById('tg-chatid-inp').value.trim();
+  const res = await apiMut('POST', '/api/dashboard/telegram-settings', { botToken: botToken || undefined, chatId });
+  if (res.error) return toast('Eroare: ' + res.error);
+  document.getElementById('tg-token-inp').value = '';
+  toast('Setări Telegram salvate!', 'success');
+  loadTelegramSettings();
+}
+
+async function sendTelegramTestMessage() {
+  const statusEl = document.getElementById('tg-status');
+  statusEl.textContent = 'Se trimite…';
+  const res = await apiMut('POST', '/api/dashboard/telegram-test', {});
+  statusEl.textContent = res.ok ? 'Mesaj trimis ✓' : ('Eroare: ' + (res.error || 'necunoscută'));
+  if (res.ok) toast('Mesaj de test trimis!', 'success');
+}
+
+document.getElementById('staff-link-generate').addEventListener('click', () => {
+  const isRegenerate = document.getElementById('staff-link-generate').textContent === 'Regenerează';
+  generateStaffLink(isRegenerate);
+});
+document.getElementById('staff-link-revoke').addEventListener('click', revokeStaffLink);
+document.getElementById('staff-link-copy').addEventListener('click', () => {
+  navigator.clipboard.writeText(document.getElementById('staff-link-value').textContent);
+  toast('Link copiat!', 'success');
+});
+document.getElementById('tg-save').addEventListener('click', saveTelegramSettings);
+document.getElementById('tg-test').addEventListener('click', sendTelegramTestMessage);
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function timeAgo(ts) {
