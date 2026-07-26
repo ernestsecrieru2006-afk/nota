@@ -248,6 +248,32 @@ export async function memberMe(req, res) {
   }
 }
 
+// Member-only savings proof for the Profil tab: lifetime discount total (offer + any referral
+// bonus — both already collapsed into payments.discount_lei at payment time), visit count, and
+// join date. Scoped strictly to req.member.memberId — never accepts an id from the client.
+export async function memberStats(req, res) {
+  const memberId = req.member.memberId;
+  try {
+    const [{ rows: [agg] }, { rows: [m] }] = await Promise.all([
+      pool.query(
+        `SELECT COALESCE(SUM(discount_lei),0)::numeric(10,2) AS lifetime_savings,
+                COUNT(*)::int                                 AS visits_count
+         FROM payments WHERE member_id=$1 AND status='paid'`,
+        [memberId]
+      ),
+      pool.query(`SELECT created_at FROM members WHERE id=$1`, [memberId]),
+    ]);
+    if (!m) return res.status(404).json({ error: 'Member not found' });
+    res.json({
+      lifetime_savings: Number(agg?.lifetime_savings || 0),
+      visits_count:      agg?.visits_count || 0,
+      member_since:       m.created_at,
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+}
+
 export async function memberReferral(req, res) {
   const memberId = req.member.memberId;
   try {

@@ -336,6 +336,11 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_menu_images_restaurant ON menu_images(restaurant_id)`);
     } catch { /* already exist */ }
 
+    // ── Club Eats PWA: restaurant cover photo for the photo-first partner feed ──
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS cover_image_id INT REFERENCES menu_images(id) ON DELETE SET NULL`);
+    } catch { /* already exists */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

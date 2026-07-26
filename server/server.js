@@ -35,7 +35,7 @@ import { getOpenOrder, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCallback, cancelPayment,
          refundPayment, simulatePayment, setMockFailNext, MIA_DEFAULT_MODE } from './mia.js';
 import { register, login, me, requireAuth, verifyJWT } from './auth.js';
-import { memberRegister, memberLogin, memberMe, memberReferral, getActiveMemberBonus,
+import { memberRegister, memberLogin, memberMe, memberReferral, memberStats, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT } from './members.js';
 import { encryptSecret, decryptSecret } from './secrets.js';
 import multer from 'multer';
@@ -293,6 +293,12 @@ app.use(express.static(join(__dirname, '../public'), {
       // Revalidate HTML on every request so deploys go live immediately
       res.setHeader('Cache-Control', 'no-cache');
     }
+    // sw.js and the manifest gate the PWA's own update cycle — browsers already refuse to
+    // cache sw.js past 24h, but no-cache makes a fresh deploy visible on the very next visit
+    // instead of waiting out that window, so "stale shell forever" can't happen.
+    if (filePath.endsWith('/sw.js') || filePath.endsWith('manifest.webmanifest')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
   },
 }));
 
@@ -353,6 +359,7 @@ app.post('/api/members/register',  limiterAuth,       memberRegister);
 app.post('/api/members/login',     limiterAuth,       memberLogin);
 app.get( '/api/members/me',        requireMemberAuth, memberMe);
 app.get( '/api/members/referral',  requireMemberAuth, memberReferral);
+app.get( '/api/members/stats',     requireMemberAuth, memberStats);
 
 // ─── /club — Club Eats member web app ────────────────────────────────────────
 
@@ -375,6 +382,24 @@ app.get('/api/table/by-token/:token', async (req, res) => {
     res.json({ ...order, table_number: tbl.number });
   } catch (err) {
     console.error('[GET /api/table/by-token]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// Read-only, side-effect-free lookup used by the Club Eats in-app scanner to confirm which
+// restaurant a scanned table token belongs to before routing the guest into the payment flow.
+// Reveals nothing beyond what /?t=TOKEN already would once opened.
+app.get('/api/table/restaurant-by-token/:token', async (req, res) => {
+  try {
+    const { rows: [tbl] } = await pool.query(
+      'SELECT restaurant_id FROM tables WHERE token = $1',
+      [req.params.token]
+    );
+    if (!tbl) return res.status(404).json({ error: 'Cod invalid' });
+    const { rows: [r] } = await pool.query('SELECT name FROM restaurants WHERE id=$1', [tbl.restaurant_id]);
+    res.json({ restaurant_id: tbl.restaurant_id, restaurant_name: r?.name || null });
+  } catch (err) {
+    console.error('[GET /api/table/restaurant-by-token]', err);
     res.status(500).json({ error: 'Eroare internă' });
   }
 });
@@ -743,6 +768,33 @@ async function serveMenuImage(req, res, variant) {
 }
 app.get('/api/images/:id', (req, res) => serveMenuImage(req, res, 'full'));
 app.get('/api/images/:id/thumb', (req, res) => serveMenuImage(req, res, 'thumb'));
+
+// ─── Club Eats cover photo (restaurant profile photo for the partner feed) ─────────────────────
+
+app.post('/api/dashboard/profile/cover-image', requireAuth, uploadMenuImage, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nicio imagine primită.' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    const processed = await processAndStore({ buffer: req.file.buffer, restaurantId: rId });
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO menu_images (restaurant_id, mime_type, full_data, thumb_data, full_url, thumb_url, width, height)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [rId, processed.mime_type, processed.full_data, processed.thumb_data, processed.full_url, processed.thumb_url, processed.width, processed.height]
+    );
+    await pool.query('UPDATE restaurants SET cover_image_id=$1 WHERE id=$2', [row.id, rId]);
+    res.json({ id: row.id, url: `/api/images/${row.id}`, thumbUrl: `/api/images/${row.id}/thumb` });
+  } catch (err) {
+    console.error('[cover image upload]', err.message);
+    res.status(400).json({ error: 'Imaginea nu a putut fi procesată. Încearcă alt fișier.' });
+  }
+});
+
+app.get('/api/dashboard/profile/cover-image', requireAuth, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query('SELECT cover_image_id FROM restaurants WHERE id=$1', [req.restaurant.restaurantId]);
+    res.json({ photo: imageUrls(r?.cover_image_id) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
 
 // ─── Menu (dashboard CRUD, tenant-scoped) ──────────────────────────────────────
 
@@ -1297,13 +1349,13 @@ app.get('/api/dashboard/club-eats', requireAuth, async (req, res) => {
 app.get('/api/public/offers', async (_req, res) => {
   try {
     const { rows } = await pool.query(`
-      SELECT r.name AS restaurant_name, o.name, o.discount_pct,
-             o.days_of_week, o.start_time, o.end_time, o.active, o.member_only
+      SELECT r.id AS restaurant_id, r.name AS restaurant_name, r.cover_image_id,
+             o.name, o.discount_pct, o.days_of_week, o.start_time, o.end_time, o.active, o.member_only
       FROM offers o JOIN restaurants r ON r.id = o.restaurant_id
       WHERE o.public_visible = true
       ORDER BY o.discount_pct DESC, r.name
     `);
-    res.json(rows);
+    res.json(rows.map(r => ({ ...r, cover_image_id: undefined, cover_photo: imageUrls(r.cover_image_id) })));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

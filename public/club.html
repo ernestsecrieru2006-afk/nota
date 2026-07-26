@@ -2,14 +2,25 @@
 <html lang="ro">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1">
 <title>Club Eats — nota.</title>
+<meta name="description" content="Club Eats — reduceri automate la restaurantele partenere nota. Scanezi, plătești, economisești.">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2300333c'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='700' fill='%23C5A059' text-anchor='middle'%3En.%3C/text%3E%3C/svg%3E">
+
+<!-- PWA -->
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#00333c">
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Club Eats">
+<meta name="mobile-web-app-capable" content="yes">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 :root {
   --bg:       #0a0a0f;
   --surface:  #13131a;
@@ -23,619 +34,458 @@
   --gold-hi:  #e8c96a;
   --r:        12px;
   --rl:       18px;
+  --safe-t:   env(safe-area-inset-top, 0px);
+  --safe-b:   env(safe-area-inset-bottom, 0px);
 }
-body { font-family:'Manrope',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100dvh; padding-bottom:64px; }
-
-/* ── Bottom nav ── */
-.bottom-nav { position:fixed; bottom:0; left:0; right:0; display:flex; justify-content:space-around; align-items:center;
-  padding:8px 12px calc(8px + env(safe-area-inset-bottom,0px)); background:rgba(10,10,15,.92); backdrop-filter:blur(14px);
-  -webkit-backdrop-filter:blur(14px); border-top:1px solid var(--border); z-index:50; }
-.bottom-nav-item { display:flex; flex-direction:column; align-items:center; gap:2px; font-size:11px; font-weight:600;
-  color:var(--muted); padding:4px 18px; border-radius:14px; }
-.bottom-nav-item.active { color:var(--gold-hi); background:var(--gold-dim); }
+html, body { height: 100%; overscroll-behavior: none; }
+body { font-family:'Manrope',system-ui,sans-serif; background:var(--bg); color:var(--text); min-height:100dvh; overflow-x: hidden; }
 a { color:inherit; text-decoration:none; }
+button, input { font-family: inherit; }
+[hidden] { display: none !important; }
+.hidden { display: none !important; }
 
-/* ── Nav ── */
-.nav { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--border); position:sticky; top:0; background:rgba(10,10,15,.88); backdrop-filter:blur(14px); -webkit-backdrop-filter:blur(14px); z-index:10; gap:10px; flex-wrap:wrap; }
-.nav-brand-row { display:flex; align-items:center; gap:8px; }
-.nav-brand { font-family:'Playfair Display',serif; font-size:20px; font-weight:700; color:#fff; letter-spacing:.01em; }
-.nav-brand span { color:var(--gold-hi); }
-.nav-pill { font-size:9.5px; font-weight:800; letter-spacing:.11em; color:var(--gold-hi); background:rgba(201,168,76,.16); border:1px solid var(--gold); border-radius:99px; padding:3px 9px; text-transform:uppercase; }
-.nav-lang { display:flex; gap:6px; }
-.lang-btn { background:none; border:1px solid var(--border); border-radius:6px; color:var(--text2); font-size:12px; font-weight:600; padding:4px 10px; cursor:pointer; font-family:inherit; transition:border-color .15s,color .15s; }
-.lang-btn.active { border-color:var(--gold); color:var(--gold-hi); }
-.nav-auth { display:flex; align-items:center; gap:10px; }
-.btn-login  { background:none; border:1px solid var(--border); border-radius:8px; color:var(--text2); font-size:13px; font-weight:600; padding:7px 16px; cursor:pointer; font-family:inherit; transition:.15s; }
-.btn-login:hover { border-color:var(--gold-dim); color:var(--gold-hi); }
-.btn-signup { background:var(--gold); border:none; border-radius:8px; color:#000; font-size:13px; font-weight:700; padding:7px 16px; cursor:pointer; font-family:inherit; transition:.15s; }
-.btn-signup:hover { background:var(--gold-hi); }
-.nav-user { font-size:13px; color:var(--text2); }
-.btn-logout { background:none; border:none; color:var(--muted); font-size:12px; cursor:pointer; font-family:inherit; text-decoration:underline; margin-left:8px; }
+/* ══════════════════════════════ Splash ══════════════════════════════ */
+#screen-splash {
+  position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; padding: 0 28px calc(56px + var(--safe-b)); text-align: center;
+  overflow: hidden; z-index: 10;
+}
+/* Abstract, hand-drawn ambience — deliberately NOT photography: no stock image can accidentally
+   depict a real venue, signage, or logo, and this loads instantly with zero network requests. */
+.splash-scene { position: absolute; inset: 0; background:
+  radial-gradient(ellipse 60% 45% at 20% 15%, rgba(201,168,76,.16), transparent 60%),
+  radial-gradient(ellipse 55% 40% at 85% 25%, rgba(139,58,58,.18), transparent 60%),
+  radial-gradient(ellipse 70% 55% at 50% 90%, rgba(0,51,60,.35), transparent 65%),
+  linear-gradient(160deg, #150f0a, #0a0a0f 55%, #0a0a0f);
+  background-size: 180% 180%, 200% 200%, 160% 160%, 100% 100%;
+  animation: scene-drift 22s ease-in-out infinite alternate;
+}
+@keyframes scene-drift {
+  0%   { background-position: 0% 0%, 100% 0%, 50% 100%, 0 0; }
+  100% { background-position: 30% 20%, 70% 30%, 40% 80%, 0 0; }
+}
+.splash-bokeh { position: absolute; border-radius: 50%; filter: blur(1px); opacity: .55; animation: bokeh-float 14s ease-in-out infinite; }
+.splash-bokeh.b1 { width: 90px; height: 90px; left: 12%; top: 22%; background: radial-gradient(circle, rgba(232,201,106,.5), transparent 70%); animation-duration: 16s; }
+.splash-bokeh.b2 { width: 50px; height: 50px; left: 72%; top: 16%; background: radial-gradient(circle, rgba(232,201,106,.35), transparent 70%); animation-duration: 12s; animation-delay: -3s; }
+.splash-bokeh.b3 { width: 130px; height: 130px; left: 60%; top: 55%; background: radial-gradient(circle, rgba(139,58,58,.28), transparent 70%); animation-duration: 20s; animation-delay: -6s; }
+.splash-bokeh.b4 { width: 70px; height: 70px; left: 20%; top: 68%; background: radial-gradient(circle, rgba(0,51,60,.4), transparent 70%); animation-duration: 18s; animation-delay: -9s; }
+@keyframes bokeh-float { 0%,100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-22px) scale(1.08); } }
+.splash-lines { position: absolute; inset: 0; opacity: .10; stroke: var(--gold-hi); fill: none; stroke-width: 1.2; }
+.splash-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10,10,15,.15) 0%, rgba(10,10,15,.55) 55%, rgba(10,10,15,.92) 100%); }
 
-/* ── Hero ── */
-@keyframes hero-pan { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-.hero { position:relative; overflow:hidden; text-align:center; padding:48px 24px 40px; margin:14px 14px 0;
-  border-radius:20px; background:linear-gradient(120deg,#00272e,#012129,#00333c,#001d22); background-size:300% 300%;
-  animation:hero-pan 10s ease-in-out infinite; border:1px solid rgba(201,168,76,.25); }
-.hero::after { content:''; position:absolute; right:-30px; bottom:-40px; width:190px; height:190px; opacity:.14;
-  background:radial-gradient(circle at 30% 30%, var(--gold-hi), transparent 70%); pointer-events:none; }
-.hero-badge { display:inline-flex; align-items:center; gap:6px; background:var(--gold-dim); border:1px solid var(--gold); border-radius:99px; padding:5px 14px; font-size:11px; font-weight:700; color:var(--gold-hi); letter-spacing:.08em; text-transform:uppercase; margin-bottom:20px; }
-.hero-title { font-family:'Playfair Display',serif; font-size:clamp(28px,7vw,48px); color:#fff; line-height:1.15; margin-bottom:12px; position:relative; }
-.hero-title em { color:var(--gold-hi); font-style:normal; }
-.hero-sub { color:rgba(255,255,255,.72); font-size:15px; line-height:1.6; max-width:480px; margin:0 auto 28px; position:relative; }
-.hero-cta { display:inline-block; background:var(--gold); color:#000; font-weight:700; font-size:15px; border-radius:10px; padding:12px 28px; cursor:pointer; border:none; font-family:inherit; transition:.15s; position:relative; }
-.hero-cta:hover { background:var(--gold-hi); }
+.splash-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
+.splash-brand { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--text2); text-transform: uppercase; margin-bottom: 10px; }
+.splash-brand span { color: var(--gold-hi); }
+.splash-lockup { font-family: 'Playfair Display', serif; font-size: clamp(38px, 11vw, 58px); font-weight: 700; line-height: 1; color: #fff; margin-bottom: 18px; }
+.splash-lockup em { color: var(--gold-hi); font-style: normal; }
+.splash-tagline { font-size: 16px; color: rgba(255,255,255,.82); line-height: 1.55; max-width: 320px; margin-bottom: 32px; }
+.splash-cta { display: block; width: 100%; max-width: 320px; background: var(--gold); color: #000; border: none;
+  border-radius: 12px; font-size: 16px; font-weight: 800; padding: 16px; cursor: pointer; transition: transform .15s, background .15s; }
+.splash-cta:active { transform: scale(.98); background: var(--gold-hi); }
 
-/* ── Section ── */
-.section { max-width:680px; margin:0 auto; padding:0 16px 40px; }
-.section-title-row { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
-.section-title { font-size:13px; font-weight:700; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; margin-bottom:0; }
-.active-count { display:flex; align-items:center; gap:6px; font-size:11px; font-weight:800; color:var(--gold-hi); letter-spacing:.06em; }
-.active-count.hidden { display:none; }
-.active-count .offer-live-dot { background:var(--gold-hi); animation:badge-glow-dot 2s ease-in-out infinite; }
-@keyframes badge-glow-dot { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+/* ══════════════════════════════ Auth ══════════════════════════════ */
+#screen-auth { position: fixed; inset: 0; background: var(--bg); z-index: 20; display: flex; flex-direction: column;
+  padding: calc(20px + var(--safe-t)) 24px calc(24px + var(--safe-b)); }
+.auth-back { align-self: flex-start; background: none; border: none; color: var(--text2); font-size: 24px; cursor: pointer; padding: 6px; margin-bottom: 20px; }
+.auth-body { flex: 1; display: flex; flex-direction: column; justify-content: center; max-width: 380px; margin: 0 auto; width: 100%; }
+.auth-title { font-family: 'Playfair Display', serif; font-size: 26px; color: #fff; margin-bottom: 6px; }
+.auth-sub { font-size: 13.5px; color: var(--text2); margin-bottom: 26px; }
+.auth-field { margin-bottom: 14px; }
+.auth-field label { display: block; font-size: 11.5px; font-weight: 700; color: var(--text2); margin-bottom: 6px; letter-spacing: .04em; text-transform: uppercase; }
+.auth-field input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 10px; color: var(--text);
+  font-size: 15px; padding: 13px 14px; outline: none; transition: border-color .15s; }
+.auth-field input:focus { border-color: var(--gold); }
+.auth-err { color: #ef4444; font-size: 13px; margin-bottom: 10px; min-height: 18px; }
+.auth-submit { width: 100%; background: var(--gold); border: none; border-radius: 10px; color: #000; font-size: 15.5px;
+  font-weight: 700; padding: 14px; cursor: pointer; margin-top: 8px; transition: background .15s; }
+.auth-submit:hover { background: var(--gold-hi); }
+.auth-submit:disabled { opacity: .6; }
+.auth-switch { text-align: center; font-size: 13.5px; color: var(--text2); margin-top: 18px; }
+.auth-switch button { background: none; border: none; color: var(--gold-hi); font-weight: 700; cursor: pointer; font-size: 13.5px; }
 
-/* ── Offers ── */
-@keyframes badge-glow { 0%,100% { box-shadow:0 0 0 0 rgba(201,168,76,.5); } 50% { box-shadow:0 0 0 7px rgba(201,168,76,0); } }
-.offers-grid { display:flex; flex-direction:column; gap:12px; }
-.offer-card { background:var(--card); border:1px solid var(--border); border-radius:var(--rl); padding:18px 20px; display:flex; align-items:center; gap:16px; transition:opacity .2s,filter .2s; }
-.offer-card.inactive { opacity:.62; filter:grayscale(.5); }
-.offer-mono { flex-shrink:0; width:52px; height:52px; background:var(--gold-dim); border:1.5px solid var(--gold); border-radius:12px; display:flex; align-items:center; justify-content:center; font-family:'Playfair Display',serif; font-size:19px; font-weight:700; color:var(--gold-hi); }
-.offer-body { flex:1; min-width:0; }
-.offer-name { font-size:15px; font-weight:700; color:var(--text); margin-bottom:3px; }
-.offer-restaurant { font-size:12px; color:var(--muted); margin-bottom:6px; }
-.offer-meta-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-.offer-meta { font-size:12px; color:var(--text2); }
-.offer-badge-member { display:inline-flex; align-items:center; gap:4px; background:var(--gold-dim); border:1px solid var(--gold); border-radius:99px; padding:2px 8px; font-size:10px; font-weight:700; color:var(--gold-hi); letter-spacing:.06em; margin-left:6px; }
-.offer-pct-chip { flex-shrink:0; font-size:14px; font-weight:800; color:var(--gold-hi); }
-.offer-live-pill { display:inline-flex; align-items:center; gap:5px; background:var(--gold); color:#000; font-size:10px; font-weight:800; letter-spacing:.05em; border-radius:99px; padding:3px 9px; text-transform:uppercase; animation:badge-glow 2s ease-in-out infinite; }
-.offer-live-dot { width:5px; height:5px; border-radius:50%; background:#000; }
-.offer-inactive-pill { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,.06); border:1px solid var(--border); color:var(--muted); font-size:10px; font-weight:700; letter-spacing:.05em; border-radius:99px; padding:3px 9px; text-transform:uppercase; }
-.offers-empty { text-align:center; color:var(--muted); padding:40px 20px; font-size:14px; }
+/* ══════════════════════════════ App shell ══════════════════════════════ */
+#screen-app { position: fixed; inset: 0; display: flex; flex-direction: column; z-index: 5; }
+.app-topbar { display: flex; align-items: center; justify-content: space-between; padding: calc(14px + var(--safe-t)) 18px 12px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.app-brand-row { display: flex; align-items: center; gap: 8px; }
+.app-brand { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; color: #fff; }
+.app-brand span { color: var(--gold-hi); }
+.app-pill { font-size: 9px; font-weight: 800; letter-spacing: .1em; color: var(--gold-hi); background: rgba(201,168,76,.16);
+  border: 1px solid var(--gold); border-radius: 99px; padding: 3px 8px; text-transform: uppercase; }
+.app-lang { display: flex; gap: 5px; }
+.app-lang button { background: none; border: 1px solid var(--border); border-radius: 6px; color: var(--text2); font-size: 11px;
+  font-weight: 700; padding: 4px 9px; cursor: pointer; transition: .15s; }
+.app-lang button.active { border-color: var(--gold); color: var(--gold-hi); }
 
-/* ── Membership CTA (logged-out only) ── */
-.membership-cta { text-align:center; margin-top:36px; padding:28px 22px; border-radius:var(--rl);
-  border:1px solid var(--border); background:var(--surface); }
-.membership-cta.hidden { display:none; }
-.membership-title { font-family:'Playfair Display',serif; font-size:22px; color:#fff; margin-bottom:8px; }
-.membership-sub { font-size:13px; color:var(--text2); margin-bottom:20px; max-width:360px; margin-left:auto; margin-right:auto; }
-.btn-membership-primary { display:block; width:100%; max-width:320px; margin:0 auto 10px; background:var(--gold); border:none;
-  border-radius:10px; color:#000; font-size:14.5px; font-weight:700; padding:13px; cursor:pointer; font-family:inherit; transition:.15s; }
-.btn-membership-primary:hover { background:var(--gold-hi); }
-.btn-membership-secondary { display:block; width:100%; max-width:320px; margin:0 auto; background:none; border:1px solid var(--border);
-  border-radius:10px; color:var(--text2); font-size:14.5px; font-weight:600; padding:13px; cursor:pointer; font-family:inherit; transition:.15s; }
-.btn-membership-secondary:hover { border-color:var(--gold-dim); color:var(--gold-hi); }
+.install-hint { display: flex; align-items: center; gap: 10px; background: rgba(201,168,76,.08); border-bottom: 1px solid var(--border);
+  padding: 10px 18px; font-size: 12.5px; color: var(--text2); }
+.install-hint span.txt { flex: 1; }
+.install-hint button.dismiss { background: none; border: none; color: var(--muted); font-size: 18px; cursor: pointer; line-height: 1; padding: 2px 4px; }
+.install-hint button.act { background: var(--gold); border: none; border-radius: 7px; color: #000; font-size: 11.5px; font-weight: 700; padding: 5px 10px; cursor: pointer; white-space: nowrap; }
 
-/* ── Auth modal ── */
-.modal-overlay { position:fixed; inset:0; background:#000a; display:flex; align-items:flex-end; justify-content:center; z-index:100; padding:0; }
-.modal-overlay.hidden { display:none; }
-.modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--rl) var(--rl) 0 0; padding:28px 24px 36px; width:100%; max-width:460px; }
-.modal-title { font-family:'Playfair Display',serif; font-size:22px; color:var(--gold-hi); margin-bottom:6px; }
-.modal-sub { font-size:13px; color:var(--text2); margin-bottom:22px; }
-.form-field { margin-bottom:14px; }
-.form-field label { display:block; font-size:12px; font-weight:600; color:var(--text2); margin-bottom:6px; letter-spacing:.04em; }
-.form-field input { width:100%; background:var(--card); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:15px; font-family:inherit; padding:11px 14px; outline:none; transition:border-color .15s; }
-.form-field input:focus { border-color:var(--gold); }
-.btn-submit { width:100%; background:var(--gold); border:none; border-radius:10px; color:#000; font-size:15px; font-weight:700; padding:13px; cursor:pointer; font-family:inherit; transition:.15s; margin-top:6px; }
-.btn-submit:hover { background:var(--gold-hi); }
-.modal-err { color:#ef4444; font-size:13px; margin-bottom:10px; min-height:18px; }
-.modal-switch { font-size:13px; color:var(--text2); text-align:center; margin-top:16px; }
-.modal-switch button { background:none; border:none; color:var(--gold-hi); font-weight:700; cursor:pointer; font-family:inherit; font-size:13px; }
-.btn-modal-close { position:absolute; top:14px; right:18px; background:none; border:none; color:var(--muted); font-size:22px; cursor:pointer; line-height:1; }
+.app-views { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.tab-view { display: none; padding: 18px 18px calc(24px + var(--safe-b)); max-width: 640px; margin: 0 auto; }
+.tab-view.active { display: block; }
 
-/* ── Member banner ── */
-.member-banner { background:linear-gradient(135deg,#1a1508,#1e1a08); border:1px solid var(--gold); border-radius:var(--rl); padding:18px 20px; margin-bottom:24px; display:flex; align-items:center; gap:14px; }
-.member-banner-icon { font-size:28px; flex-shrink:0; }
-.member-banner-body {}
-.member-banner-title { font-size:14px; font-weight:700; color:var(--gold-hi); margin-bottom:3px; }
-.member-banner-sub { font-size:12px; color:var(--text2); }
-.member-banner.hidden { display:none; }
+.bottom-tabs { display: flex; border-top: 1px solid var(--border); background: rgba(10,10,15,.94); backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px); padding: 6px 12px calc(6px + var(--safe-b)); flex-shrink: 0; }
+.tab-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none;
+  color: var(--muted); font-size: 11px; font-weight: 600; padding: 8px 4px; cursor: pointer; border-radius: 12px; }
+.tab-btn.active { color: var(--gold-hi); }
+.tab-btn svg { width: 22px; height: 22px; }
 
-/* ── Toast ── */
-.toast { position:fixed; bottom:24px; left:50%; transform:translateX(-50%); background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 20px; font-size:13px; color:var(--text); box-shadow:0 4px 24px #0008; z-index:200; opacity:0; transition:opacity .2s; pointer-events:none; white-space:nowrap; }
-.toast.show { opacity:1; }
+/* ── Feed ── */
+.feed-title { font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 16px; }
+.feed-grid { display: flex; flex-direction: column; gap: 14px; }
+.feed-card { display: flex; align-items: center; gap: 14px; background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--rl); padding: 12px; cursor: pointer; transition: border-color .15s, transform .1s; text-align: left; width: 100%; }
+.feed-card:active { transform: scale(.985); }
+.feed-card.live { border-color: rgba(201,168,76,.5); }
+.feed-photo { width: 64px; height: 64px; border-radius: 12px; flex-shrink: 0; background-size: cover; background-position: center;
+  background-color: var(--gold-dim); display: flex; align-items: center; justify-content: center;
+  font-family: 'Playfair Display', serif; font-size: 24px; font-weight: 700; color: var(--gold-hi); }
+.feed-body { flex: 1; min-width: 0; }
+.feed-name { font-size: 15.5px; font-weight: 700; color: var(--text); margin-bottom: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-offer { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; border-radius: 99px; padding: 4px 10px; }
+.feed-offer.live { background: var(--gold); color: #000; animation: badge-glow 2s ease-in-out infinite; }
+.feed-offer.upcoming { background: rgba(255,255,255,.06); color: var(--text2); border: 1px solid var(--border); }
+.feed-dot { width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+@keyframes badge-glow { 0%,100% { box-shadow: 0 0 0 0 rgba(201,168,76,.5); } 50% { box-shadow: 0 0 0 6px rgba(201,168,76,0); } }
+.feed-chevron { color: var(--muted); flex-shrink: 0; }
+.feed-empty { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 14px; line-height: 1.6; }
+
+/* ── Profile ── */
+.profile-hero { text-align: center; padding: 20px 0 26px; }
+.profile-savings-lbl { font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: .1em; text-transform: uppercase; margin-bottom: 8px; }
+.profile-savings-val { font-family: 'Playfair Display', serif; font-size: 42px; font-weight: 700; color: var(--gold-hi); }
+.profile-stats-row { display: flex; justify-content: center; gap: 28px; margin-top: 18px; }
+.profile-stat { text-align: center; }
+.profile-stat strong { display: block; font-size: 20px; font-weight: 700; color: var(--text); }
+.profile-stat span { font-size: 11.5px; color: var(--muted); }
+
+.profile-section { background: var(--card); border: 1px solid var(--border); border-radius: var(--rl); padding: 18px 20px; margin-bottom: 14px; }
+.profile-section-title { font-size: 13px; font-weight: 700; color: var(--gold-hi); margin-bottom: 10px; }
+.referral-link-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.referral-link-box { flex: 1; min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  padding: 9px 12px; font-size: 12px; color: var(--gold-hi); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn-icon-circle { background: var(--gold); border: none; border-radius: 50%; width: 38px; height: 38px; flex-shrink: 0;
+  color: #000; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.btn-copy { background: none; border: 1px solid var(--border); border-radius: 8px; color: var(--text2); font-size: 12px;
+  font-weight: 600; padding: 9px 14px; cursor: pointer; white-space: nowrap; }
+.referral-stats-row { display: flex; gap: 20px; font-size: 12px; color: var(--text2); flex-wrap: wrap; }
+.referral-stats-row strong { display: block; font-size: 18px; color: var(--text); }
+.bonus-note { margin-top: 12px; font-size: 12.5px; color: var(--gold-hi); background: var(--gold-dim); border: 1px solid var(--gold);
+  border-radius: 8px; padding: 8px 12px; }
+.bonus-note.hidden { display: none; }
+
+.profile-row { display: flex; align-items: center; justify-content: space-between; padding: 12px 4px; border-bottom: 1px solid var(--border); font-size: 14px; }
+.profile-row:last-child { border-bottom: none; }
+.profile-row span.lbl { color: var(--text2); }
+.btn-logout-full { width: 100%; background: none; border: 1px solid var(--border); border-radius: 10px; color: #ef4444;
+  font-size: 14px; font-weight: 600; padding: 12px; cursor: pointer; margin-top: 6px; }
+
+/* ══════════════════════════════ Scanner ══════════════════════════════ */
+#screen-scanner { position: fixed; inset: 0; background: #000; z-index: 100; display: flex; flex-direction: column; }
+.scanner-video-wrap { position: relative; flex: 1; overflow: hidden; background: #000; }
+#scanner-video { width: 100%; height: 100%; object-fit: cover; }
+.scanner-frame { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+.scanner-frame-box { width: 62vw; max-width: 280px; height: 62vw; max-height: 280px; position: relative; }
+.scanner-frame-box::before, .scanner-frame-box::after,
+.scanner-corner-tl, .scanner-corner-br { content: ''; }
+.scanner-corner { position: absolute; width: 34px; height: 34px; border: 3px solid var(--gold-hi); }
+.scanner-corner.tl { top: 0; left: 0; border-right: none; border-bottom: none; border-radius: 8px 0 0 0; }
+.scanner-corner.tr { top: 0; right: 0; border-left: none; border-bottom: none; border-radius: 0 8px 0 0; }
+.scanner-corner.bl { bottom: 0; left: 0; border-right: none; border-top: none; border-radius: 0 0 0 8px; }
+.scanner-corner.br { bottom: 0; right: 0; border-left: none; border-top: none; border-radius: 0 0 8px 0; }
+.scanner-topbar { position: absolute; top: calc(14px + var(--safe-t)); left: 18px; right: 18px; display: flex;
+  align-items: center; justify-content: space-between; z-index: 2; }
+.scanner-name-chip { background: rgba(0,0,0,.55); backdrop-filter: blur(6px); border-radius: 99px; padding: 7px 14px;
+  font-size: 13px; font-weight: 700; color: #fff; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scanner-icon-btn { background: rgba(0,0,0,.55); border: none; border-radius: 50%; width: 40px; height: 40px; color: #fff;
+  display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; }
+.scanner-icon-btn.active { background: var(--gold); color: #000; }
+.scanner-msg { position: absolute; bottom: 24px; left: 18px; right: 18px; text-align: center; background: rgba(0,0,0,.7);
+  border-radius: 10px; padding: 12px 16px; font-size: 13.5px; color: #fff; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.scanner-msg.show { opacity: 1; }
+.scanner-msg.err { color: #ff8080; }
+.scanner-bottom { padding: 18px 20px calc(20px + var(--safe-b)); background: #000; text-align: center; }
+.scanner-manual-link { background: none; border: none; color: var(--gold-hi); font-size: 13.5px; font-weight: 600; cursor: pointer; padding: 8px; }
+
+.scanner-manual-panel { position: fixed; inset: 0; background: var(--bg); z-index: 110; display: flex; flex-direction: column;
+  padding: calc(20px + var(--safe-t)) 24px calc(24px + var(--safe-b)); }
+.scanner-manual-panel .auth-back { margin-bottom: 20px; }
+.scanner-manual-body { max-width: 380px; margin: 0 auto; width: 100%; }
+.scanner-manual-body h2 { font-family: 'Playfair Display', serif; font-size: 22px; color: #fff; margin-bottom: 8px; }
+.scanner-manual-body p { font-size: 13.5px; color: var(--text2); margin-bottom: 18px; line-height: 1.5; }
+.scanner-manual-body input { width: 100%; background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+  color: var(--text); font-size: 15px; padding: 13px 14px; outline: none; margin-bottom: 12px; }
+.scanner-manual-body .auth-submit { margin-top: 0; }
+.scanner-manual-err { color: #ef4444; font-size: 13px; margin-bottom: 10px; min-height: 18px; }
 
 /* ── Spinner ── */
-.spinner { width:18px; height:18px; border:2px solid var(--border); border-top-color:var(--gold); border-radius:50%; animation:spin .7s linear infinite; display:inline-block; vertical-align:middle; }
-@keyframes spin { to { transform:rotate(360deg); } }
+.spinner { width: 20px; height: 20px; border: 2.5px solid var(--border); border-top-color: var(--gold); border-radius: 50%;
+  animation: spin .7s linear infinite; display: inline-block; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.center-spin { display: flex; justify-content: center; padding: 40px 0; }
 
-/* ── Referral section ── */
-.referral-section { background:rgba(201,168,76,.06); backdrop-filter:blur(8px); border:1px solid var(--gold); border-radius:var(--rl); padding:22px 20px; margin-bottom:24px; margin-top:18px; box-shadow:0 8px 28px rgba(0,0,0,.25); }
-.referral-section.hidden { display:none; }
-.referral-title { font-size:15px; font-weight:700; color:var(--gold-hi); margin-bottom:4px; }
-.referral-sub   { font-size:12px; color:var(--text2); margin-bottom:16px; }
-.referral-link-row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:14px; }
-.referral-link-box { flex:1; min-width:0; background:var(--card); border:1px solid var(--border); border-radius:8px; padding:9px 12px; font-size:12px; color:var(--gold-hi); font-family:'Manrope',monospace; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.btn-share-referral { background:var(--gold); border:none; border-radius:50%; width:38px; height:38px; flex-shrink:0; color:#000; font-size:15px; font-weight:700; cursor:pointer; font-family:inherit; transition:.15s; display:flex; align-items:center; justify-content:center; }
-.btn-share-referral:hover { background:var(--gold-hi); }
-.btn-copy-referral  { background:none; border:1px solid var(--border); border-radius:8px; color:var(--text2); font-size:12px; font-weight:600; padding:9px 14px; cursor:pointer; font-family:inherit; transition:.15s; white-space:nowrap; }
-.btn-copy-referral:hover { border-color:var(--gold); color:var(--gold-hi); }
-.referral-stats { display:flex; gap:20px; font-size:12px; color:var(--text2); flex-wrap:wrap; }
-.referral-stat  { display:flex; flex-direction:column; gap:2px; }
-.referral-stat strong { font-size:20px; font-weight:700; color:var(--text); }
-.bonus-badge { display:inline-flex; align-items:center; gap:6px; background:linear-gradient(135deg,rgba(201,168,76,.15),rgba(201,168,76,.05)); border:1px solid var(--gold); border-radius:10px; padding:10px 14px; font-size:13px; color:var(--gold-hi); font-weight:600; margin-top:12px; }
-.bonus-badge.hidden { display:none; }
+/* ── Toast ── */
+.toast { position: fixed; bottom: calc(90px + var(--safe-b)); left: 50%; transform: translateX(-50%); background: var(--card);
+  border: 1px solid var(--border); border-radius: 10px; padding: 10px 20px; font-size: 13px; color: var(--text);
+  box-shadow: 0 4px 24px #0008; z-index: 200; opacity: 0; transition: opacity .2s; pointer-events: none; white-space: nowrap; }
+.toast.show { opacity: 1; }
 
-@media (min-width:460px) {
-  .modal-overlay { align-items:center; padding:20px; }
-  .modal { border-radius:var(--rl); position:relative; }
+@media (min-width: 460px) {
+  #screen-auth, .scanner-manual-panel { align-items: center; }
+  .auth-body, .scanner-manual-body { width: 380px; }
 }
 </style>
 </head>
 <body>
 
-<!-- ── Navigation ── -->
-<nav class="nav">
-  <div class="nav-brand-row">
-    <div class="nav-brand">nota<span>.</span></div>
-    <div class="nav-pill">Club Eats</div>
+<!-- ══════════════════════════════ Splash ══════════════════════════════ -->
+<section id="screen-splash">
+  <div class="splash-scene" aria-hidden="true">
+    <div class="splash-bokeh b1"></div>
+    <div class="splash-bokeh b2"></div>
+    <div class="splash-bokeh b3"></div>
+    <div class="splash-bokeh b4"></div>
+    <svg class="splash-lines" viewBox="0 0 400 800" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <circle cx="90" cy="140" r="34"/>
+      <path d="M300 90 q10 40 0 80 M300 90 q-10 40 0 80"/>
+      <path d="M60 620 q40 -14 80 0 q10 24 -4 40 q-36 14 -72 0 q-14 -16 -4 -40 z"/>
+      <circle cx="330" cy="650" r="20"/>
+      <path d="M330 630 v-30"/>
+    </svg>
   </div>
-  <div class="nav-lang">
-    <button class="lang-btn active" data-lang="ro">RO</button>
-    <button class="lang-btn" data-lang="ru">RU</button>
+  <div class="splash-overlay" aria-hidden="true"></div>
+  <div class="splash-content">
+    <div class="splash-brand">by <span>nota.</span></div>
+    <div class="splash-lockup">Club <em>Eats</em></div>
+    <p class="splash-tagline" id="splash-tagline">Bucură-te de reduceri luând masa la localurile tale preferate.</p>
+    <button class="splash-cta" id="btn-splash-join">Alătură-te</button>
   </div>
-  <div class="nav-auth" id="nav-auth">
-    <button class="btn-login" id="btn-nav-login">Autentificare</button>
-    <button class="btn-signup" id="btn-nav-signup">Alătură-te gratuit</button>
-  </div>
-</nav>
+</section>
 
-<!-- ── Hero (shown when logged-out) ── -->
-<div id="hero-section" class="hero">
-  <div class="hero-badge">✨ Program gratuit de fidelitate</div>
-  <h1 class="hero-title">Reduceri exclusive<br><em>la restaurantele partenere</em></h1>
-  <p class="hero-sub" id="hero-sub-text">Devino membru Club Eats și beneficiază de reduceri automate la plata prin nota. — zero pași suplimentari.</p>
-  <button class="hero-cta" id="btn-hero-cta">Alătură-te gratuit</button>
-</div>
+<!-- ══════════════════════════════ Auth ══════════════════════════════ -->
+<section id="screen-auth" hidden>
+  <button class="auth-back" id="btn-auth-back" aria-label="Înapoi">←</button>
+  <div class="auth-body">
+    <div class="auth-title" id="auth-title">Creează cont</div>
+    <div class="auth-sub" id="auth-sub">Alătură-te Club Eats — reduceri automate la restaurantele partenere.</div>
+    <div class="auth-err" id="auth-err"></div>
+    <div class="auth-field">
+      <label id="auth-lbl-email">Email</label>
+      <input type="email" id="auth-inp-email" autocomplete="email" placeholder="adresa@email.com">
+    </div>
+    <div class="auth-field">
+      <label id="auth-lbl-password">Parolă</label>
+      <input type="password" id="auth-inp-password" autocomplete="current-password" placeholder="••••••••">
+    </div>
+    <button class="auth-submit" id="btn-auth-submit">Creează cont</button>
+    <div class="auth-switch" id="auth-switch">
+      Ai deja cont? <button id="btn-auth-switch">Autentifică-te</button>
+    </div>
+  </div>
+</section>
 
-<!-- ── Main content ── -->
-<main class="section">
-  <!-- Member welcome banner -->
-  <div class="member-banner hidden" id="member-banner">
-    <div class="member-banner-icon">✨</div>
-    <div class="member-banner-body">
-      <div class="member-banner-title" id="member-banner-title">Bun venit în Club Eats!</div>
-      <div class="member-banner-sub" id="member-banner-sub">Reducerile tale se aplică automat la scanarea mesei.</div>
+<!-- ══════════════════════════════ App shell ══════════════════════════════ -->
+<section id="screen-app" hidden>
+  <div class="app-topbar">
+    <div class="app-brand-row">
+      <div class="app-brand">nota<span>.</span></div>
+      <div class="app-pill">Club Eats</div>
+    </div>
+    <div class="app-lang">
+      <button data-lang="ro" class="active">RO</button>
+      <button data-lang="ru">RU</button>
     </div>
   </div>
 
-  <!-- ── Referral section (logged-in only) ── -->
-  <div class="referral-section hidden" id="referral-section">
-    <div class="referral-title" id="ref-title">Invită prietenii</div>
-    <div class="referral-sub" id="ref-sub">Când prietenul tău face prima plată, amândoi primiți +5% bonus la următoarea comandă.</div>
-    <div class="referral-link-row">
-      <div class="referral-link-box" id="ref-link-box">—</div>
-      <button class="btn-share-referral" id="btn-share-ref" aria-label="Distribuie" title="Distribuie">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5"/></svg>
+  <div class="install-hint hidden" id="install-hint">
+    <span class="txt" id="install-hint-txt">Adaugă Club Eats pe ecranul principal</span>
+    <button class="act hidden" id="install-hint-act">Instalează</button>
+    <button class="dismiss" id="install-hint-dismiss" aria-label="Închide">×</button>
+  </div>
+
+  <div class="app-views">
+    <!-- Restaurante -->
+    <div class="tab-view active" id="view-feed" data-view="feed">
+      <div class="feed-title" id="feed-title">Restaurante partenere</div>
+      <div class="feed-grid" id="feed-grid"><div class="center-spin"><span class="spinner"></span></div></div>
+    </div>
+
+    <!-- Profil -->
+    <div class="tab-view" id="view-profile" data-view="profile">
+      <div class="profile-hero">
+        <div class="profile-savings-lbl" id="profile-savings-lbl">Ai economisit</div>
+        <div class="profile-savings-val" id="profile-savings-val">— MDL</div>
+        <div class="profile-stats-row">
+          <div class="profile-stat"><strong id="profile-visits">—</strong><span id="profile-visits-lbl">vizite</span></div>
+          <div class="profile-stat"><strong id="profile-since">—</strong><span id="profile-since-lbl">membru din</span></div>
+        </div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-section-title" id="ref-title">Invită prietenii</div>
+        <div style="font-size:12.5px;color:var(--text2);margin-bottom:14px" id="ref-sub">Când prietenul tău face prima plată, amândoi primiți +5% bonus.</div>
+        <div class="referral-link-row">
+          <div class="referral-link-box" id="ref-link-box">—</div>
+          <button class="btn-icon-circle" id="btn-share-ref" aria-label="Distribuie" title="Distribuie">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5 15.4 17.5M15.4 6.5 8.6 10.5"/></svg>
+          </button>
+          <button class="btn-copy" id="btn-copy-ref">Copiază</button>
+        </div>
+        <div class="referral-stats-row">
+          <div><strong id="ref-invited">0</strong><span id="ref-invited-lbl">prieteni invitați</span></div>
+          <div><strong id="ref-converted">0</strong><span id="ref-converted-lbl">au plătit prima dată</span></div>
+        </div>
+        <div class="bonus-note hidden" id="bonus-note"></div>
+      </div>
+
+      <div class="profile-section">
+        <div class="profile-row"><span class="lbl" id="profile-email-lbl">Email</span><span id="profile-email">—</span></div>
+        <div class="profile-row"><span class="lbl" id="profile-lang-lbl">Limbă</span><span id="profile-lang-val">Română</span></div>
+      </div>
+
+      <button class="btn-logout-full" id="btn-logout">Ieșire din cont</button>
+    </div>
+  </div>
+
+  <nav class="bottom-tabs">
+    <button class="tab-btn active" data-tab="feed">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+      <span id="tab-feed-lbl">Restaurante</span>
+    </button>
+    <button class="tab-btn" data-tab="profile">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg>
+      <span id="tab-profile-lbl">Profil</span>
+    </button>
+  </nav>
+</section>
+
+<!-- ══════════════════════════════ Scanner ══════════════════════════════ -->
+<section id="screen-scanner" hidden>
+  <div class="scanner-video-wrap">
+    <video id="scanner-video" playsinline muted autoplay></video>
+    <canvas id="scanner-canvas" hidden></canvas>
+    <div class="scanner-topbar">
+      <button class="scanner-icon-btn" id="btn-scanner-close" aria-label="Închide">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
-      <button class="btn-copy-referral" id="btn-copy-ref">Copiază</button>
+      <div class="scanner-name-chip" id="scanner-name-chip">Scanează la masă</div>
+      <button class="scanner-icon-btn hidden" id="btn-scanner-torch" aria-label="Bliț">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg>
+      </button>
     </div>
-    <div class="referral-stats">
-      <div class="referral-stat">
-        <strong id="ref-invited">—</strong>
-        <span id="ref-invited-lbl">prieteni invitați</span>
+    <div class="scanner-frame">
+      <div class="scanner-frame-box">
+        <div class="scanner-corner tl"></div><div class="scanner-corner tr"></div>
+        <div class="scanner-corner bl"></div><div class="scanner-corner br"></div>
       </div>
-      <div class="referral-stat">
-        <strong id="ref-converted">—</strong>
-        <span id="ref-converted-lbl">au plătit prima dată</span>
-      </div>
     </div>
-    <div class="bonus-badge hidden" id="bonus-badge">
-      ✨ <span id="bonus-badge-text">Ai un bonus de 5% activ!</span>
-    </div>
+    <div class="scanner-msg" id="scanner-msg"></div>
   </div>
+  <div class="scanner-bottom">
+    <button class="scanner-manual-link" id="btn-scanner-manual">Introdu codul manual</button>
+  </div>
+</section>
 
-  <div class="section-title-row">
-    <div class="section-title" id="offers-section-title">Oferte active</div>
-    <div class="active-count hidden" id="active-count"><span class="offer-live-dot"></span><span id="active-count-num">0</span></div>
-  </div>
-  <div class="offers-grid" id="offers-grid">
-    <div class="offers-empty"><span class="spinner"></span></div>
-  </div>
-
-  <div class="membership-cta hidden" id="membership-cta">
-    <div class="membership-title" id="membership-title">Ești gata pentru nota?</div>
-    <div class="membership-sub" id="membership-sub">Alătură-te Club Eats — reduceri automate la restaurantele partenere, fără coduri.</div>
-    <button class="btn-membership-primary" id="btn-membership-signup">Creează cont nou</button>
-    <button class="btn-membership-secondary" id="btn-membership-login">Autentificare</button>
-  </div>
-</main>
-
-<!-- ── Auth modal ── -->
-<div class="modal-overlay hidden" id="modal-overlay">
-  <div class="modal">
-    <button class="btn-modal-close" id="btn-modal-close">×</button>
-    <div class="modal-title" id="modal-title">Autentificare</div>
-    <div class="modal-sub" id="modal-sub">Intră în contul tău Club Eats.</div>
-    <div class="modal-err" id="modal-err"></div>
-    <div class="form-field">
-      <label id="lbl-email">Email</label>
-      <input type="email" id="inp-email" autocomplete="email" placeholder="adresa@email.com">
-    </div>
-    <div class="form-field">
-      <label id="lbl-password">Parolă</label>
-      <input type="password" id="inp-password" autocomplete="current-password" placeholder="••••••••">
-    </div>
-    <button class="btn-submit" id="btn-submit">Intră în cont</button>
-    <div class="modal-switch" id="modal-switch">
-      Nu ai cont? <button id="btn-switch-mode">Înregistrează-te gratuit</button>
-    </div>
+<div class="scanner-manual-panel hidden" id="scanner-manual-panel">
+  <button class="auth-back" id="btn-manual-back" aria-label="Înapoi">←</button>
+  <div class="scanner-manual-body">
+    <h2 id="manual-title">Introdu codul manual</h2>
+    <p id="manual-sub">Lipește linkul de pe codul QR al mesei, sau codul de 16 caractere.</p>
+    <div class="scanner-manual-err" id="manual-err"></div>
+    <input type="text" id="manual-inp" placeholder="https://paynota.com/?t=… sau cod">
+    <button class="auth-submit" id="btn-manual-submit">Continuă</button>
   </div>
 </div>
 
 <!-- ── Toast ── -->
 <div class="toast" id="toast"></div>
 
-<!-- ── Bottom nav — only real destinations ── -->
-<nav class="bottom-nav">
-  <a class="bottom-nav-item" href="/">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
-    <span id="bn-home">Acasă</span>
-  </a>
-  <a class="bottom-nav-item active" href="/club">
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7-6.2-3.8-6.2 3.8 1.6-7-5.4-4.7 7.1-.6z"/></svg>
-    <span id="bn-club">Club Eats</span>
-  </a>
-</nav>
-
+<script src="/vendor/jsqr.js" defer></script>
+<script src="/club-scanner.js" defer></script>
 <script src="/socket.io/socket.io.js"></script>
 <script>
 'use strict';
-// ── i18n ──────────────────────────────────────────────────────────────────────
+
+// ── i18n ─────────────────────────────────────────────────────────────────────
 const TRANS = {
   ro: {
-    nav_login:      'Autentificare',
-    nav_signup:     'Alătură-te gratuit',
-    nav_logout:     'Ieșire',
-    hero_badge:     '✨ Program gratuit de fidelitate',
-    hero_title1:    'Reduceri exclusive',
-    hero_title2:    'la restaurantele partenere',
-    hero_sub:       'Devino membru Club Eats și beneficiezi de reduceri automate la plata prin nota. — zero pași suplimentari.',
-    hero_cta:       'Alătură-te gratuit',
-    offers_title:   'Oferte active',
-    member_banner_title:  'Bun venit în Club Eats!',
-    member_banner_sub:    'Reducerile tale se aplică automat când scanezi masa.',
-    modal_login_title:  'Autentificare',
-    modal_login_sub:    'Intră în contul tău Club Eats.',
-    modal_reg_title:    'Creează cont gratuit',
-    modal_reg_sub:      'Alătură-te Club Eats — reduceri automate la restaurantele partenere.',
-    lbl_email:      'Email',
-    lbl_password:   'Parolă',
-    btn_login:      'Intră în cont',
-    btn_register:   'Creează cont',
-    switch_to_reg:  'Nu ai cont?',
-    switch_to_reg_btn: 'Înregistrează-te gratuit',
-    switch_to_login:    'Ai deja cont?',
-    switch_to_login_btn: 'Autentifică-te',
-    offers_empty:   'Rețeaua Club Eats se extinde în Chișinău — primele restaurante partenere apar aici.',
-    badge_member_only: '★ Membri',
-    badge_live:     'Activ acum',
-    badge_inactive: 'Inactiv',
-    active_now_label: 'ACTIVE ACUM',
+    splash_tagline: 'Bucură-te de reduceri luând masa la localurile tale preferate.',
+    splash_cta: 'Alătură-te',
+    auth_reg_title: 'Creează cont', auth_reg_sub: 'Alătură-te Club Eats — reduceri automate la restaurantele partenere.',
+    auth_login_title: 'Autentificare', auth_login_sub: 'Intră în contul tău Club Eats.',
+    lbl_email: 'Email', lbl_password: 'Parolă',
+    btn_register: 'Creează cont', btn_login: 'Intră în cont',
+    switch_to_login: 'Ai deja cont?', switch_to_login_btn: 'Autentifică-te',
+    switch_to_reg: 'Nu ai cont?', switch_to_reg_btn: 'Înregistrează-te',
+    install_hint: 'Adaugă Club Eats pe ecranul principal', install_act: 'Instalează',
+    feed_title: 'Restaurante partenere',
+    feed_empty: 'Rețeaua se extinde în Chișinău — primele restaurante apar aici în curând.',
+    tab_feed: 'Restaurante', tab_profile: 'Profil',
+    profile_savings: 'Ai economisit', profile_visits: 'vizite', profile_since: 'membru din',
+    profile_email: 'Email', profile_lang: 'Limbă',
+    ref_title: 'Invită prietenii', ref_sub: 'Când prietenul tău face prima plată prin nota., amândoi primiți +5% bonus la următoarea comandă.',
+    ref_invited_lbl: 'prieteni invitați', ref_converted_lbl: 'au plătit prima dată',
+    ref_copy: 'Copiază', ref_copied: 'Copiat ✓',
+    ref_bonus: 'Ai un bonus de 5% activ la următoarea comandă!',
+    ref_share_title: 'Club Eats — nota.', ref_share_text: 'Alătură-te Club Eats și primești reduceri automate la restaurante. Folosește linkul meu:',
+    logout: 'Ieșire din cont',
+    scan_default_chip: 'Scanează la masă',
+    scan_wrong_restaurant: (name) => `Ești la ${name} — te redirecționăm…`,
+    scan_not_nota: 'Acesta nu este un cod nota. Continuă să scanezi.',
+    scan_invalid: 'Cod invalid. Continuă să scanezi.',
+    scan_cam_denied: 'Camera nu este disponibilă. Introdu codul manual.',
+    manual_title: 'Introdu codul manual', manual_sub: 'Lipește linkul de pe codul QR al mesei, sau codul de 16 caractere.',
+    manual_submit: 'Continuă', manual_invalid: 'Cod invalid — verifică linkul sau codul.',
     days: ['Dum','Lun','Mar','Mie','Joi','Vin','Sâm'],
-    ref_title:      'Invită prietenii',
-    ref_sub:        'Când prietenul tău face prima plată prin nota., amândoi primiți +5% bonus la următoarea comandă.',
-    ref_invited_lbl:   'prieteni invitați',
-    ref_converted_lbl: 'au plătit prima dată',
-    ref_share:      'Distribuie',
-    ref_copy:       'Copiază',
-    ref_copied:     'Copiat ✓',
-    ref_bonus:      'Ai un bonus de 5% activ la următoarea comandă!',
-    ref_share_title: 'Club Eats — nota.',
-    ref_share_text:  'Alătură-te Club Eats și primești reduceri automate la restaurante. Folosește linkul meu:',
-    membership_title: 'Ești gata pentru nota?',
-    membership_sub:  'Alătură-te Club Eats — reduceri automate la restaurantele partenere, fără coduri sau cupoane.',
-    bn_home: 'Acasă',
-    bn_club: 'Club Eats',
+    today_at: (t) => `azi de la ${t}`,
+    auth_fill_all: 'Completează toate câmpurile.',
+    auth_net_err: 'Eroare de rețea. Încearcă din nou.',
   },
   ru: {
-    nav_login:      'Войти',
-    nav_signup:     'Присоединиться бесплатно',
-    nav_logout:     'Выйти',
-    hero_badge:     '✨ Бесплатная программа лояльности',
-    hero_title1:    'Эксклюзивные скидки',
-    hero_title2:    'в ресторанах-партнёрах',
-    hero_sub:       'Станьте участником Club Eats и получайте автоматические скидки при оплате через nota. — без лишних шагов.',
-    hero_cta:       'Присоединиться бесплатно',
-    offers_title:   'Активные предложения',
-    member_banner_title:  'Добро пожаловать в Club Eats!',
-    member_banner_sub:    'Ваши скидки применяются автоматически при сканировании стола.',
-    modal_login_title:  'Войти',
-    modal_login_sub:    'Войдите в аккаунт Club Eats.',
-    modal_reg_title:    'Создать бесплатный аккаунт',
-    modal_reg_sub:      'Присоединяйтесь к Club Eats — автоматические скидки в ресторанах-партнёрах.',
-    lbl_email:      'Email',
-    lbl_password:   'Пароль',
-    btn_login:      'Войти',
-    btn_register:   'Создать аккаунт',
-    switch_to_reg:  'Нет аккаунта?',
-    switch_to_reg_btn: 'Зарегистрироваться бесплатно',
-    switch_to_login:    'Уже есть аккаунт?',
-    switch_to_login_btn: 'Войти',
-    offers_empty:   'Сеть Club Eats расширяется в Кишинёве — первые рестораны-партнёры появятся здесь.',
-    badge_member_only: '★ Участники',
-    badge_live:     'Активно сейчас',
-    badge_inactive: 'Неактивно',
-    active_now_label: 'АКТИВНО СЕЙЧАС',
+    splash_tagline: 'Наслаждайся скидками в любимых заведениях.',
+    splash_cta: 'Присоединиться',
+    auth_reg_title: 'Создать аккаунт', auth_reg_sub: 'Присоединяйся к Club Eats — автоматические скидки в ресторанах-партнёрах.',
+    auth_login_title: 'Войти', auth_login_sub: 'Войди в свой аккаунт Club Eats.',
+    lbl_email: 'Email', lbl_password: 'Пароль',
+    btn_register: 'Создать аккаунт', btn_login: 'Войти',
+    switch_to_login: 'Уже есть аккаунт?', switch_to_login_btn: 'Войти',
+    switch_to_reg: 'Нет аккаунта?', switch_to_reg_btn: 'Зарегистрироваться',
+    install_hint: 'Добавь Club Eats на главный экран', install_act: 'Установить',
+    feed_title: 'Рестораны-партнёры',
+    feed_empty: 'Сеть расширяется в Кишинёве — первые рестораны появятся здесь совсем скоро.',
+    tab_feed: 'Рестораны', tab_profile: 'Профиль',
+    profile_savings: 'Ты сэкономил(а)', profile_visits: 'визитов', profile_since: 'участник с',
+    profile_email: 'Email', profile_lang: 'Язык',
+    ref_title: 'Пригласи друзей', ref_sub: 'Когда твой друг сделает первый платёж через nota., вы оба получите +5% бонус к следующему заказу.',
+    ref_invited_lbl: 'приглашённых друзей', ref_converted_lbl: 'сделали первый платёж',
+    ref_copy: 'Копировать', ref_copied: 'Скопировано ✓',
+    ref_bonus: 'У тебя есть бонус 5% на следующий заказ!',
+    ref_share_title: 'Club Eats — nota.', ref_share_text: 'Присоединяйся к Club Eats и получай скидки в ресторанах автоматически. Используй мою ссылку:',
+    logout: 'Выйти из аккаунта',
+    scan_default_chip: 'Сканируй за столом',
+    scan_wrong_restaurant: (name) => `Ты в ${name} — перенаправляем…`,
+    scan_not_nota: 'Это не код nota. Продолжай сканировать.',
+    scan_invalid: 'Неверный код. Продолжай сканировать.',
+    scan_cam_denied: 'Камера недоступна. Введи код вручную.',
+    manual_title: 'Введите код вручную', manual_sub: 'Вставьте ссылку с QR-кода стола, или 16-значный код.',
+    manual_submit: 'Продолжить', manual_invalid: 'Неверный код — проверьте ссылку или код.',
     days: ['Вс','Пн','Вт','Ср','Чт','Пт','Сб'],
-    ref_title:      'Пригласи друзей',
-    ref_sub:        'Когда твой друг сделает первый платёж через nota., вы оба получите +5% бонус к следующему заказу.',
-    ref_invited_lbl:   'приглашённых друзей',
-    ref_converted_lbl: 'сделали первый платёж',
-    ref_share:      'Поделиться',
-    ref_copy:       'Копировать',
-    ref_copied:     'Скопировано ✓',
-    ref_bonus:      'У тебя есть бонус 5% на следующий заказ!',
-    ref_share_title: 'Club Eats — nota.',
-    ref_share_text:  'Присоединяйся к Club Eats и получай скидки в ресторанах автоматически. Используй мою ссылку:',
-    membership_title: 'Готов к nota?',
-    membership_sub:  'Присоединяйся к Club Eats — автоматические скидки в ресторанах-партнёрах, без кодов и купонов.',
-    bn_home: 'Главная',
-    bn_club: 'Club Eats',
+    today_at: (t) => `сегодня с ${t}`,
+    auth_fill_all: 'Заполните все поля.',
+    auth_net_err: 'Ошибка сети. Попробуйте снова.',
   },
 };
 
 let lang = localStorage.getItem('nota_club_lang') || (navigator.language?.startsWith('ru') ? 'ru' : 'ro');
-let isLoginMode = true;
-let member = null;
-
-function t(k) { return TRANS[lang][k] || k; }
-
-function applyLang() {
-  document.documentElement.lang = lang;
-  document.querySelectorAll('.lang-btn').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
-  document.getElementById('btn-nav-login').textContent  = t('nav_login');
-  document.getElementById('btn-nav-signup').textContent = t('nav_signup');
-  document.querySelector('.hero-badge').textContent = t('hero_badge');
-  document.querySelector('.hero-title').innerHTML = `${t('hero_title1')}<br><em>${t('hero_title2')}</em>`;
-  document.getElementById('hero-sub-text').textContent = t('hero_sub');
-  document.getElementById('btn-hero-cta').textContent  = t('hero_cta');
-  document.getElementById('offers-section-title').textContent = t('offers_title');
-  document.getElementById('member-banner-title').textContent  = t('member_banner_title');
-  document.getElementById('member-banner-sub').textContent    = t('member_banner_sub');
-  document.getElementById('lbl-email').textContent    = t('lbl_email');
-  document.getElementById('lbl-password').textContent = t('lbl_password');
-  // Referral section
-  document.getElementById('ref-title').textContent         = t('ref_title');
-  document.getElementById('ref-sub').textContent           = t('ref_sub');
-  document.getElementById('ref-invited-lbl').textContent   = t('ref_invited_lbl');
-  document.getElementById('ref-converted-lbl').textContent = t('ref_converted_lbl');
-  document.getElementById('btn-share-ref').setAttribute('aria-label', t('ref_share'));
-  document.getElementById('btn-share-ref').setAttribute('title', t('ref_share'));
-  document.getElementById('btn-copy-ref').textContent      = t('ref_copy');
-  document.getElementById('membership-title').textContent  = t('membership_title');
-  document.getElementById('membership-sub').textContent    = t('membership_sub');
-  document.getElementById('btn-membership-signup').textContent = t('nav_signup');
-  document.getElementById('btn-membership-login').textContent  = t('nav_login');
-  document.getElementById('bn-home').textContent = t('bn_home');
-  document.getElementById('bn-club').textContent = t('bn_club');
-  refreshModalText();
-  renderOffers(lastOffers);
-  refreshNavAuth();
+function t(key, ...args) {
+  const v = TRANS[lang]?.[key] ?? TRANS.ro[key] ?? key;
+  return typeof v === 'function' ? v(...args) : v;
 }
-
-// ── Auth state ───────────────────────────────────────────────────────────────
-function getMemberToken() { return localStorage.getItem('nota_club_token'); }
-
-function setMember(tok, payload) {
-  if (tok) localStorage.setItem('nota_club_token', tok);
-  member = payload;
-  refreshNavAuth();
-  renderOffers(lastOffers);
-}
-
-function logout() {
-  localStorage.removeItem('nota_club_token');
-  member = null;
-  refreshNavAuth();
-  renderOffers(lastOffers);
-}
-
-function shareReferral() {
-  const link = document.getElementById('ref-link-box').textContent;
-  if (navigator.share) {
-    navigator.share({
-      title: t('ref_share_title'),
-      text:  t('ref_share_text'),
-      url:   link,
-    }).catch(() => {});
-  } else {
-    copyReferralLink();
-  }
-}
-
-function copyReferralLink() {
-  const link = document.getElementById('ref-link-box').textContent;
-  const btn  = document.getElementById('btn-copy-ref');
-  if (!link || link === '—') return;
-  navigator.clipboard.writeText(link).then(() => {
-    btn.textContent = t('ref_copied');
-    setTimeout(() => { btn.textContent = t('ref_copy'); }, 2000);
-  }).catch(() => showToast('Copierea nu a funcționat.'));
-}
-
-function refreshNavAuth() {
-  const authEl   = document.getElementById('nav-auth');
-  const heroEl   = document.getElementById('hero-section');
-  const bannerEl = document.getElementById('member-banner');
-  const refEl    = document.getElementById('referral-section');
-  const ctaEl    = document.getElementById('membership-cta');
-  if (member) {
-    authEl.innerHTML = `<span class="nav-user">${esc(member.email)}</span><button class="btn-logout" id="btn-logout-dyn">${t('nav_logout')}</button>`;
-    document.getElementById('btn-logout-dyn').addEventListener('click', logout);
-    heroEl.style.display = 'none';
-    bannerEl.classList.remove('hidden');
-    refEl.classList.remove('hidden');
-    ctaEl.classList.add('hidden');
-    loadReferralData();
-  } else {
-    authEl.innerHTML = `<button class="btn-login" id="btn-nav-login-dyn">${t('nav_login')}</button><button class="btn-signup" id="btn-nav-signup-dyn">${t('nav_signup')}</button>`;
-    document.getElementById('btn-nav-login-dyn').addEventListener('click', () => openModal(true));
-    document.getElementById('btn-nav-signup-dyn').addEventListener('click', () => openModal(false));
-    heroEl.style.display = '';
-    bannerEl.classList.add('hidden');
-    refEl.classList.add('hidden');
-    ctaEl.classList.remove('hidden');
-  }
-}
-
-async function loadReferralData() {
-  const tok = getMemberToken();
-  if (!tok || !member) return;
-  try {
-    const resp = await fetch('/api/members/referral', { headers: { Authorization: `Bearer ${tok}` } });
-    if (!resp.ok) return;
-    const data = await resp.json();
-    const appUrl = window.location.origin;
-    const refLink = `${appUrl}/club?ref=${data.referral_code}`;
-    document.getElementById('ref-link-box').textContent = refLink;
-    document.getElementById('ref-invited').textContent   = data.total_invited   ?? 0;
-    document.getElementById('ref-converted').textContent = data.total_converted ?? 0;
-    // Bonus badge
-    const badgeEl = document.getElementById('bonus-badge');
-    if (data.bonus_pct > 0 && data.bonus_expires) {
-      document.getElementById('bonus-badge-text').textContent = t('ref_bonus');
-      badgeEl.classList.remove('hidden');
-    } else {
-      badgeEl.classList.add('hidden');
-    }
-  } catch { /* non-critical */ }
-}
-
-// ── Modal ────────────────────────────────────────────────────────────────────
-function openModal(loginMode) {
-  isLoginMode = loginMode;
-  document.getElementById('modal-overlay').classList.remove('hidden');
-  document.getElementById('modal-err').textContent = '';
-  document.getElementById('inp-email').value = '';
-  document.getElementById('inp-password').value = '';
-  refreshModalText();
-  setTimeout(() => document.getElementById('inp-email').focus(), 80);
-}
-
-function closeModal() {
-  document.getElementById('modal-overlay').classList.add('hidden');
-}
-
-function refreshModalText() {
-  document.getElementById('modal-title').textContent = isLoginMode ? t('modal_login_title') : t('modal_reg_title');
-  document.getElementById('modal-sub').textContent   = isLoginMode ? t('modal_login_sub')   : t('modal_reg_sub');
-  document.getElementById('btn-submit').textContent  = isLoginMode ? t('btn_login')          : t('btn_register');
-  const sw = document.getElementById('modal-switch');
-  sw.innerHTML = isLoginMode
-    ? `${t('switch_to_reg')} <button id="btn-switch-mode-dyn">${t('switch_to_reg_btn')}</button>`
-    : `${t('switch_to_login')} <button id="btn-switch-mode-dyn">${t('switch_to_login_btn')}</button>`;
-  document.getElementById('btn-switch-mode-dyn').addEventListener('click', () => {
-    isLoginMode = !isLoginMode;
-    document.getElementById('modal-err').textContent = '';
-    refreshModalText();
-  });
-}
-
-async function submitAuth() {
-  const email    = document.getElementById('inp-email').value.trim();
-  const password = document.getElementById('inp-password').value;
-  const errEl    = document.getElementById('modal-err');
-  errEl.textContent = '';
-  if (!email || !password) { errEl.textContent = 'Completează toate câmpurile.'; return; }
-
-  const url = isLoginMode ? '/api/members/login' : '/api/members/register';
-  const body = { email, password };
-  // Pass referral code on registration
-  if (!isLoginMode) {
-    const refCode = localStorage.getItem('nota_ref_code');
-    if (refCode) body.refCode = refCode;
-  }
-  try {
-    document.getElementById('btn-submit').disabled = true;
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json();
-    if (!resp.ok) { errEl.textContent = data.error || 'Eroare. Încearcă din nou.'; return; }
-    // Clear referral code after successful registration
-    if (!isLoginMode) localStorage.removeItem('nota_ref_code');
-    setMember(data.token, data.member);
-    closeModal();
-    showToast(isLoginMode ? '✓ Autentificat cu succes!' : '✓ Cont creat cu succes!');
-  } catch {
-    errEl.textContent = 'Eroare de rețea. Încearcă din nou.';
-  } finally {
-    document.getElementById('btn-submit').disabled = false;
-  }
-}
-
-// ── Offers ───────────────────────────────────────────────────────────────────
-let lastOffers = [];
-
-function fmtDays(daysArr) {
-  const days = t('days');
-  if (daysArr.length === 7) return lang === 'ro' ? 'Zilnic' : 'Ежедневно';
-  return daysArr.map(d => days[d]).join(', ');
-}
-
-function fmtTime(t) { return (t || '').slice(0,5); }
-
-function isOfferLiveNow(o) {
-  const now = new Date();
-  const dow = now.getDay();
-  const pad = n => String(n).padStart(2,'0');
-  const nowT = `${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
-  return o.active && Array.isArray(o.days_of_week) && o.days_of_week.includes(dow)
-    && (o.start_time || '99') <= nowT && (o.end_time || '00') > nowT;
-}
-
-function renderOffers(offers) {
-  lastOffers = offers;
-  const grid = document.getElementById('offers-grid');
-  const activeCountEl = document.getElementById('active-count');
-  const activeCount = offers.filter(isOfferLiveNow).length;
-  if (activeCount > 0) {
-    document.getElementById('active-count-num').textContent = `${activeCount} ${t('active_now_label')}`;
-    activeCountEl.classList.remove('hidden');
-  } else {
-    activeCountEl.classList.add('hidden');
-  }
-  if (!offers.length) {
-    grid.innerHTML = `<div class="offers-empty">${t('offers_empty')}</div>`;
-    return;
-  }
-  grid.innerHTML = offers.map(o => {
-    const live = isOfferLiveNow(o);
-    const memberBadge = o.member_only
-      ? `<span class="offer-badge-member">${t('badge_member_only')}</span>`
-      : '';
-    const initial = esc((o.restaurant_name || '?').trim().charAt(0).toUpperCase());
-    const statusPill = live
-      ? `<span class="offer-live-pill"><span class="offer-live-dot"></span>${t('badge_live')}</span>`
-      : `<span class="offer-inactive-pill">${t('badge_inactive')}</span>`;
-    return `
-    <div class="offer-card${live ? '' : ' inactive'}">
-      <div class="offer-mono">${initial}</div>
-      <div class="offer-body">
-        <div class="offer-name">${esc(o.name)}${memberBadge}</div>
-        <div class="offer-restaurant">${esc(o.restaurant_name)}</div>
-        <div class="offer-meta-row">
-          ${statusPill}
-          <span class="offer-meta">${fmtTime(o.start_time)} – ${fmtTime(o.end_time)} · ${fmtDays(o.days_of_week || [])}</span>
-        </div>
-      </div>
-      <div class="offer-pct-chip">−${o.discount_pct}%</div>
-    </div>`;
-  }).join('');
-}
-
-async function loadOffers() {
-  try {
-    const resp = await fetch('/api/public/offers');
-    const data = await resp.json();
-    renderOffers(Array.isArray(data) ? data : []);
-  } catch {
-    document.getElementById('offers-grid').innerHTML = `<div class="offers-empty">Eroare la încărcare.</div>`;
-  }
-}
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 
 // ── Toast ────────────────────────────────────────────────────────────────────
 let toastTimer;
@@ -644,87 +494,471 @@ function showToast(msg) {
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
-// ── Utils ─────────────────────────────────────────────────────────────────────
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+// ── Member session (SAME localStorage key the guest app reads for auto-discount) ────────────
+function getMemberToken() { return localStorage.getItem('nota_club_token'); }
+function setMemberToken(tok) { localStorage.setItem('nota_club_token', tok); }
+function clearMemberToken() { localStorage.removeItem('nota_club_token'); }
 
-// ── Event delegation ──────────────────────────────────────────────────────────
-document.addEventListener('click', e => {
-  // Language toggle
-  const langBtn = e.target.closest('.lang-btn');
-  if (langBtn) {
-    lang = langBtn.dataset.lang;
-    localStorage.setItem('nota_club_lang', lang);
-    applyLang();
+let member = null; // decoded payload { memberId, email, plan }
+function decodeMember(tok) {
+  try {
+    const payload = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    if (payload.aud === 'member' && payload.exp * 1000 > Date.now()) return payload;
+  } catch {}
+  return null;
+}
+
+// ── Screen switching ──────────────────────────────────────────────────────────
+function showScreen(name) {
+  document.getElementById('screen-splash').hidden = name !== 'splash';
+  document.getElementById('screen-auth').hidden   = name !== 'auth';
+  document.getElementById('screen-app').hidden     = name !== 'app';
+}
+function showTab(name) {
+  document.querySelectorAll('.tab-view').forEach(v => v.classList.toggle('active', v.dataset.view === name));
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  if (name === 'profile') loadProfile();
+}
+
+// ── Auth screen ────────────────────────────────────────────────────────────────
+let authMode = 'register'; // 'register' | 'login'
+function openAuth(mode) {
+  authMode = mode;
+  document.getElementById('auth-err').textContent = '';
+  document.getElementById('auth-inp-email').value = '';
+  document.getElementById('auth-inp-password').value = '';
+  refreshAuthText();
+  showScreen('auth');
+  setTimeout(() => document.getElementById('auth-inp-email').focus(), 80);
+}
+function refreshAuthText() {
+  const reg = authMode === 'register';
+  document.getElementById('auth-title').textContent = t(reg ? 'auth_reg_title' : 'auth_login_title');
+  document.getElementById('auth-sub').textContent   = t(reg ? 'auth_reg_sub'   : 'auth_login_sub');
+  document.getElementById('btn-auth-submit').textContent = t(reg ? 'btn_register' : 'btn_login');
+  document.getElementById('auth-lbl-email').textContent = t('lbl_email');
+  document.getElementById('auth-lbl-password').textContent = t('lbl_password');
+  const sw = document.getElementById('auth-switch');
+  sw.innerHTML = reg
+    ? `${t('switch_to_login')} <button id="btn-auth-switch-dyn">${t('switch_to_login_btn')}</button>`
+    : `${t('switch_to_reg')} <button id="btn-auth-switch-dyn">${t('switch_to_reg_btn')}</button>`;
+}
+
+async function submitAuth() {
+  const email    = document.getElementById('auth-inp-email').value.trim();
+  const password = document.getElementById('auth-inp-password').value;
+  const errEl    = document.getElementById('auth-err');
+  errEl.textContent = '';
+  if (!email || !password) { errEl.textContent = t('auth_fill_all'); return; }
+
+  const url = authMode === 'login' ? '/api/members/login' : '/api/members/register';
+  const body = { email, password };
+  if (authMode === 'register') {
+    const refCode = localStorage.getItem('nota_ref_code');
+    if (refCode) body.refCode = refCode;
+  }
+  const submitBtn = document.getElementById('btn-auth-submit');
+  try {
+    submitBtn.disabled = true;
+    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const data = await resp.json();
+    if (!resp.ok) { errEl.textContent = data.error || t('auth_net_err'); return; }
+    if (authMode === 'register') localStorage.removeItem('nota_ref_code');
+    setMemberToken(data.token);
+    member = data.member;
+    enterApp();
+  } catch {
+    errEl.textContent = t('auth_net_err');
+  } finally {
+    submitBtn.disabled = false;
+  }
+}
+
+// ── Enter the logged-in app shell ───────────────────────────────────────────────
+function enterApp() {
+  showScreen('app');
+  showTab('feed');
+  applyLangApp();
+  loadFeed();
+  maybeShowInstallHint();
+  connectOfferSocket();
+}
+
+// ── Restaurante feed ─────────────────────────────────────────────────────────
+let lastOffers = [];
+
+function offerAppliesToday(o) {
+  if (!o.active) return false;
+  const now = new Date();
+  const dow = now.getDay();
+  const pad = n => String(n).padStart(2, '0');
+  const nowT = `${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+  if (!Array.isArray(o.days_of_week) || !o.days_of_week.includes(dow)) return false;
+  return (o.end_time || '00') > nowT;
+}
+function offerLiveNow(o) {
+  const now = new Date();
+  const pad = n => String(n).padStart(2, '0');
+  const nowT = `${pad(now.getHours())}:${pad(now.getMinutes())}:00`;
+  return (o.start_time || '99') <= nowT && (o.end_time || '00') > nowT;
+}
+function fmtTime(s) { return (s || '').slice(0, 5); }
+
+function buildFeedCards(offers) {
+  const today = offers.filter(offerAppliesToday);
+  const byRest = new Map();
+  for (const o of today) {
+    if (!byRest.has(o.restaurant_id)) {
+      byRest.set(o.restaurant_id, { restaurant_id: o.restaurant_id, restaurant_name: o.restaurant_name, cover_photo: o.cover_photo, offers: [] });
+    }
+    byRest.get(o.restaurant_id).offers.push(o);
+  }
+  const cards = [];
+  for (const r of byRest.values()) {
+    const live = r.offers.filter(offerLiveNow).sort((a, b) => b.discount_pct - a.discount_pct);
+    const upcoming = r.offers.slice().sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
+    const chosen = live[0] || upcoming[0];
+    if (chosen) cards.push({ ...r, offer: chosen, live: !!live[0] });
+  }
+  cards.sort((a, b) => (b.live - a.live) || (b.offer.discount_pct - a.offer.discount_pct));
+  return cards;
+}
+
+function renderFeed() {
+  const grid = document.getElementById('feed-grid');
+  const cards = buildFeedCards(lastOffers);
+  if (!cards.length) {
+    grid.innerHTML = `<div class="feed-empty">${t('feed_empty')}</div>`;
     return;
   }
-  // Hero CTA
-  if (e.target.id === 'btn-hero-cta') { openModal(false); return; }
-  // Membership CTA
-  if (e.target.id === 'btn-membership-signup') { openModal(false); return; }
-  if (e.target.id === 'btn-membership-login')  { openModal(true);  return; }
-  // Nav auth buttons (static — only present when logged-out initially)
-  if (e.target.id === 'btn-nav-login')  { openModal(true);  return; }
-  if (e.target.id === 'btn-nav-signup') { openModal(false); return; }
-  // Close modal backdrop
-  if (e.target.id === 'modal-overlay')  { closeModal(); return; }
-  if (e.target.id === 'btn-modal-close') { closeModal(); return; }
-  // Submit auth
-  if (e.target.id === 'btn-submit') { submitAuth(); return; }
-  // Referral share / copy
-  if (e.target.id === 'btn-share-ref') { shareReferral(); return; }
-  if (e.target.id === 'btn-copy-ref')  { copyReferralLink(); return; }
+  grid.innerHTML = cards.map(c => {
+    const initial = esc((c.restaurant_name || '?').trim().charAt(0).toUpperCase());
+    const photoStyle = c.cover_photo?.thumbUrl ? ` style="background-image:url('${esc(c.cover_photo.thumbUrl)}')"` : '';
+    const photoInner = c.cover_photo?.thumbUrl ? '' : initial;
+    const offerHtml = c.live
+      ? `<span class="feed-offer live"><span class="feed-dot"></span>−${c.offer.discount_pct}% · ${fmtTime(c.offer.start_time)}–${fmtTime(c.offer.end_time)}</span>`
+      : `<span class="feed-offer upcoming">−${c.offer.discount_pct}% · ${t('today_at', fmtTime(c.offer.start_time))}</span>`;
+    return `
+    <button class="feed-card${c.live ? ' live' : ''}" data-restaurant-id="${c.restaurant_id}" data-restaurant-name="${esc(c.restaurant_name)}">
+      <div class="feed-photo"${photoStyle}>${photoInner}</div>
+      <div class="feed-body">
+        <div class="feed-name">${esc(c.restaurant_name)}</div>
+        ${offerHtml}
+      </div>
+      <svg class="feed-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg>
+    </button>`;
+  }).join('');
+}
+
+async function loadFeed() {
+  try {
+    const resp = await fetch('/api/public/offers');
+    const data = await resp.json();
+    lastOffers = Array.isArray(data) ? data : [];
+  } catch {
+    lastOffers = [];
+  }
+  renderFeed();
+}
+
+function connectOfferSocket() {
+  if (window.__clubSocket) return;
+  const socket = io({ transports: ['websocket', 'polling'] });
+  socket.on('connect', () => socket.emit('join-public-offers'));
+  let timer = null;
+  socket.on('offer-change', () => { clearTimeout(timer); timer = setTimeout(loadFeed, 250); });
+  window.__clubSocket = socket;
+}
+// Re-evaluate ACTIV ACUM against the wall clock periodically — no event fires when a time
+// window simply opens or closes, so this is the only thing that flips a card's live state.
+setInterval(() => { if (lastOffers.length) renderFeed(); }, 30_000);
+
+// ── Profil ───────────────────────────────────────────────────────────────────
+async function loadProfile() {
+  const tok = getMemberToken();
+  if (!tok) return;
+  document.getElementById('profile-email').textContent = member?.email || '—';
+  try {
+    const resp = await fetch('/api/members/stats', { headers: { Authorization: `Bearer ${tok}` } });
+    if (resp.ok) {
+      const data = await resp.json();
+      document.getElementById('profile-savings-val').textContent = `${Number(data.lifetime_savings).toFixed(0)} MDL`;
+      document.getElementById('profile-visits').textContent = data.visits_count;
+      const since = data.member_since ? new Date(data.member_since) : null;
+      document.getElementById('profile-since').textContent = since
+        ? since.toLocaleDateString(lang === 'ru' ? 'ru-RU' : 'ro-RO', { month: 'short', year: 'numeric' })
+        : '—';
+    }
+  } catch { /* non-critical */ }
+
+  try {
+    const resp = await fetch('/api/members/referral', { headers: { Authorization: `Bearer ${tok}` } });
+    if (resp.ok) {
+      const data = await resp.json();
+      const link = `${window.location.origin}/club?ref=${data.referral_code}`;
+      document.getElementById('ref-link-box').textContent = link;
+      document.getElementById('ref-invited').textContent = data.total_invited ?? 0;
+      document.getElementById('ref-converted').textContent = data.total_converted ?? 0;
+      const bonusEl = document.getElementById('bonus-note');
+      if (data.bonus_pct > 0 && data.bonus_expires) {
+        bonusEl.textContent = t('ref_bonus');
+        bonusEl.classList.remove('hidden');
+      } else {
+        bonusEl.classList.add('hidden');
+      }
+    }
+  } catch { /* non-critical */ }
+}
+
+function shareReferral() {
+  const link = document.getElementById('ref-link-box').textContent;
+  if (link === '—') return;
+  if (navigator.share) {
+    navigator.share({ title: t('ref_share_title'), text: t('ref_share_text'), url: link }).catch(() => {});
+  } else {
+    copyReferralLink();
+  }
+}
+function copyReferralLink() {
+  const link = document.getElementById('ref-link-box').textContent;
+  const btn = document.getElementById('btn-copy-ref');
+  if (link === '—') return;
+  navigator.clipboard.writeText(link).then(() => {
+    btn.textContent = t('ref_copied');
+    setTimeout(() => { btn.textContent = t('ref_copy'); }, 2000);
+  }).catch(() => showToast('—'));
+}
+
+function logout() {
+  clearMemberToken();
+  member = null;
+  showScreen('splash');
+}
+
+// ── i18n application ──────────────────────────────────────────────────────────
+function applyLangSplash() {
+  document.getElementById('splash-tagline').textContent = t('splash_tagline');
+  document.getElementById('btn-splash-join').textContent = t('splash_cta');
+}
+function applyLangApp() {
+  document.getElementById('feed-title').textContent = t('feed_title');
+  document.getElementById('tab-feed-lbl').textContent = t('tab_feed');
+  document.getElementById('tab-profile-lbl').textContent = t('tab_profile');
+  document.getElementById('profile-savings-lbl').textContent = t('profile_savings');
+  document.getElementById('profile-visits-lbl').textContent = t('profile_visits');
+  document.getElementById('profile-since-lbl').textContent = t('profile_since');
+  document.getElementById('profile-email-lbl').textContent = t('profile_email');
+  document.getElementById('profile-lang-lbl').textContent = t('profile_lang');
+  document.getElementById('profile-lang-val').textContent = lang === 'ro' ? 'Română' : 'Русский';
+  document.getElementById('ref-title').textContent = t('ref_title');
+  document.getElementById('ref-sub').textContent = t('ref_sub');
+  document.getElementById('ref-invited-lbl').textContent = t('ref_invited_lbl');
+  document.getElementById('ref-converted-lbl').textContent = t('ref_converted_lbl');
+  document.getElementById('btn-copy-ref').textContent = t('ref_copy');
+  document.getElementById('btn-logout').textContent = t('logout');
+  document.getElementById('install-hint-txt').textContent = t('install_hint');
+  document.getElementById('install-hint-act').textContent = t('install_act');
+  renderFeed();
+}
+function applyLangGlobal() {
+  document.documentElement.lang = lang;
+  document.querySelectorAll('.app-lang button').forEach(b => b.classList.toggle('active', b.dataset.lang === lang));
+  applyLangSplash();
+  if (!document.getElementById('screen-app').hidden) applyLangApp();
+  if (!document.getElementById('screen-auth').hidden) refreshAuthText();
+}
+function setLang(l) {
+  lang = l;
+  localStorage.setItem('nota_club_lang', l);
+  applyLangGlobal();
+}
+
+// ── Install hint (PWA) ────────────────────────────────────────────────────────
+let deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  document.getElementById('install-hint-act').classList.remove('hidden');
+});
+function isStandalone() {
+  return window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+}
+function maybeShowInstallHint() {
+  if (isStandalone()) return;
+  if (localStorage.getItem('club_install_hint_dismissed')) return;
+  document.getElementById('install-hint').classList.remove('hidden');
+}
+
+// ── Scanner ────────────────────────────────────────────────────────────────────
+let scannerRestaurant = null; // { id, name } of the tapped card
+let scannerBusy = false;
+
+function extractToken(raw) {
+  if (!raw) return null;
+  const str = raw.trim();
+  // Direct 16-hex token pasted manually
+  if (/^[0-9a-f]{16}$/i.test(str)) return str.toLowerCase();
+  try {
+    const url = new URL(str);
+    const tok = url.searchParams.get('t');
+    if (tok && /^[0-9a-f]{16}$/i.test(tok)) return tok.toLowerCase();
+  } catch { /* not a URL */ }
+  return null;
+}
+
+function showScannerMsg(msg, isErr) {
+  const el = document.getElementById('scanner-msg');
+  el.textContent = msg;
+  el.classList.toggle('err', !!isErr);
+  el.classList.add('show');
+  clearTimeout(el.__timer);
+  el.__timer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+async function handleScannedToken(token) {
+  if (scannerBusy) return;
+  scannerBusy = true;
+  try {
+    const resp = await fetch(`/api/table/restaurant-by-token/${token}`);
+    if (!resp.ok) { showScannerMsg(t('scan_invalid'), true); scannerBusy = false; return; }
+    const data = await resp.json();
+    if (scannerRestaurant && data.restaurant_id !== scannerRestaurant.id) {
+      showScannerMsg(t('scan_wrong_restaurant', data.restaurant_name || ''), false);
+      setTimeout(() => { window.location.href = `/?t=${token}`; }, 1100);
+      return;
+    }
+    window.location.href = `/?t=${token}`;
+  } catch {
+    showScannerMsg(t('scan_invalid'), true);
+    scannerBusy = false;
+  }
+}
+
+function onScanDecode(raw) {
+  const token = extractToken(raw);
+  if (!token) { showScannerMsg(t('scan_not_nota'), true); return; }
+  handleScannedToken(token);
+}
+
+async function openScanner(restaurantId, restaurantName) {
+  scannerRestaurant = restaurantId ? { id: Number(restaurantId), name: restaurantName } : null;
+  scannerBusy = false;
+  document.getElementById('scanner-name-chip').textContent = restaurantName || t('scan_default_chip');
+  document.getElementById('screen-scanner').hidden = false;
+  const video = document.getElementById('scanner-video');
+  const canvas = document.getElementById('scanner-canvas');
+  const torchBtn = document.getElementById('btn-scanner-torch');
+  torchBtn.classList.add('hidden');
+  torchBtn.classList.remove('active');
+  const result = await window.ClubScanner.start(video, canvas, {
+    onResult: onScanDecode,
+    onError: () => {
+      showToast(t('scan_cam_denied'));
+      closeScanner();
+      openManualEntry();
+    },
+  });
+  if (result.torchSupported) torchBtn.classList.remove('hidden');
+}
+function closeScanner() {
+  window.ClubScanner.stop();
+  document.getElementById('screen-scanner').hidden = true;
+}
+async function toggleTorch() {
+  const btn = document.getElementById('btn-scanner-torch');
+  const on = !btn.classList.contains('active');
+  const ok = await window.ClubScanner.toggleTorch(on);
+  if (ok) btn.classList.toggle('active', on);
+}
+
+// ── Manual code entry (camera-denied fallback) ────────────────────────────────
+function openManualEntry() {
+  document.getElementById('manual-title').textContent = t('manual_title');
+  document.getElementById('manual-sub').textContent = t('manual_sub');
+  document.getElementById('btn-manual-submit').textContent = t('manual_submit');
+  document.getElementById('manual-err').textContent = '';
+  document.getElementById('manual-inp').value = '';
+  document.getElementById('scanner-manual-panel').classList.remove('hidden');
+}
+function closeManualEntry() {
+  document.getElementById('scanner-manual-panel').classList.add('hidden');
+}
+function submitManualEntry() {
+  const raw = document.getElementById('manual-inp').value;
+  const token = extractToken(raw);
+  const errEl = document.getElementById('manual-err');
+  if (!token) { errEl.textContent = t('manual_invalid'); return; }
+  errEl.textContent = '';
+  handleScannedToken(token);
+}
+
+// ── Event delegation (no inline handlers anywhere) ────────────────────────────
+document.getElementById('btn-splash-join').addEventListener('click', () => openAuth('register'));
+document.getElementById('btn-auth-back').addEventListener('click', () => showScreen('splash'));
+document.getElementById('btn-auth-submit').addEventListener('click', submitAuth);
+document.getElementById('auth-switch').addEventListener('click', e => {
+  if (e.target.id === 'btn-auth-switch-dyn') { authMode = authMode === 'register' ? 'login' : 'register'; refreshAuthText(); }
+});
+document.getElementById('auth-inp-password').addEventListener('keydown', e => { if (e.key === 'Enter') submitAuth(); });
+document.getElementById('auth-inp-email').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('auth-inp-password').focus(); });
+
+document.querySelectorAll('.app-lang button').forEach(b => b.addEventListener('click', () => setLang(b.dataset.lang)));
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+document.getElementById('feed-grid').addEventListener('click', e => {
+  const card = e.target.closest('.feed-card');
+  if (card) openScanner(card.dataset.restaurantId, card.dataset.restaurantName);
 });
 
-// Submit on Enter in password field
-document.getElementById('inp-password').addEventListener('keydown', e => {
-  if (e.key === 'Enter') submitAuth();
+document.getElementById('install-hint-dismiss').addEventListener('click', () => {
+  localStorage.setItem('club_install_hint_dismissed', '1');
+  document.getElementById('install-hint').classList.add('hidden');
 });
-document.getElementById('inp-email').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('inp-password').focus();
+document.getElementById('install-hint-act').addEventListener('click', async () => {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  document.getElementById('install-hint').classList.add('hidden');
+  localStorage.setItem('club_install_hint_dismissed', '1');
 });
+
+document.getElementById('btn-share-ref').addEventListener('click', shareReferral);
+document.getElementById('btn-copy-ref').addEventListener('click', copyReferralLink);
+document.getElementById('btn-logout').addEventListener('click', logout);
+
+document.getElementById('btn-scanner-close').addEventListener('click', closeScanner);
+document.getElementById('btn-scanner-torch').addEventListener('click', toggleTorch);
+document.getElementById('btn-scanner-manual').addEventListener('click', () => { closeScanner(); openManualEntry(); });
+document.getElementById('btn-manual-back').addEventListener('click', closeManualEntry);
+document.getElementById('btn-manual-submit').addEventListener('click', submitManualEntry);
+document.getElementById('manual-inp').addEventListener('keydown', e => { if (e.key === 'Enter') submitManualEntry(); });
 
 // ── Boot ─────────────────────────────────────────────────────────────────────
 (function boot() {
-  // Stash ?ref= referral code in localStorage for later registration
   const urlRef = new URLSearchParams(window.location.search).get('ref');
   if (urlRef && /^[A-Z2-9]{6}$/i.test(urlRef)) {
     localStorage.setItem('nota_ref_code', urlRef.toUpperCase());
-    // Clean URL without reload
-    const clean = window.location.pathname + window.location.hash;
-    history.replaceState(null, '', clean);
+    history.replaceState(null, '', window.location.pathname + window.location.hash);
   }
 
-  // Try to restore member from stored token
   const tok = getMemberToken();
   if (tok) {
-    try {
-      const payload = JSON.parse(atob(tok.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
-      if (payload.aud === 'member' && payload.exp * 1000 > Date.now()) {
-        member = payload;
-      } else {
-        localStorage.removeItem('nota_club_token');
-      }
-    } catch { localStorage.removeItem('nota_club_token'); }
+    const payload = decodeMember(tok);
+    if (payload) { member = payload; }
+    else clearMemberToken();
   }
-  applyLang();
-  loadOffers();
 
-  // Live sync: any offer create/edit/toggle/delete anywhere nudges every /club visitor to
-  // refetch the (already public-safe) offers list — no restaurant internals in the payload.
-  const socket = io({ transports: ['websocket', 'polling'] });
-  socket.on('connect', () => socket.emit('join-public-offers'));
-  let offerRefetchTimer = null;
-  socket.on('offer-change', () => {
-    clearTimeout(offerRefetchTimer);
-    offerRefetchTimer = setTimeout(loadOffers, 250);
-  });
+  applyLangGlobal();
+  if (member) enterApp();
+  else showScreen('splash');
 
-  // Time-window open/close is not a data change — no event fires for it — so re-evaluate
-  // ACTIV ACUM against the wall clock periodically using the already-fetched offer list.
-  setInterval(() => renderOffers(lastOffers), 30_000);
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/club' }).catch(() => {});
+  }
 })();
 </script>
 </body>

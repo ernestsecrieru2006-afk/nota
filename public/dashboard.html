@@ -1343,6 +1343,20 @@ html, body {
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:6px">Oaspeții fericiți (4-5★) vor vedea un buton direct spre această pagină.</div>
         </div>
+
+        <!-- Club Eats cover photo -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Foto Club Eats</div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div id="cover-photo-preview" style="width:72px;height:72px;border-radius:10px;background:var(--surface);border:1px solid var(--border);background-size:cover;background-position:center;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);text-align:center">fără foto</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <input type="file" id="cover-photo-input" accept="image/jpeg,image/png,image/webp" style="display:none">
+              <button id="cover-photo-pick" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Alege o poză</button>
+              <span id="cover-photo-status" style="font-size:11px;color:var(--muted)"></span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Apare în feed-ul Club Eats — fără poză, oaspeții văd o siglă cu inițiala restaurantului.</div>
+        </div>
       </div>
 
       <!-- Coming soon — prominent product previews -->
@@ -3256,7 +3270,40 @@ async function loadSettings() {
     const data = await api('/api/dashboard/settings');
     document.getElementById('google-url-inp').value = data.google_review_url || '';
   } catch { /* non-critical */ }
+  try {
+    const cover = await api('/api/dashboard/profile/cover-image');
+    if (cover.photo) {
+      const el = document.getElementById('cover-photo-preview');
+      el.style.backgroundImage = `url('${cover.photo.thumbUrl}')`;
+      el.textContent = '';
+    }
+  } catch { /* non-critical */ }
 }
+
+async function uploadCoverPhoto(file) {
+  if (!file.type.startsWith('image/')) return toast('Fișierul trebuie să fie o imagine.');
+  const statusEl = document.getElementById('cover-photo-status');
+  statusEl.textContent = 'Se încarcă…';
+  const form = new FormData();
+  form.append('photo', file);
+  try {
+    const res = await fetch('/api/dashboard/profile/cover-image', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { statusEl.textContent = ''; return toast('Eroare: ' + (data.error || 'upload eșuat')); }
+    const el = document.getElementById('cover-photo-preview');
+    el.style.backgroundImage = `url('${data.thumbUrl}')`;
+    el.textContent = '';
+    statusEl.textContent = 'Salvat ✓';
+    toast('Foto Club Eats salvată!', 'success');
+  } catch {
+    statusEl.textContent = '';
+    toast('Eroare la încărcarea imaginii.');
+  }
+}
+document.getElementById('cover-photo-pick').addEventListener('click', () => document.getElementById('cover-photo-input').click());
+document.getElementById('cover-photo-input').addEventListener('change', e => { if (e.target.files[0]) uploadCoverPhoto(e.target.files[0]); });
 
 async function saveGoogleUrl() {
   const url = document.getElementById('google-url-inp').value.trim();
