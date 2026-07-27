@@ -15,7 +15,16 @@
  * deleted outright rather than deactivated); the real revocation path is the `active` flag.
  *
  * Endpoints (registered in server.js):
- *   POST /api/staff/redeem   { linkToken, pin }   → { token, restaurantName }
+ *   POST /api/staff/redeem   { linkToken, pin }        → { token, restaurantName }
+ *   GET  /api/staff/roster                             → [{ id, name }]  (active staff_members)
+ *   POST /api/staff/identify { staffMemberId }          → { token }
+ *
+ * Waiter identity is a layer ON TOP of the link+PIN domain above, not a replacement for it: the
+ * JWT payload gains an OPTIONAL `staffMemberId` once a device picks who's holding it (see
+ * identifyStaffMember below). Tokens without it behave exactly as before — every existing route
+ * that only reads `restaurantId`/`linkId` is unaffected. A restaurant with no staff_members rows
+ * configured never triggers the "who are you" step client-side, so this is fully dormant until
+ * an owner sets up a roster.
  */
 
 import crypto from 'crypto';
@@ -48,7 +57,7 @@ export function verifyStaffJWT(token) {
     const payload = JSON.parse(Buffer.from(bdy, 'base64').toString());
     if (payload.aud !== 'staff') return null;
     if (payload.exp && Date.now() / 1000 > payload.exp) return null;
-    return payload; // { restaurantId, linkId, aud }
+    return payload; // { restaurantId, linkId, staffMemberId?, aud }
   } catch {
     return null;
   }
@@ -141,7 +150,7 @@ export async function requireStaffAuth(req, res, next) {
     console.error('[staff] requireStaffAuth DB check failed:', err.message);
     return res.status(503).json({ error: 'Temporar indisponibil' });
   }
-  req.staff = payload; // { restaurantId, linkId, aud }
+  req.staff = payload; // { restaurantId, linkId, staffMemberId?, aud }
   next();
 }
 
@@ -189,6 +198,54 @@ export async function redeemStaffLink(req, res) {
     res.json({ token, restaurantName: row.restaurant_name });
   } catch (err) {
     console.error('[staff] redeem error:', err.message);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+}
+
+// ─── waiter identity (layered on top of the link+PIN session above) ──────────────
+
+// Returns the restaurant's active waiter roster (id + name only — nothing else a device needs).
+// An empty list means the owner hasn't set up a roster yet; the waiter app treats that as "skip
+// identification entirely", so this is fully dormant on every restaurant until opted into.
+export async function getStaffRoster(req, res) {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name FROM staff_members WHERE restaurant_id=$1 AND active ORDER BY name`,
+      [req.staff.restaurantId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[staff] roster error:', err.message);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+}
+
+// A device that already holds a valid link+PIN session picks which roster entry it is, and gets
+// back a new token with that identity embedded. Re-verifies staffMemberId belongs to the same
+// restaurant and is active — a device can never claim another restaurant's waiter, and a
+// deactivated waiter can't be picked (though an already-issued token for one keeps working per
+// the file's revocation model, same as the link itself).
+export async function identifyStaffMember(req, res) {
+  const staffMemberId = Number(req.body?.staffMemberId);
+  if (!Number.isInteger(staffMemberId) || staffMemberId <= 0) {
+    return res.status(400).json({ error: 'staffMemberId invalid' });
+  }
+  try {
+    const { rows: [member] } = await pool.query(
+      `SELECT id FROM staff_members WHERE id=$1 AND restaurant_id=$2 AND active`,
+      [staffMemberId, req.staff.restaurantId]
+    );
+    if (!member) return res.status(404).json({ error: 'Ospătar inexistent' });
+
+    const token = signStaffJWT({
+      restaurantId: req.staff.restaurantId,
+      linkId:       req.staff.linkId,
+      staffMemberId: member.id,
+      exp:          Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+    });
+    res.json({ token });
+  } catch (err) {
+    console.error('[staff] identify error:', err.message);
     res.status(500).json({ error: 'Eroare internă' });
   }
 }

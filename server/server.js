@@ -38,11 +38,14 @@ import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCa
 import { register, login, me, requireAuth, verifyJWT, sweepLoginAttempts, loginAttemptsSize } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, memberStats, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT, sweepMemberAttempts, memberAttemptsSize } from './members.js';
-import { hashPin, redeemStaffLink, requireStaffAuth, verifyStaffJWT, sweepStaffAttempts, staffAttemptsSize } from './staff.js';
+import { hashPin, redeemStaffLink, requireStaffAuth, verifyStaffJWT, sweepStaffAttempts, staffAttemptsSize,
+         getStaffRoster, identifyStaffMember } from './staff.js';
+import { getEmployees as getPosterEmployees, findWaiterForPayment } from './poster.js';
 import { notifyTelegram, sendTelegramTest, sweepTelegramMaps, telegramMapSizes } from './telegram.js';
 import { sendReceiptEmail, sendApologyEmail } from './email.js';
 import { encryptSecret, decryptSecret } from './secrets.js';
 import { sweepByAge } from './mem-sweep.js';
+import { resolveGuestOrder } from './guest.js';
 import multer from 'multer';
 import { processAndStore } from './storage.js';
 
@@ -68,6 +71,45 @@ async function getRestaurantMiaCreds(restaurantId) {
 async function getRestaurantForQrId(qrId) {
   const { rows: [row] } = await pool.query(`SELECT restaurant_id FROM payments WHERE mia_payment_id=$1`, [qrId]);
   return row?.restaurant_id ?? null;
+}
+
+// Per-restaurant Poster credentials, decrypted — or null to leave the attribution chain's POS
+// step dormant (see poster.js doc comment). Mirrors getRestaurantMiaCreds's fail-safe shape: a
+// restaurant is only ever taken out of "not connected" by its own poster_status='active' +
+// stored token, never a server-wide fallback.
+async function getPosterCreds(restaurantId) {
+  if (!restaurantId) return null;
+  const { rows: [rest] } = await pool.query(
+    `SELECT poster_status, poster_token_enc FROM restaurants WHERE id=$1`,
+    [restaurantId]
+  );
+  if (!rest || rest.poster_status !== 'active' || !rest.poster_token_enc) return null;
+  const token = decryptSecret(rest.poster_token_enc);
+  return token ? { token } : null;
+}
+
+// Period resolution shared by every tip-reporting endpoint (staff's own view + owner dashboard).
+// query.period: today|7d|30d|month|custom (custom needs query.from/to as YYYY-MM-DD). Returns a
+// half-open [from, to) range; malformed custom bounds fall back to 'today' rather than erroring,
+// since this only ever narrows a report, never a security-relevant decision.
+function resolveTipPeriod(query) {
+  const now = new Date();
+  const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const period = query?.period || 'today';
+  const validDate = s => typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s);
+
+  if (period === 'custom' && validDate(query.from) && validDate(query.to)) {
+    const from = new Date(`${query.from}T00:00:00`);
+    const to   = new Date(new Date(`${query.to}T00:00:00`).getTime() + 24 * 60 * 60 * 1000);
+    return { from, to };
+  }
+  if (period === '7d')  return { from: new Date(now.getTime() - 7  * 24 * 60 * 60 * 1000), to: new Date(now.getTime() + 60_000) };
+  if (period === '30d') return { from: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000), to: new Date(now.getTime() + 60_000) };
+  if (period === 'month') {
+    return { from: new Date(now.getFullYear(), now.getMonth(), 1), to: new Date(now.getFullYear(), now.getMonth() + 1, 1) };
+  }
+  const start = startOfDay(now);
+  return { from: start, to: new Date(start.getTime() + 24 * 60 * 60 * 1000) };
 }
 
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || null;
@@ -389,6 +431,8 @@ app.get( '/api/members/stats',     requireMemberAuth, memberStats);
 // or exports, and every query is scoped by req.staff.restaurantId from the verified JWT.
 
 app.post('/api/staff/redeem', limiterAuth, redeemStaffLink);
+app.get( '/api/staff/roster', requireStaffAuth, getStaffRoster);
+app.post('/api/staff/identify', requireStaffAuth, identifyStaffMember);
 
 app.get('/api/staff/tables', requireStaffAuth, async (req, res) => {
   try {
@@ -414,6 +458,34 @@ app.post('/api/staff/tables/:number/ack', requireStaffAuth, (req, res) => {
   res.json({ ok: true });
 });
 
+// A waiter's own tip totals — strictly filtered by the identity embedded in their own verified
+// JWT (req.staff.staffMemberId), never a client-supplied id. This is the whole privacy guarantee:
+// there is no parameter here to tamper with to see someone else's tips.
+app.get('/api/staff/tips/me', requireStaffAuth, async (req, res) => {
+  const waiterId = req.staff.staffMemberId;
+  if (!waiterId) return res.status(400).json({ error: 'Trebuie să te identifici mai întâi' });
+  try {
+    const { from, to } = resolveTipPeriod(req.query);
+    const { rows: [row] } = await pool.query(
+      `SELECT COUNT(*) AS payment_count, COALESCE(SUM(tip_lei),0) AS total_tips,
+              COALESCE(SUM(amount_lei),0) AS total_bill
+       FROM payments
+       WHERE restaurant_id=$1 AND waiter_id=$2 AND status='paid' AND paid_at >= $3 AND paid_at < $4`,
+      [req.staff.restaurantId, waiterId, from, to]
+    );
+    const totalBill = Number(row.total_bill);
+    const avgTipPct = totalBill > 0 ? (Number(row.total_tips) / totalBill) * 100 : 0;
+    res.json({
+      paymentCount: Number(row.payment_count),
+      totalTips:    Number(row.total_tips),
+      avgTipPct:    Math.round(avgTipPct * 10) / 10,
+    });
+  } catch (err) {
+    console.error('[staff/tips/me]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
 // ─── /club — Club Eats member web app ────────────────────────────────────────
 
 app.get('/club', (_req, res) => res.sendFile(join(__dirname, '../public/club.html')));
@@ -424,6 +496,11 @@ app.get('/oferte', (_req, res) => res.redirect(301, '/club'));
 // NOTE: Legacy numeric routes (GET /api/table/:n, POST /api/table/:n/item) removed —
 // they bypassed token security. Use GET /api/table/by-token/:token instead.
 
+// Privacy hardening: table tokens are permanent (printed on physical tents), so this endpoint
+// no longer just hands back whatever order is open. See server/guest.js for the full model —
+// in short: no open order with items => neutral response regardless of session; an open order
+// with items => bound to a per-browser session (?gs=) so a stale session from a table that's
+// since turned over can never see the new sitting's bill.
 app.get('/api/table/by-token/:token', async (req, res) => {
   try {
     const { rows: [tbl] } = await pool.query(
@@ -431,8 +508,9 @@ app.get('/api/table/by-token/:token', async (req, res) => {
       [req.params.token]
     );
     if (!tbl) return res.status(404).json({ error: 'Masă invalidă' });
-    const order = await getOpenOrder(tbl.number, tbl.restaurant_id);
-    res.json({ ...order, table_number: tbl.number });
+    const result = await resolveGuestOrder(req.params.token, tbl.number, tbl.restaurant_id, req.query.gs);
+    if (result.neutral) return res.json({ neutral: true, table_number: tbl.number, items: [] });
+    res.json({ ...result.order, table_number: tbl.number, guestSession: result.session });
   } catch (err) {
     console.error('[GET /api/table/by-token]', err);
     res.status(500).json({ error: 'Eroare internă' });
@@ -739,10 +817,11 @@ app.get('/api/dashboard/export', requireAuth, async (req, res) => {
     const { rows } = await pool.query(`
       SELECT p.paid_at, o.table_number, p.gross_lei, p.discount_lei, p.amount_lei, p.tip_lei,
              (p.amount_lei + p.tip_lei) AS total_lei, p.mia_payment_id, of.name AS offer_name,
-             p.member_id, fb.rating
+             p.member_id, fb.rating, s.name AS waiter_name, p.waiter_source
       FROM payments p
       JOIN orders o ON o.id = p.order_id
       LEFT JOIN offers of ON of.id = p.offer_id
+      LEFT JOIN staff_members s ON s.id = p.waiter_id
       LEFT JOIN LATERAL (
         SELECT rating FROM feedback WHERE payment_id = p.id ORDER BY created_at LIMIT 1
       ) fb ON true
@@ -756,19 +835,358 @@ app.get('/api/dashboard/export', requireAuth, async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="nota-${csvDate}.csv"`);
 
     const lines = [
-      'Ora,Masa,Brut (lei),Reducere (lei),Net (lei),Bacsis (lei),Total (lei),Oferta,Membru Club,Rating,MIA ID',
+      'Ora,Masa,Brut (lei),Reducere (lei),Net (lei),Bacsis (lei),Total (lei),Oferta,Membru Club,Rating,MIA ID,Ospatar,Sursa ospatar',
       ...rows.map(r => {
         const time = new Date(r.paid_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
         const gross = r.gross_lei ?? r.amount_lei;
         return [time, r.table_number, gross, r.discount_lei || 0, r.amount_lei, r.tip_lei,
                 r.total_lei, r.offer_name || '', r.member_id ? 'da' : 'nu',
-                r.rating || '', r.mia_payment_id || ''].join(',');
+                r.rating || '', r.mia_payment_id || '', r.waiter_name || 'Neatribuit',
+                r.waiter_source || ''].join(',');
       }),
     ];
     res.send(lines.join('\n'));
   } catch (err) {
     console.error('[export]', err);
     res.status(500).json({ error: 'Eroare la export' });
+  }
+});
+
+// ─── Waiter roster (owner-managed, tenant-scoped) ─────────────────────────────
+// nota. only reports tips — this never touches money movement, only who a settled payment's tip
+// gets attributed to for the restaurant's own payroll process.
+
+app.get('/api/dashboard/staff-members', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, name, active, poster_user_id FROM staff_members WHERE restaurant_id=$1 ORDER BY active DESC, name`,
+      [req.restaurant.restaurantId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[staff-members]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+app.post('/api/dashboard/staff-members', requireAuth, async (req, res) => {
+  const name = (req.body?.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Nume necesar' });
+  try {
+    const { rows: [member] } = await pool.query(
+      `INSERT INTO staff_members (restaurant_id, name) VALUES ($1, $2) RETURNING id, name, active`,
+      [req.restaurant.restaurantId, name]
+    );
+    res.json(member);
+  } catch (err) {
+    console.error('[staff-members create]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+app.put('/api/dashboard/staff-members/:id', requireAuth, async (req, res) => {
+  const id = Number(req.params.id);
+  if (!Number.isInteger(id)) return res.status(400).json({ error: 'Id invalid' });
+  const { name, active } = req.body || {};
+  try {
+    const { rows: [member] } = await pool.query(
+      `UPDATE staff_members SET name=COALESCE($3, name), active=COALESCE($4, active)
+       WHERE id=$1 AND restaurant_id=$2 RETURNING id, name, active`,
+      [id, req.restaurant.restaurantId,
+       typeof name === 'string' && name.trim() ? name.trim() : null,
+       typeof active === 'boolean' ? active : null]
+    );
+    if (!member) return res.status(404).json({ error: 'Ospătar inexistent' });
+    res.json(member);
+  } catch (err) {
+    console.error('[staff-members update]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// ─── Shift / table assignment — the attribution chain's fallback when Poster isn't connected ──
+// Time-bounded by design: attributeWaiterToPayment (see settlePayment) resolves whoever was
+// assigned to the table AT the moment of payment, never whoever is assigned now.
+
+app.get('/api/dashboard/table-assignments/active', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT t.id AS table_id, t.number, ta.staff_member_id, s.name AS waiter_name, ta.started_at
+       FROM tables t
+       LEFT JOIN table_assignments ta ON ta.table_id = t.id AND ta.ended_at IS NULL
+       LEFT JOIN staff_members s ON s.id = ta.staff_member_id
+       WHERE t.restaurant_id = $1
+       ORDER BY t.number`,
+      [req.restaurant.restaurantId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[table-assignments active]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+app.post('/api/dashboard/table-assignments', requireAuth, async (req, res) => {
+  const tableId = Number(req.body?.tableId);
+  const staffMemberId = Number(req.body?.staffMemberId);
+  if (!Number.isInteger(tableId) || !Number.isInteger(staffMemberId)) {
+    return res.status(400).json({ error: 'tableId și staffMemberId necesare' });
+  }
+  const rId = req.restaurant.restaurantId;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [tbl] } = await client.query(
+      `SELECT id FROM tables WHERE id=$1 AND restaurant_id=$2`, [tableId, rId]
+    );
+    const { rows: [member] } = await client.query(
+      `SELECT id FROM staff_members WHERE id=$1 AND restaurant_id=$2 AND active`, [staffMemberId, rId]
+    );
+    if (!tbl || !member) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Masă sau ospătar inexistent' });
+    }
+    // Partial unique index (table_id) WHERE ended_at IS NULL enforces this structurally too —
+    // this UPDATE is what makes reassigning a table a clean handoff instead of a constraint error.
+    await client.query(
+      `UPDATE table_assignments SET ended_at = NOW() WHERE table_id=$1 AND ended_at IS NULL`,
+      [tableId]
+    );
+    const { rows: [assignment] } = await client.query(
+      `INSERT INTO table_assignments (restaurant_id, table_id, staff_member_id)
+       VALUES ($1, $2, $3) RETURNING id, started_at`,
+      [rId, tableId, staffMemberId]
+    );
+    await client.query('COMMIT');
+    res.json({ ok: true, id: assignment.id, startedAt: assignment.started_at });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[table-assignments create]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  } finally {
+    client.release();
+  }
+});
+
+// One-tap "end shift" — closes every table currently assigned to this waiter at once.
+app.post('/api/dashboard/table-assignments/end-shift', requireAuth, async (req, res) => {
+  const staffMemberId = Number(req.body?.staffMemberId);
+  if (!Number.isInteger(staffMemberId)) return res.status(400).json({ error: 'staffMemberId necesar' });
+  try {
+    const { rowCount } = await pool.query(
+      `UPDATE table_assignments SET ended_at = NOW()
+       WHERE staff_member_id=$1 AND restaurant_id=$2 AND ended_at IS NULL`,
+      [staffMemberId, req.restaurant.restaurantId]
+    );
+    res.json({ ok: true, endedCount: rowCount });
+  } catch (err) {
+    console.error('[table-assignments end-shift]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// ─── Poster POS integration — dormant until an owner pastes a token (server-side only calls,
+// so this never touches CSP's connectSrc) ─────────────────────────────────────────────────────
+
+app.put('/api/dashboard/poster/connect', requireAuth, async (req, res) => {
+  const token = (req.body?.token || '').trim();
+  if (!token) return res.status(400).json({ error: 'Token necesar' });
+  try {
+    await getPosterEmployees(token); // validate before persisting — never store a dead credential
+    await pool.query(
+      `UPDATE restaurants SET poster_token_enc=$2, poster_status='active' WHERE id=$1`,
+      [req.restaurant.restaurantId, encryptSecret(token)]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[poster connect]', err.message);
+    res.status(400).json({ error: 'Token Poster invalid sau inaccesibil' });
+  }
+});
+
+app.get('/api/dashboard/poster/employees', requireAuth, async (req, res) => {
+  try {
+    const creds = await getPosterCreds(req.restaurant.restaurantId);
+    if (!creds) return res.status(400).json({ connected: false, employees: [] });
+
+    const [employees, { rows: mapped }] = await Promise.all([
+      getPosterEmployees(creds.token),
+      pool.query(
+        `SELECT id, name, poster_user_id FROM staff_members WHERE restaurant_id=$1 AND active`,
+        [req.restaurant.restaurantId]
+      ),
+    ]);
+
+    const mappedByPosterId = new Map(mapped.filter(m => m.poster_user_id).map(m => [m.poster_user_id, m]));
+    const unmappedStaff = mapped.filter(m => !m.poster_user_id);
+
+    const withSuggestion = employees.map(e => {
+      const existing = mappedByPosterId.get(e.posterUserId);
+      const suggestion = !existing
+        ? unmappedStaff.find(s => s.name.trim().toLowerCase() === e.name.trim().toLowerCase())
+        : null;
+      return { ...e, mappedStaffMemberId: existing?.id ?? null, suggestedStaffMemberId: suggestion?.id ?? null };
+    });
+
+    res.json({ connected: true, employees: withSuggestion });
+  } catch (err) {
+    console.error('[poster employees]', err.message);
+    res.status(502).json({ error: 'Nu s-a putut contacta Poster', connected: true, employees: [] });
+  }
+});
+
+app.post('/api/dashboard/poster/mapping', requireAuth, async (req, res) => {
+  const staffMemberId = Number(req.body?.staffMemberId);
+  const posterUserId  = String(req.body?.posterUserId || '').trim();
+  if (!Number.isInteger(staffMemberId) || !posterUserId) {
+    return res.status(400).json({ error: 'staffMemberId și posterUserId necesare' });
+  }
+  try {
+    const { rows: [member] } = await pool.query(
+      `UPDATE staff_members SET poster_user_id=$3 WHERE id=$1 AND restaurant_id=$2 RETURNING id`,
+      [staffMemberId, req.restaurant.restaurantId, posterUserId]
+    );
+    if (!member) return res.status(404).json({ error: 'Ospătar inexistent' });
+    res.json({ ok: true });
+  } catch (err) {
+    // Unique index (restaurant_id, poster_user_id) blocks mapping the same Poster employee twice.
+    console.error('[poster mapping]', err.message);
+    res.status(409).json({ error: 'Acest angajat Poster e deja asociat unui alt ospătar' });
+  }
+});
+
+// ─── Owner reporting — "Bacșișuri" ────────────────────────────────────────────
+
+app.get('/api/dashboard/tips', requireAuth, async (req, res) => {
+  try {
+    const rId = req.restaurant.restaurantId;
+    const { from, to } = resolveTipPeriod(req.query);
+    const { rows } = await pool.query(
+      `SELECT p.waiter_id, s.name AS waiter_name,
+              COUNT(*) AS payment_count,
+              COALESCE(SUM(p.tip_lei), 0) AS total_tips,
+              COALESCE(SUM(p.amount_lei), 0) AS total_bill
+       FROM payments p
+       LEFT JOIN staff_members s ON s.id = p.waiter_id
+       WHERE p.restaurant_id=$1 AND p.status='paid' AND p.paid_at >= $2 AND p.paid_at < $3
+       GROUP BY p.waiter_id, s.name
+       ORDER BY total_tips DESC`,
+      [rId, from, to]
+    );
+
+    const waiters = [];
+    let unassigned = null;
+    for (const r of rows) {
+      const totalBill = Number(r.total_bill);
+      const entry = {
+        waiterId:     r.waiter_id,
+        name:         r.waiter_name || 'Neatribuit',
+        paymentCount: Number(r.payment_count),
+        totalTips:    Number(r.total_tips),
+        totalBill,
+        avgTipPct:    totalBill > 0 ? Math.round((Number(r.total_tips) / totalBill) * 1000) / 10 : 0,
+      };
+      if (r.waiter_id === null) unassigned = entry; else waiters.push(entry);
+    }
+    res.json({
+      waiters,
+      unassigned: unassigned || { waiterId: null, name: 'Neatribuit', paymentCount: 0, totalTips: 0, totalBill: 0, avgTipPct: 0 },
+    });
+  } catch (err) {
+    console.error('[dashboard/tips]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// Registered BEFORE the /:waiterId route below — Express matches routes in registration order,
+// and /:waiterId would otherwise swallow this literal path (waiterId='export') and 400 on it.
+app.get('/api/dashboard/tips/export', requireAuth, async (req, res) => {
+  try {
+    const rId = req.restaurant.restaurantId;
+    const { from, to } = resolveTipPeriod(req.query);
+    const { rows } = await pool.query(
+      `SELECT s.name AS waiter_name, COUNT(*) AS payment_count, COALESCE(SUM(p.tip_lei),0) AS total_tips
+       FROM payments p LEFT JOIN staff_members s ON s.id = p.waiter_id
+       WHERE p.restaurant_id=$1 AND p.status='paid' AND p.paid_at >= $2 AND p.paid_at < $3
+       GROUP BY s.name ORDER BY s.name`,
+      [rId, from, to]
+    );
+    const period = req.query.period || 'today';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="nota-bacsisuri-${period}.csv"`);
+    const lines = [
+      'Ospatar,Perioada,Nr. plati,Total bacsis (lei)',
+      ...rows.map(r => [r.waiter_name || 'Neatribuit', period, r.payment_count, r.total_tips].join(',')),
+    ];
+    res.send(lines.join('\n'));
+  } catch (err) {
+    console.error('[dashboard/tips export]', err);
+    res.status(500).json({ error: 'Eroare la export' });
+  }
+});
+
+// :waiterId is either a numeric staff_members id, or the literal string "unassigned".
+app.get('/api/dashboard/tips/:waiterId', requireAuth, async (req, res) => {
+  const rId = req.restaurant.restaurantId;
+  const waiterId = req.params.waiterId === 'unassigned' ? null : Number(req.params.waiterId);
+  if (waiterId !== null && !Number.isInteger(waiterId)) return res.status(400).json({ error: 'Id invalid' });
+  try {
+    const { from, to } = resolveTipPeriod(req.query);
+    const { rows } = await pool.query(
+      `SELECT p.id, o.table_number, p.amount_lei, p.tip_lei, p.paid_at, p.waiter_source
+       FROM payments p JOIN orders o ON o.id = p.order_id
+       WHERE p.restaurant_id=$1 AND p.status='paid' AND p.paid_at >= $2 AND p.paid_at < $3
+         AND p.waiter_id IS NOT DISTINCT FROM $4
+       ORDER BY p.paid_at DESC`,
+      [rId, from, to, waiterId]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('[dashboard/tips drill-down]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+app.post('/api/dashboard/tips/:paymentId/assign', requireAuth, async (req, res) => {
+  const paymentId = Number(req.params.paymentId);
+  const staffMemberId = Number(req.body?.staffMemberId);
+  if (!Number.isInteger(paymentId) || !Number.isInteger(staffMemberId)) {
+    return res.status(400).json({ error: 'Date invalide' });
+  }
+  const rId = req.restaurant.restaurantId;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows: [pmt] } = await client.query(
+      `SELECT id, waiter_id FROM payments WHERE id=$1 AND restaurant_id=$2 AND status='paid' FOR UPDATE`,
+      [paymentId, rId]
+    );
+    if (!pmt) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Plată inexistentă' }); }
+    const { rows: [member] } = await client.query(
+      `SELECT id FROM staff_members WHERE id=$1 AND restaurant_id=$2 AND active`, [staffMemberId, rId]
+    );
+    if (!member) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Ospătar inexistent' }); }
+
+    await client.query(`UPDATE payments SET waiter_id=$2, waiter_source='manual' WHERE id=$1`, [paymentId, staffMemberId]);
+    await client.query(
+      `INSERT INTO tip_reassignments (payment_id, restaurant_id, from_waiter_id, to_waiter_id)
+       VALUES ($1, $2, $3, $4)`,
+      [paymentId, rId, pmt.waiter_id, staffMemberId]
+    );
+    await client.query('COMMIT');
+
+    const now = new Date().toISOString();
+    io.to(`waiter-${staffMemberId}`).emit('tip-received', { at: now });
+    if (pmt.waiter_id) io.to(`waiter-${pmt.waiter_id}`).emit('tip-received', { at: now });
+    io.to(`dashboard-${rId}`).emit('tip-attributed', { paymentId, waiterId: staffMemberId, source: 'manual' });
+
+    res.json({ ok: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('[dashboard/tips assign]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  } finally {
+    client.release();
   }
 });
 
@@ -2686,7 +3104,7 @@ io.on('connection', socket => {
   let currentStaffRestaurantId = null;
   let currentStaffLinkId       = null;
 
-  socket.on('join-table', async ({ token, tableNumber, restaurantId, paymentId, memberToken } = {}) => {
+  socket.on('join-table', async ({ token, tableNumber, restaurantId, paymentId, memberToken, guestSession } = {}) => {
     if (checkThrottle(socket)) return;
     try {
       let resolvedNumber = tableNumber;
@@ -2709,12 +3127,27 @@ io.on('connection', socket => {
       const memberPayload = verifyMemberJWT(memberToken);
       currentMemberId = memberPayload?.memberId ?? null;
       socket.join(`table-${resolvedRestaurantId}-${resolvedNumber}`);
-      const [order, activeOffer, memberBonus] = await Promise.all([
-        getOpenOrder(resolvedNumber, currentRestaurantId),
+      // Privacy hardening: resolveGuestOrder (server/guest.js) gates whether this socket sees
+      // the table's actual bill — no open order with items, or a stale session from a table
+      // that's since turned over, both fall back to a neutral response. Joining the room above
+      // still happens unconditionally, so a legitimately-present guest keeps getting live
+      // updates the moment a real order appears.
+      const [guestResult, activeOffer, memberBonus] = await Promise.all([
+        resolveGuestOrder(token || null, resolvedNumber, resolvedRestaurantId, guestSession),
         getActiveOffer(resolvedRestaurantId, { memberId: currentMemberId }),
         getActiveMemberBonus(currentMemberId),
       ]);
-      socket.emit('order-update', { ...order, activeOffer: activeOffer || null, memberBonus: memberBonus || null });
+      if (guestResult.neutral) {
+        socket.emit('order-update', {
+          neutral: true, table_number: resolvedNumber, items: [],
+          activeOffer: activeOffer || null, memberBonus: memberBonus || null,
+        });
+      } else {
+        socket.emit('order-update', {
+          ...guestResult.order, activeOffer: activeOffer || null, memberBonus: memberBonus || null,
+          guestSession: guestResult.session,
+        });
+      }
 
       // Payment recovery on reconnect: re-emit confirmed/failed based on DB state
       if (paymentId && typeof paymentId === 'string' && paymentId.length < 128) {
@@ -2769,6 +3202,10 @@ io.on('connection', socket => {
       currentStaffRestaurantId = payload.restaurantId;
       currentStaffLinkId       = payload.linkId;
       socket.join(`staff-${payload.restaurantId}`);
+      // Per-waiter room, only joined when the token carries an identified staffMemberId — a
+      // waiter's socket can only ever join its OWN room, so cross-waiter access is impossible at
+      // the transport layer, not just enforced by a REST filter.
+      if (payload.staffMemberId) socket.join(`waiter-${payload.staffMemberId}`);
       trackStaffSocket(payload.linkId, socket);
       ack?.({ ok: true });
     } catch (err) {
@@ -3197,6 +3634,65 @@ async function checkReferralConversion(memberId) {
   }
 }
 
+// Best-effort, fire-and-forget tip attribution — called AFTER a payment has already durably
+// settled (see the two call sites below, right next to the existing notifyTelegram calls). Never
+// touches payments.status or the settlement idempotency lock; only ever writes the separate
+// waiter_id/waiter_source columns. Any failure here must never surface as a payment failure —
+// same fire-and-forget shape the codebase already uses for Telegram notifications and iiko sync.
+async function attributeWaiterToPayment(paymentId, restaurantId, orderId, paidAt, amountBani) {
+  try {
+    const { rows: [ord] } = await pool.query('SELECT table_id FROM orders WHERE id=$1', [orderId]);
+    const tableId = ord?.table_id;
+    if (!tableId) return;
+
+    let waiterId = null;
+    let source = 'unassigned';
+
+    // 1. Poster POS, if connected — dormant (getPosterCreds returns null) until an owner
+    // configures a token, so this branch is a no-op on every restaurant today.
+    const posterCreds = await getPosterCreds(restaurantId);
+    if (posterCreds) {
+      try {
+        const posterUserId = await findWaiterForPayment(posterCreds.token, { paidAt, amountBani });
+        if (posterUserId) {
+          const { rows: [m] } = await pool.query(
+            `SELECT id FROM staff_members WHERE restaurant_id=$1 AND poster_user_id=$2 AND active`,
+            [restaurantId, posterUserId]
+          );
+          if (m) { waiterId = m.id; source = 'pos'; }
+        }
+      } catch (posterErr) {
+        console.error('[attributeWaiterToPayment] poster lookup failed (non-fatal):', posterErr.message);
+      }
+    }
+
+    // 2. Time-bounded shift/table assignment — whoever had this table AT paidAt, not now.
+    if (!waiterId) {
+      const { rows: [a] } = await pool.query(
+        `SELECT staff_member_id FROM table_assignments
+         WHERE table_id=$1 AND started_at<=$2 AND (ended_at IS NULL OR ended_at>$2)
+         ORDER BY started_at DESC LIMIT 1`,
+        [tableId, paidAt]
+      );
+      if (a) { waiterId = a.staff_member_id; source = 'assignment'; }
+    }
+
+    // 3. Neither resolved — explicit 'unassigned', never left NULL/ambiguous, so the owner's
+    // Neatribuite bucket always accounts for every settled payment.
+    await pool.query(
+      `UPDATE payments SET waiter_id=$2, waiter_source=$3 WHERE id=$1`,
+      [paymentId, waiterId, waiterId ? source : 'unassigned']
+    );
+
+    if (waiterId) io.to(`waiter-${waiterId}`).emit('tip-received', { at: paidAt.toISOString() });
+    io.to(`dashboard-${restaurantId}`).emit('tip-attributed', {
+      paymentId, waiterId, source: waiterId ? source : 'unassigned',
+    });
+  } catch (err) {
+    console.error('[attributeWaiterToPayment]', err.message);
+  }
+}
+
 async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) {
   const meta = paymentMeta.get(miaPaymentId);
   if (!meta) {
@@ -3319,6 +3815,8 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) 
     });
     notifyTelegram(restaurantId, `💳 Masa ${tableNumber} · ${Math.round(Number(amountLei) + Number(tipLei))} lei plătit`,
       { dedupeKey: `${restaurantId}:payment:${dbPaymentId}` });
+    attributeWaiterToPayment(dbPaymentId, restaurantId, orderId, new Date(),
+      Math.round((Number(amountLei) + Number(tipLei)) * 100));
 
     cleanupMeta(miaPaymentId, socketId);
   } catch (err) {
@@ -3480,6 +3978,8 @@ async function settleFromDB(pmt, confirmedMiaId = null, payId = null) {
     });
     notifyTelegram(pmt.restaurant_id, `💳 Masa ${pmt.table_number} · ${Math.round(Number(pmt.amount_lei) + Number(pmt.tip_lei))} lei plătit`,
       { dedupeKey: `${pmt.restaurant_id}:payment:${pmt.id}` });
+    attributeWaiterToPayment(pmt.id, pmt.restaurant_id, pmt.order_id, new Date(),
+      Math.round((Number(pmt.amount_lei) + Number(pmt.tip_lei)) * 100));
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('[settleFromDB]', err);

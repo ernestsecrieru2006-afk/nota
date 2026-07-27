@@ -899,6 +899,9 @@ html, body {
         <a class="nav-item" data-view="team">
           <span class="nav-icon">👥</span>Echipă & Notificări
         </a>
+        <a class="nav-item" data-view="tips">
+          <span class="nav-icon">🧾</span>Bacșișuri
+        </a>
 
         <div style="margin-top:20px">
           <div class="ss-label">Azi</div>
@@ -1437,6 +1440,77 @@ html, body {
           </div>
           <div id="tg-status" style="font-size:11px;color:var(--muted);margin-top:8px"></div>
           <div style="font-size:11px;color:var(--muted);margin-top:10px">Dacă e configurat, primești mesaje pe Telegram când un oaspete cheamă ospătarul sau când o masă e achitată. Fără token/chat ID, funcția e dezactivată.</div>
+        </div>
+
+        <!-- Waiter roster -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Ospătari</div>
+          <div id="staff-members-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <input type="text" id="staff-member-name-inp" placeholder="Nume ospătar nou" style="flex:1;min-width:160px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;font-family:inherit">
+            <button id="staff-member-add-btn" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer;font-family:inherit">Adaugă</button>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Ospătarul își alege numele o singură dată, pe /waiter, după PIN — apoi vede doar bacșișurile lui.</div>
+        </div>
+
+        <!-- Shift / table assignment -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Tură — atribuire mese</div>
+          <div id="active-shifts-row" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px"></div>
+          <div id="table-assign-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Bacșișul unei plăți se atribuie ospătarului asignat la masă în momentul plății — reasignarea unei mese nu schimbă plățile deja făcute.</div>
+        </div>
+
+        <!-- Poster POS mapping -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Integrare Poster POS</div>
+          <div id="poster-status" style="font-size:13px;color:var(--muted);margin-bottom:10px">Se încarcă…</div>
+          <div id="poster-connect-form" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <input type="password" id="poster-token-inp" placeholder="Token API Poster (cont:cheie)" style="flex:1;min-width:200px;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 12px;outline:none;font-family:inherit">
+            <button id="poster-connect-btn" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer;font-family:inherit">Conectează</button>
+          </div>
+          <div id="poster-mapping-list" style="display:flex;flex-direction:column;gap:6px"></div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Odată conectat, bacșișul se atribuie automat din datele Poster; atribuirea pe tură rămâne rezerva pentru orice plată pe care Poster nu o poate corela.</div>
+        </div>
+      </div>
+
+      <!-- ── Bacșișuri (tip attribution reporting) ─────────────────────── -->
+      <div id="tips-section" style="margin-top:0" data-view="tips">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+          <div>
+            <div class="section-title" style="margin-bottom:2px">Bacșișuri</div>
+            <div style="font-size:12px;color:var(--muted)">Cine a încasat ce bacșiș, pentru statul de plată</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="per-tab active" data-tips-period="today">Azi</button>
+            <button class="per-tab" data-tips-period="7d">7 zile</button>
+            <button class="per-tab" data-tips-period="30d">30 zile</button>
+            <button class="per-tab" data-tips-period="month">Luna asta</button>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button id="tips-export-btn" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">↓ Export CSV pentru salarizare</button>
+        </div>
+
+        <div id="tips-waiters-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px"></div>
+
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div class="section-title" style="font-size:12px">Neatribuite</div>
+            <div id="tips-unassigned-total" style="font-size:13px;color:var(--muted)"></div>
+          </div>
+          <div id="tips-unassigned-list" style="display:flex;flex-direction:column;gap:6px"></div>
+        </div>
+
+        <div id="tips-drilldown-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:200;align-items:center;justify-content:center">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:20px;width:min(600px,92vw);max-height:80vh;overflow:auto">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+              <div class="section-title" id="tips-drilldown-title" style="font-size:13px"></div>
+              <button id="tips-drilldown-close" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer">×</button>
+            </div>
+            <div id="tips-drilldown-list" style="display:flex;flex-direction:column;gap:6px"></div>
+          </div>
         </div>
       </div>
 
@@ -2126,6 +2200,10 @@ document.getElementById('onboarding-wizard').addEventListener('click', async e =
 
 async function loadAll() {
   await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings(), loadLoyalty()]);
+  // Staff members must load before table assignments / Poster mapping (both render options from
+  // staffMembersCache) and before the Bacșișuri view's assign dropdowns.
+  await loadStaffMembers();
+  await Promise.all([loadTableAssignments(), loadPosterStatus(), loadTips()]);
 }
 
 // ── API Helper ────────────────────────────────────────────────────────────────
@@ -2488,6 +2566,15 @@ function connectSocket() {
   // A waiter tapped "Preiau" on /waiter — clear it here too, exactly as if the owner had
   // clicked "Rezolvat" themselves. Purely additive: manual dismiss still works unchanged.
   socket.on('waiter-call-acked', ({ tableNumber }) => dismissWaiter(tableNumber));
+
+  // Attribution happens best-effort AFTER 'payment-made' already fired (see server.js's
+  // attributeWaiterToPayment), so the Bacșișuri view needs its own refresh signal, debounced in
+  // case several payments settle close together.
+  let tipsRefreshTimer = null;
+  socket.on('tip-attributed', () => {
+    clearTimeout(tipsRefreshTimer);
+    tipsRefreshTimer = setTimeout(() => { if (currentView === 'tips') loadTips(); }, 300);
+  });
 }
 
 function addWaiterFeedEntry(tableNumber) {
@@ -3588,6 +3675,270 @@ document.getElementById('staff-link-copy').addEventListener('click', () => {
 });
 document.getElementById('tg-save').addEventListener('click', saveTelegramSettings);
 document.getElementById('tg-test').addEventListener('click', sendTelegramTestMessage);
+
+// ── Waiter roster ────────────────────────────────────────────────────────────
+let staffMembersCache = [];
+
+function staffMemberRowHTML(m) {
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);opacity:${m.active ? '1' : '.5'}">
+      <input type="text" value="${esc(m.name)}" data-staff-member-name="${m.id}" style="flex:1;background:transparent;border:none;color:var(--text);font-size:13px;padding:4px;outline:none;font-family:inherit">
+      <button data-staff-member-toggle="${m.id}" data-active="${m.active}" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:11px;padding:4px 10px;cursor:pointer;font-family:inherit;white-space:nowrap">${m.active ? 'Dezactivează' : 'Activează'}</button>
+    </div>`;
+}
+
+async function loadStaffMembers() {
+  staffMembersCache = await api('/api/dashboard/staff-members');
+  document.getElementById('staff-members-list').innerHTML = staffMembersCache.length
+    ? staffMembersCache.map(staffMemberRowHTML).join('')
+    : '<div style="font-size:12px;color:var(--muted)">Niciun ospătar adăugat încă.</div>';
+  renderTableAssignGrid();
+}
+
+document.getElementById('staff-member-add-btn').addEventListener('click', async () => {
+  const inp  = document.getElementById('staff-member-name-inp');
+  const name = inp.value.trim();
+  if (!name) return;
+  try {
+    const res = await apiMut('POST', '/api/dashboard/staff-members', { name });
+    if (res.error) return toast('Eroare: ' + res.error);
+    inp.value = '';
+    await loadStaffMembers();
+    toast('Ospătar adăugat.', 'success');
+  } catch { toast('Eroare la adăugare.'); }
+});
+
+document.getElementById('staff-members-list').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-staff-member-toggle]');
+  if (!btn) return;
+  try {
+    await apiMut('PUT', `/api/dashboard/staff-members/${btn.dataset.staffMemberToggle}`,
+      { active: btn.dataset.active !== 'true' });
+    await loadStaffMembers();
+  } catch { toast('Eroare la actualizare.'); }
+});
+
+document.getElementById('staff-members-list').addEventListener('change', async e => {
+  const inp = e.target.closest('[data-staff-member-name]');
+  const name = inp?.value.trim();
+  if (!inp || !name) return;
+  try { await apiMut('PUT', `/api/dashboard/staff-members/${inp.dataset.staffMemberName}`, { name }); }
+  catch { toast('Eroare la redenumire.'); }
+});
+
+// ── Shift / table assignment ─────────────────────────────────────────────────
+let tableAssignCache = [];
+
+async function loadTableAssignments() {
+  tableAssignCache = await api('/api/dashboard/table-assignments/active');
+  renderTableAssignGrid();
+}
+
+function renderTableAssignGrid() {
+  const grid = document.getElementById('table-assign-grid');
+  if (!grid) return;
+  const activeStaff = staffMembersCache.filter(m => m.active);
+  grid.innerHTML = tableAssignCache.map(t => `
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+      <div style="font-size:12px;color:var(--muted);margin-bottom:6px">Masa ${t.number}</div>
+      <select data-assign-table="${t.table_id}" style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px;font-family:inherit">
+        <option value="">— liberă —</option>
+        ${activeStaff.map(s => `<option value="${s.id}" ${s.id === t.staff_member_id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+      </select>
+    </div>`).join('');
+
+  // One "Termină tura" button per waiter currently holding at least one table.
+  const byWaiter = new Map();
+  for (const t of tableAssignCache) {
+    if (!t.staff_member_id) continue;
+    const cur = byWaiter.get(t.staff_member_id) || { name: t.waiter_name, count: 0 };
+    cur.count++;
+    byWaiter.set(t.staff_member_id, cur);
+  }
+  document.getElementById('active-shifts-row').innerHTML = [...byWaiter.entries()].map(([id, v]) => `
+    <button data-end-shift="${id}" style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:8px;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:inherit">Termină tura — ${esc(v.name)} (${v.count})</button>
+  `).join('');
+}
+
+document.getElementById('table-assign-grid').addEventListener('change', async e => {
+  const sel = e.target.closest('[data-assign-table]');
+  if (!sel) return;
+  if (!sel.value) { await loadTableAssignments(); return toast('Folosește „Termină tura” ca să eliberezi mesele unui ospătar.'); }
+  try {
+    await apiMut('POST', '/api/dashboard/table-assignments', {
+      tableId: Number(sel.dataset.assignTable), staffMemberId: Number(sel.value),
+    });
+    await loadTableAssignments();
+  } catch { toast('Eroare la atribuire.'); }
+});
+
+document.getElementById('active-shifts-row').addEventListener('click', async e => {
+  const btn = e.target.closest('[data-end-shift]');
+  if (!btn) return;
+  try {
+    await apiMut('POST', '/api/dashboard/table-assignments/end-shift', { staffMemberId: Number(btn.dataset.endShift) });
+    await loadTableAssignments();
+    toast('Tură încheiată.', 'success');
+  } catch { toast('Eroare la încheierea turei.'); }
+});
+
+// ── Poster POS mapping ───────────────────────────────────────────────────────
+async function loadPosterStatus() {
+  try {
+    const data = await api('/api/dashboard/poster/employees');
+    if (!data.connected) {
+      document.getElementById('poster-status').textContent = 'Neconectat — opțional; fără el, atribuirea se face din tura asignată.';
+      document.getElementById('poster-connect-form').style.display = 'flex';
+      document.getElementById('poster-mapping-list').innerHTML = '';
+      return;
+    }
+    document.getElementById('poster-status').textContent = `Conectat — ${data.employees.length} angajați găsiți în Poster.`;
+    document.getElementById('poster-connect-form').style.display = 'none';
+    document.getElementById('poster-mapping-list').innerHTML = data.employees.map(e => `
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <div>${esc(e.name)}${e.roleName ? ` <span style="color:var(--muted)">(${esc(e.roleName)})</span>` : ''}</div>
+        <select data-poster-map="${e.posterUserId}" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;font-family:inherit">
+          <option value="">— fără asociere —</option>
+          ${staffMembersCache.filter(s => s.active).map(s => `<option value="${s.id}" ${s.id === (e.mappedStaffMemberId ?? e.suggestedStaffMemberId) ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}
+        </select>
+      </div>`).join('');
+  } catch {
+    document.getElementById('poster-status').textContent = 'Eroare la verificarea conexiunii Poster.';
+  }
+}
+
+document.getElementById('poster-connect-btn').addEventListener('click', async () => {
+  const inp = document.getElementById('poster-token-inp');
+  const val = inp.value.trim();
+  if (!val) return;
+  try {
+    const res = await apiMut('PUT', '/api/dashboard/poster/connect', { token: val });
+    if (res.error) return toast('Eroare: ' + res.error);
+    inp.value = '';
+    toast('Poster conectat.', 'success');
+    loadPosterStatus();
+  } catch { toast('Eroare la conectare.'); }
+});
+
+document.getElementById('poster-mapping-list').addEventListener('change', async e => {
+  const sel = e.target.closest('[data-poster-map]');
+  if (!sel || !sel.value) return;
+  try {
+    await apiMut('POST', '/api/dashboard/poster/mapping', {
+      staffMemberId: Number(sel.value), posterUserId: sel.dataset.posterMap,
+    });
+    toast('Asociere salvată.', 'success');
+  } catch { toast('Eroare la asociere.'); }
+});
+
+// ── Bacșișuri (tip attribution reporting) ────────────────────────────────────
+let tipsCurrentPeriod = 'today';
+
+async function loadTips(period) {
+  period = period || tipsCurrentPeriod;
+  tipsCurrentPeriod = period;
+
+  const [data, unassignedRows] = await Promise.all([
+    api(`/api/dashboard/tips?period=${period}`),
+    api(`/api/dashboard/tips/unassigned?period=${period}`),
+  ]);
+
+  document.getElementById('tips-waiters-list').innerHTML = data.waiters.length
+    ? data.waiters.map(tipsWaiterRowHTML).join('')
+    : '<div style="font-size:12px;color:var(--muted)">Niciun bacșiș atribuit în această perioadă încă.</div>';
+
+  document.getElementById('tips-unassigned-total').textContent =
+    `${data.unassigned.paymentCount} plăți · ${Math.round(data.unassigned.totalTips)} lei`;
+
+  document.getElementById('tips-unassigned-list').innerHTML = unassignedRows.length
+    ? unassignedRows.map(tipsUnassignedRowHTML).join('')
+    : '<div style="font-size:12px;color:var(--muted)">Nimic neatribuit — bravo!</div>';
+}
+
+function tipsWaiterRowHTML(w) {
+  return `
+    <div data-waiter-row="${w.waiterId}" data-waiter-name="${esc(w.name)}" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;cursor:pointer">
+      <div>
+        <div style="font-size:14px;font-weight:700;color:var(--text)">${esc(w.name)}</div>
+        <div style="font-size:11px;color:var(--muted)">${w.paymentCount} plăți · ${Math.round(w.totalBill)} lei facturat</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:18px;font-weight:800;color:var(--em)">${Math.round(w.totalTips)} lei</div>
+        <div style="font-size:11px;color:var(--muted)">${w.avgTipPct}% bacșiș mediu</div>
+      </div>
+    </div>`;
+}
+
+function tipsUnassignedRowHTML(p) {
+  const time = new Date(p.paid_at).toLocaleTimeString('ro-RO', { hour: '2-digit', minute: '2-digit' });
+  const activeStaff = staffMembersCache.filter(s => s.active);
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px">
+      <div>Masa ${p.table_number} · ${time} · ${Number(p.tip_lei)} lei bacșiș</div>
+      <select data-assign-payment="${p.id}" style="background:var(--surface);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:12px;padding:4px 8px;font-family:inherit">
+        <option value="">Atribuie...</option>
+        ${activeStaff.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}
+      </select>
+    </div>`;
+}
+
+document.getElementById('tips-waiters-list').addEventListener('click', e => {
+  const row = e.target.closest('[data-waiter-row]');
+  if (!row) return;
+  openTipsDrilldown(row.dataset.waiterRow, row.dataset.waiterName);
+});
+
+async function openTipsDrilldown(waiterId, name) {
+  document.getElementById('tips-drilldown-title').textContent = name || 'Detalii';
+  document.getElementById('tips-drilldown-modal').style.display = 'flex';
+  const rows = await api(`/api/dashboard/tips/${waiterId}?period=${tipsCurrentPeriod}`);
+  document.getElementById('tips-drilldown-list').innerHTML = rows.length
+    ? rows.map(r => {
+        const time = new Date(r.paid_at).toLocaleString('ro-RO', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        return `<div style="display:flex;justify-content:space-between;font-size:12px;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span>Masa ${r.table_number} · ${time}</span>
+          <span>${Number(r.amount_lei)} + <b style="color:var(--em)">${Number(r.tip_lei)}</b> lei</span>
+        </div>`;
+      }).join('')
+    : '<div style="font-size:12px;color:var(--muted)">Nimic în această perioadă.</div>';
+}
+
+document.getElementById('tips-drilldown-close').addEventListener('click', () => {
+  document.getElementById('tips-drilldown-modal').style.display = 'none';
+});
+
+document.getElementById('tips-unassigned-list').addEventListener('change', async e => {
+  const sel = e.target.closest('[data-assign-payment]');
+  if (!sel || !sel.value) return;
+  try {
+    await apiMut('POST', `/api/dashboard/tips/${sel.dataset.assignPayment}/assign`, { staffMemberId: Number(sel.value) });
+    toast('Bacșiș atribuit.', 'success');
+    loadTips();
+  } catch { toast('Eroare la atribuire.'); }
+});
+
+document.querySelectorAll('[data-tips-period]').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('[data-tips-period]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadTips(btn.dataset.tipsPeriod);
+  });
+});
+
+document.getElementById('tips-export-btn').addEventListener('click', () => {
+  fetch(`/api/dashboard/tips/export?period=${tipsCurrentPeriod}`, { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.blob())
+    .then(blob => {
+      const url = URL.createObjectURL(blob);
+      const a   = document.createElement('a');
+      a.href    = url;
+      a.setAttribute('download', `nota-bacsisuri-${tipsCurrentPeriod}.csv`);
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1000);
+    })
+    .catch(() => toast('Eroare la export CSV.'));
+});
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 function timeAgo(ts) {

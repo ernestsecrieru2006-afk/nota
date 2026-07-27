@@ -426,6 +426,62 @@ async function setup() {
       console.error('[setup-db] hot-path index audit failed (non-fatal):', err.message);
     }
 
+    // ── Tip attribution to waiters ────────────────────────────────────────────
+    // staff_members is a per-restaurant waiter roster, layered on top of the existing shared
+    // staff_access_links (link+PIN) domain — it does NOT replace it. table_assignments is the
+    // time-bounded "who had this table" record used to attribute a tip when no POS data is
+    // available; the partial unique index enforces "one active assignment per table" structurally.
+    // tip_reassignments is a pure audit trail for manual owner corrections.
+    try {
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS staff_members (
+          id             SERIAL       PRIMARY KEY,
+          restaurant_id  INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+          name           TEXT         NOT NULL,
+          active         BOOLEAN      NOT NULL DEFAULT true,
+          poster_user_id TEXT,
+          created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_staff_members_restaurant ON staff_members(restaurant_id) WHERE active`);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_members_poster_map ON staff_members(restaurant_id, poster_user_id) WHERE poster_user_id IS NOT NULL`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS table_assignments (
+          id              SERIAL       PRIMARY KEY,
+          restaurant_id   INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+          table_id        INT          NOT NULL REFERENCES tables(id) ON DELETE CASCADE,
+          staff_member_id INT          NOT NULL REFERENCES staff_members(id) ON DELETE CASCADE,
+          started_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+          ended_at        TIMESTAMPTZ
+        )
+      `);
+      await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_table_assign_one_active ON table_assignments(table_id) WHERE ended_at IS NULL`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_table_assign_lookup ON table_assignments(table_id, started_at, ended_at)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_table_assign_staff_active ON table_assignments(staff_member_id) WHERE ended_at IS NULL`);
+
+      await client.query(`
+        CREATE TABLE IF NOT EXISTS tip_reassignments (
+          id              SERIAL       PRIMARY KEY,
+          payment_id      INT          NOT NULL REFERENCES payments(id) ON DELETE CASCADE,
+          restaurant_id   INT          NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+          from_waiter_id  INT          REFERENCES staff_members(id),
+          to_waiter_id    INT          REFERENCES staff_members(id),
+          changed_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+        )
+      `);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_tip_reassignments_payment ON tip_reassignments(payment_id)`);
+
+      // waiter_source: 'pos' | 'assignment' | 'manual' | 'unassigned' — NULL on pre-existing rows.
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS waiter_id INT REFERENCES staff_members(id)`);
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS waiter_source VARCHAR(20)`);
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_waiter ON payments(restaurant_id, waiter_id, paid_at)`);
+
+      // Poster credentials, per-restaurant, encrypted at rest — same shape as the maib_* columns.
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS poster_token_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS poster_status VARCHAR(20)`);
+    } catch { /* already exist */ }
+
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');
 

@@ -80,7 +80,7 @@ button { font-family: inherit; }
 #conn-banner.show { display: block; }
 
 /* ── Start / PIN screen ──────────────────────────────── */
-#start-screen {
+#start-screen, #identify-screen {
   min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center;
   padding: 24px; gap: 18px; text-align: center;
 }
@@ -142,6 +142,26 @@ button { font-family: inherit; }
 
 #empty-state { text-align: center; color: var(--muted); font-size: 13px; margin-top: 40px; }
 
+/* ── "Cine ești?" identify picker ────────────────────── */
+#identify-list { display: flex; flex-direction: column; gap: 10px; width: 260px; }
+.identify-btn { width: 100%; }
+
+/* ── Bacșișurile tale — live personal tip counter ────── */
+#tips-panel {
+  display: none; margin: 10px 14px 0; padding: 14px 16px; border-radius: var(--rl);
+  background: var(--em-bg); border: 1px solid rgba(16,185,129,.35);
+}
+#tips-panel.show { display: block; }
+#tips-label { font-size: 11px; color: var(--em-hi); font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+#tips-amount { font-size: 28px; font-weight: 800; color: var(--em-hi); margin-top: 2px; }
+#tips-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+#tips-panel.pulse { animation: tips-pulse 0.6s ease; }
+@keyframes tips-pulse {
+  0%   { transform: scale(1); }
+  30%  { transform: scale(1.03); box-shadow: 0 0 0 6px rgba(16,185,129,.25); }
+  100% { transform: scale(1); }
+}
+
 /* ── Wake lock note ──────────────────────────────────── */
 #wakelock-note {
   display: none; text-align: center; font-size: 11px; color: var(--muted);
@@ -163,6 +183,13 @@ button { font-family: inherit; }
   <div id="start-error"></div>
 </div>
 
+<!-- ── "Cine ești?" — one-time waiter identity picker ───── -->
+<div id="identify-screen" style="display:none">
+  <div id="start-logo">n.</div>
+  <div id="identify-msg" style="font-size:14px;color:var(--text2);max-width:320px;text-align:center;line-height:1.5">Cine ești?</div>
+  <div id="identify-list"></div>
+</div>
+
 <!-- ── Live grid ───────────────────────────────────────── -->
 <div id="grid-screen">
   <div id="topbar">
@@ -174,6 +201,11 @@ button { font-family: inherit; }
       <button id="lang-btn" class="tb-btn" type="button">RO</button>
       <button id="mute-btn" class="tb-btn" type="button">🔊</button>
     </div>
+  </div>
+  <div id="tips-panel">
+    <div id="tips-label">Bacșișurile tale azi</div>
+    <div id="tips-amount">— lei</div>
+    <div id="tips-sub"><span id="tips-count">0</span> plăți · <span id="tips-avg">0</span>% bacșiș mediu</div>
   </div>
   <div id="wakelock-note"></div>
   <div id="grid"></div>

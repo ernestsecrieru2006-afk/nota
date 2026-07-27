@@ -37,6 +37,7 @@
       emptyState:  'Nicio masă configurată.',
       wakeNote:    'Ține telefonul conectat la curent pentru a evita stingerea ecranului.',
       lei:         'lei neachitat',
+      whoAreYou:   'Cine ești?',
     },
     ru: {
       checking:    'Проверка доступа…',
@@ -59,6 +60,7 @@
       emptyState:  'Нет столов.',
       wakeNote:    'Держите телефон на зарядке, чтобы экран не гас.',
       lei:         'лей к оплате',
+      whoAreYou:   'Кто ты?',
     },
   };
 
@@ -83,6 +85,15 @@
   const muteBtn        = el('mute-btn');
   const langBtn        = el('lang-btn');
   const wakeNote       = el('wakelock-note');
+  const identifyScreen = el('identify-screen');
+  const identifyMsg    = el('identify-msg');
+  const identifyList   = el('identify-list');
+  const tipsPanel      = el('tips-panel');
+  const tipsAmount     = el('tips-amount');
+  const tipsCount      = el('tips-count');
+  const tipsAvg        = el('tips-avg');
+
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 
   // ── State ─────────────────────────────────────────────────────────────
   const params        = new URLSearchParams(location.search);
@@ -132,13 +143,17 @@
       beep(880, now, 0.14); beep(880, now + 0.22, 0.14); beep(880, now + 0.44, 0.14);
     } else if (kind === 'paid') {
       beep(523, now, 0.16); beep(659, now + 0.18, 0.22);
+    } else if (kind === 'tip') {
+      beep(659, now, 0.1); beep(988, now + 0.12, 0.16);
     }
   }
 
   // iOS Safari has no Vibration API at all — this silently no-ops there, sound + visual only.
   function vibrate(kind) {
     if (muted || !('vibrate' in navigator)) return;
-    navigator.vibrate(kind === 'call' ? [200, 100, 200, 100, 200] : [300]);
+    if (kind === 'call') navigator.vibrate([200, 100, 200, 100, 200]);
+    else if (kind === 'tip') navigator.vibrate([80]);
+    else navigator.vibrate([300]);
   }
 
   // ── Wake Lock — releases automatically when the tab is hidden and does NOT auto-reacquire,
@@ -293,6 +308,17 @@
       vibrate('paid');
     });
 
+    // Only ever delivered into this socket's OWN waiter-${staffMemberId} room (server-enforced,
+    // see join-staff in server.js) — never another waiter's tips.
+    socket.on('tip-received', () => {
+      loadMyTips();
+      playAlert('tip');
+      vibrate('tip');
+      tipsPanel.classList.remove('pulse');
+      void tipsPanel.offsetWidth; // restart the CSS animation on repeated events
+      tipsPanel.classList.add('pulse');
+    });
+
     // Non-alerting — clears/refreshes silently, never triggers sound/vibration.
     socket.on('waiter-call-acked', ({ tableNumber }) => {
       const row = tables.find(x => Number(x.number) === Number(tableNumber));
@@ -308,7 +334,11 @@
     staffToken = null;
     if (socket) { socket.disconnect(); socket = null; }
     gridScreen.style.display = 'none';
+    identifyScreen.style.display = 'none';
+    tipsPanel.classList.remove('show');
     startScreen.style.display = 'flex';
+    // nota_staff_member_id is deliberately kept — re-redeeming re-attaches the same identity
+    // (see ensureIdentified) without re-asking "Cine ești?" on this device.
     if (linkToken) showPinEntry(); else showInvalidLink();
     startError.textContent = t('revoked');
   }
@@ -338,6 +368,68 @@
     startBtn.style.display = 'none';
   }
 
+  // ── Waiter identity — layered on top of the shared link+PIN session ────
+  // Asked once per device (persisted in localStorage), not once per app-open: a fresh PIN
+  // redemption always issues a token WITHOUT staffMemberId, so a remembered id gets silently
+  // re-attached via identifyAs() rather than re-asking. Only a never-before-identified device
+  // (or one whose remembered id got deactivated) sees the picker.
+  async function identifyAs(id) {
+    const { status, data } = await staffApi('/api/staff/identify', {
+      method: 'POST', body: JSON.stringify({ staffMemberId: id }),
+    });
+    if (status !== 200 || !data.token) return false;
+    staffToken = data.token;
+    localStorage.setItem('nota_staff_token', staffToken);
+    localStorage.setItem('nota_staff_member_id', String(id));
+    return true;
+  }
+
+  function showIdentifyPicker(roster) {
+    identifyMsg.textContent = t('whoAreYou');
+    identifyList.innerHTML = roster.map(r =>
+      `<button class="big-btn identify-btn" data-identify="${r.id}" data-name="${esc(r.name)}" type="button">${esc(r.name)}</button>`
+    ).join('');
+    startScreen.style.display = 'none';
+    identifyScreen.style.display = 'flex';
+  }
+
+  identifyList.addEventListener('click', async e => {
+    const btn = e.target.closest('[data-identify]');
+    if (!btn) return;
+    const ok = await identifyAs(Number(btn.dataset.identify));
+    if (!ok) return; // transient error — stays on the picker, safe to retap
+    localStorage.setItem('nota_staff_member_name', btn.dataset.name);
+    identifyScreen.style.display = 'none';
+    enterShift();
+  });
+
+  // Empty roster (owner hasn't set one up) → dormant, resolves immediately, no picker shown —
+  // today's anonymous flow is exactly preserved. Returns true iff the picker was shown, so the
+  // caller knows to let the picker's own click handler drive enterShift() instead of doing it itself.
+  async function ensureIdentified() {
+    const rememberedId = localStorage.getItem('nota_staff_member_id');
+    if (rememberedId) {
+      if (await identifyAs(Number(rememberedId))) return false;
+      localStorage.removeItem('nota_staff_member_id');
+      localStorage.removeItem('nota_staff_member_name');
+    }
+    const { status, data: roster } = await staffApi('/api/staff/roster');
+    if (status !== 200 || !Array.isArray(roster) || !roster.length) return false;
+    showIdentifyPicker(roster);
+    return true;
+  }
+
+  // ── Personal tip counter ─────────────────────────────────────────────
+  async function loadMyTips() {
+    if (!localStorage.getItem('nota_staff_member_id')) return;
+    const { status, data } = await staffApi('/api/staff/tips/me');
+    if (status !== 200) return; // 400 = not identified yet on this token; just stays hidden
+    tipsPanel.classList.add('show');
+    tipsAmount.textContent = `${Math.round(Number(data.totalTips))} lei`;
+    tipsCount.textContent  = data.paymentCount;
+    tipsAvg.textContent    = data.avgTipPct;
+  }
+
   async function enterShift() {
     ensureAudio();       // user gesture — required before any sound can ever play
     requestWakeLock();
@@ -346,6 +438,7 @@
     tbRestaurant.textContent = restaurantName || '';
     const ok = await loadTables();
     if (!ok) return; // revoked mid-flight — handleRevoked() already reset the screen
+    loadMyTips();
     connectSocket();
   }
 
@@ -368,7 +461,9 @@
       localStorage.setItem('nota_staff_token', staffToken);
       localStorage.setItem('nota_staff_restaurant', restaurantName);
       localStorage.setItem('nota_staff_link_token', linkToken);
-      enterShift(); // this tap is the user gesture that unlocks audio
+      ensureAudio(); // this tap is the user gesture that unlocks audio, even if the picker shows next
+      const pickerShown = await ensureIdentified();
+      if (!pickerShown) enterShift();
     } catch {
       startBtn.disabled = false;
       startError.textContent = t('genericErr');
