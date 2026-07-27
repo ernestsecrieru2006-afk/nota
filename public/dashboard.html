@@ -392,6 +392,13 @@ html, body {
 .t-status { font-size: 10px; color: var(--muted); margin-top: 3px; }
 .t-active .t-status { color: var(--amber-hi); }
 .t-paid   .t-status { color: var(--em-hi); }
+.t-settle-btn {
+  display: block; width: 100%; margin-top: 8px; background: none;
+  border: 1px solid var(--border); border-radius: 7px; color: var(--text2);
+  font-size: 9.5px; font-weight: 700; padding: 4px 2px; cursor: pointer;
+  font-family: inherit; letter-spacing: .01em;
+}
+.t-settle-btn:hover { border-color: var(--amber); color: var(--amber-hi); }
 
 /* ── COMING SOON ────────────────────────────────────────── */
 .cs-section-hd {
@@ -1134,6 +1141,34 @@ html, body {
         <div id="offers-list"></div>
         </div>
         <!-- ── end Oferte ─────────────────────────────────────── -->
+
+        <!-- ── Loialitate (card-free repeat-visit rule) ──────────────────────── -->
+        <div data-subview="offers" style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-top:20px">
+          <div class="section-title" style="font-size:13px;margin-bottom:4px">Loialitate — reducere automată la revenire</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:14px">Fără carduri, fără coduri — se aplică automat la plată, pe baza contului Club Eats sau a telefonului folosit.</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:14px;cursor:pointer">
+            <input type="checkbox" id="loy-enabled" style="accent-color:var(--em)"> Activează regula de loialitate
+          </label>
+          <div class="offer-form-grid" style="margin-bottom:14px">
+            <div class="offer-field">
+              <label>Regulă</label>
+              <select id="loy-mode" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:9px 10px;font-family:inherit">
+                <option value="every_nth">La fiecare a N-a vizită</option>
+                <option value="visits_30d">După N vizite în 30 de zile</option>
+              </select>
+            </div>
+            <div class="offer-field">
+              <label id="loy-n-label">N (vizite)</label>
+              <input type="number" id="loy-n" min="2" max="100" value="5">
+            </div>
+            <div class="offer-field">
+              <label>Reducere (%)</label>
+              <input type="number" id="loy-pct" min="1" max="50" value="10">
+            </div>
+          </div>
+          <button class="btn-save-offer" id="loy-save">Salvează regula</button>
+          <span id="loy-status" style="font-size:12px;color:var(--muted);margin-left:10px"></span>
+        </div>
 
         <!-- Per-offer attribution -->
         <div id="ce-attr-wrap" style="display:none" data-subview="club">
@@ -2090,7 +2125,7 @@ document.getElementById('onboarding-wizard').addEventListener('click', async e =
 });
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings(), loadLoyalty()]);
 }
 
 // ── API Helper ────────────────────────────────────────────────────────────────
@@ -2311,15 +2346,33 @@ async function loadTables() {
       ? '🔔 ospătar'
       : isPending ? '⏳ plată în curs'
       : hasAct ? `${t.available} disp · ${t.claimed} sel` : hasPaid ? 'Achitat' : 'Liberă';
+    const settleBtn = hasAct
+      ? `<button class="t-settle-btn" data-settle-table="${t.number}" title="Marchează restul comenzii ca achitat la casă (cash/card la POS)">Achitat la casă</button>`
+      : '';
     return `
       <div class="t-tile ${cls}">
         <div class="t-num">Masa ${t.number}</div>
         <div class="t-indicator"></div>
         <div class="t-amount ${unpaid === 0 ? 'zero' : ''}">${amtTxt || '—'}</div>
         <div class="t-status">${stTxt}</div>
+        ${settleBtn}
       </div>`;
   }).join('');
 }
+
+async function settleTableExternally(tableNumber) {
+  const ok = window.confirm(`Marchezi tot restul comenzii de la Masa ${tableNumber} ca achitat la casă (cash/card, în afara nota.)?\n\nOaspeții nu vor mai putea plăti aceste preparate prin nota.`);
+  if (!ok) return;
+  const res = await apiMut('POST', `/api/dashboard/tables/${tableNumber}/settle-external`, {});
+  if (res.error) return toast('Eroare: ' + res.error);
+  toast(`Masa ${tableNumber} — ${res.settledCount} poziții marcate ca achitate la casă.`, 'success');
+  loadTables();
+}
+
+document.getElementById('tables-grid').addEventListener('click', e => {
+  const btn = e.target.closest('[data-settle-table]');
+  if (btn) settleTableExternally(Number(btn.dataset.settleTable));
+});
 
 // ── Recent Payments ───────────────────────────────────────────────────────────
 async function loadRecentPayments() {
@@ -2871,7 +2924,41 @@ document.getElementById('ce-section').addEventListener('click', e => {
     document.getElementById('of-end').value   = qhBtn.dataset.end.slice(0,5);
     return;
   }
+  if (e.target.closest('#loy-save')) { saveLoyalty(); return; }
 });
+
+// ── Loyalty (card-free repeat-visit rule) ─────────────────────────────────────
+function syncLoyaltyNLabel() {
+  const mode = document.getElementById('loy-mode').value;
+  document.getElementById('loy-n-label').textContent = mode === 'visits_30d' ? 'N (vizite în 30 zile)' : 'N (fiecare a N-a vizită)';
+}
+
+async function loadLoyalty() {
+  try {
+    const data = await api('/api/dashboard/loyalty');
+    document.getElementById('loy-enabled').checked = !!data.loyalty_enabled;
+    document.getElementById('loy-mode').value       = data.loyalty_mode || 'every_nth';
+    document.getElementById('loy-n').value          = data.loyalty_n || 5;
+    document.getElementById('loy-pct').value        = data.loyalty_pct || 10;
+    syncLoyaltyNLabel();
+  } catch { /* non-critical */ }
+}
+
+async function saveLoyalty() {
+  const body = {
+    enabled: document.getElementById('loy-enabled').checked,
+    mode: document.getElementById('loy-mode').value,
+    n: Number(document.getElementById('loy-n').value),
+    pct: Number(document.getElementById('loy-pct').value),
+  };
+  const res = await apiMut('PUT', '/api/dashboard/loyalty', body);
+  const statusEl = document.getElementById('loy-status');
+  if (res.error) { statusEl.textContent = 'Eroare: ' + res.error; return; }
+  statusEl.textContent = 'Salvat ✓';
+  setTimeout(() => { statusEl.textContent = ''; }, 2500);
+}
+
+document.getElementById('loy-mode').addEventListener('change', syncLoyaltyNLabel);
 
 // Toggle active via change event
 document.getElementById('ce-section').addEventListener('change', e => {
@@ -3301,18 +3388,52 @@ function renderFeedbackStats(data) {
   const critWrap = document.getElementById('fb-critical-wrap');
   const critList = document.getElementById('fb-critical-list');
   if ((data.recentCritical || []).length) {
-    critList.innerHTML = data.recentCritical.map(fb => `
-      <div style="background:var(--card);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:12px 14px">
+    critList.innerHTML = data.recentCritical.map(fb => {
+      const canReply  = fb.reachable && !fb.replied_at;
+      const statusTxt = fb.replied_at ? '✓ Ai răspuns' : fb.reachable ? '' : 'Oaspete necontactabil';
+      return `
+      <div style="background:var(--card);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:12px 14px" data-fb-card="${fb.id}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span style="color:#ef4444;font-weight:700">${'★'.repeat(fb.rating)}${'☆'.repeat(5-fb.rating)}</span>
           <span style="font-size:11px;color:var(--muted)">${timeAgo(fb.created_at)}</span>
+          ${statusTxt ? `<span style="font-size:11px;color:${fb.replied_at ? 'var(--em)' : 'var(--muted)'};margin-left:auto">${statusTxt}</span>` : ''}
         </div>
-        <div style="font-size:13px;color:var(--text2)">${esc(fb.comment)}</div>
-      </div>`).join('');
+        <div style="font-size:13px;color:var(--text2);margin-bottom:${canReply ? '8' : '0'}px">${esc(fb.comment)}</div>
+        ${canReply ? `<button class="menu-mini-btn" data-reply-open="${fb.id}">Răspunde</button>` : ''}
+        ${canReply ? `
+        <div class="fb-reply-box" id="fb-reply-box-${fb.id}" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+          <textarea id="fb-reply-msg-${fb.id}" rows="2" placeholder="${fb.guest_email ? 'Scrie un scurt mesaj de scuze…' : 'Fără email — doar oferta de mai jos va ajunge la oaspete.'}"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;padding:8px 10px;font-family:inherit;resize:vertical;margin-bottom:8px" ${fb.guest_email ? '' : 'disabled'}></textarea>
+          ${fb.member_id ? `
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2);margin-bottom:8px">
+            <input type="checkbox" id="fb-reply-offer-${fb.id}"> Acordă -15% la următoarea vizită (membru Club Eats, valabil 30 zile)
+          </label>` : ''}
+          <div style="display:flex;gap:8px">
+            <button class="menu-mini-btn" data-reply-send="${fb.id}" style="background:var(--em);color:#000;border-color:var(--em)">Trimite</button>
+            <button class="menu-mini-btn" data-reply-cancel="${fb.id}">Anulează</button>
+          </div>
+        </div>` : ''}
+      </div>`;
+    }).join('');
     critWrap.style.display = '';
   } else {
     critWrap.style.display = 'none';
   }
+}
+
+async function sendFeedbackReply(fbId) {
+  const msgEl   = document.getElementById(`fb-reply-msg-${fbId}`);
+  const offerEl = document.getElementById(`fb-reply-offer-${fbId}`);
+  const message = msgEl && !msgEl.disabled ? msgEl.value.trim() : '';
+  const wantsOffer = !!offerEl?.checked;
+  if (!message && !wantsOffer) return toast('Scrie un mesaj sau bifează oferta.');
+  const body = {};
+  if (message) body.message = message;
+  if (wantsOffer) { body.grantOfferPct = 15; body.grantOfferDays = 30; }
+  const res = await apiMut('POST', `/api/dashboard/feedback/${fbId}/reply`, body);
+  if (res.error) return toast('Eroare: ' + res.error);
+  toast('Răspuns trimis ✓', 'success');
+  loadFeedback(document.querySelector('[data-fb-period].active')?.dataset.fbPeriod || '7d');
 }
 
 async function loadSettings() {
@@ -3374,6 +3495,13 @@ document.getElementById('feedback-section').addEventListener('click', e => {
     return;
   }
   if (e.target.id === 'google-url-save') { saveGoogleUrl(); return; }
+
+  const openBtn = e.target.closest('[data-reply-open]');
+  if (openBtn) { document.getElementById(`fb-reply-box-${openBtn.dataset.replyOpen}`).style.display = ''; return; }
+  const cancelBtn = e.target.closest('[data-reply-cancel]');
+  if (cancelBtn) { document.getElementById(`fb-reply-box-${cancelBtn.dataset.replyCancel}`).style.display = 'none'; return; }
+  const sendBtn = e.target.closest('[data-reply-send]');
+  if (sendBtn) { sendFeedbackReply(sendBtn.dataset.replySend); return; }
 });
 
 // ── Staff access (Echipă) ───────────────────────────────────────────────────────

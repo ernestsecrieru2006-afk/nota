@@ -247,6 +247,12 @@ async function setup() {
       await client.query(`CREATE INDEX IF NOT EXISTS idx_feedback_restaurant ON feedback(restaurant_id, created_at)`);
     } catch { /* already exist */ }
 
+    // ── Service recovery: optional guest email on low ratings + one-tap owner reply ──────────
+    try {
+      await client.query(`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS guest_email TEXT`);
+      await client.query(`ALTER TABLE feedback ADD COLUMN IF NOT EXISTS replied_at TIMESTAMPTZ`);
+    } catch { /* already exist */ }
+
     // ── Menu: in-QR restaurant menu (choice screen + browsing) ───────────────
     await client.query(`
       CREATE TABLE IF NOT EXISTS menu_categories (
@@ -366,6 +372,59 @@ async function setup() {
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS telegram_bot_token_enc TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS telegram_chat_id TEXT`);
     } catch { /* already exist */ }
+
+    // ── Card-free repeat-visit loyalty (one simple rule per restaurant) ──────────────────────
+    // loyalty_mode: 'every_nth' (every Nth visit gets X% off) | 'visits_30d' (X% off once N
+    // visits have happened in a rolling 30 days, standing until the count drops back below N).
+    // Applied automatically at payment via the same member_id/device_id identity payments
+    // already carry — no cards, no codes, no extra guest steps.
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS loyalty_enabled BOOLEAN NOT NULL DEFAULT false`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS loyalty_mode TEXT NOT NULL DEFAULT 'every_nth'`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS loyalty_n SMALLINT NOT NULL DEFAULT 5`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS loyalty_pct SMALLINT NOT NULL DEFAULT 10`);
+    } catch { /* already exist */ }
+
+    // ── Hot-path index audit (see EXPLAIN findings in the accompanying report) ──────────────
+    try {
+      // tables.token is the single hottest lookup in the product (every QR scan, socket join,
+      // menu load, bill render) — it already gets a unique index for free via the column's
+      // UNIQUE constraint above, but that constraint has gone through try/catch'd ALTERs across
+      // schema versions; if one of those ever silently failed to apply on some environment, this
+      // is the one lookup that must never be left to a sequential scan. Guard explicitly instead
+      // of trusting the constraint history — this is a no-op (not a duplicate index) wherever the
+      // constraint's index already exists.
+      const { rows: tokenIdx } = await client.query(
+        `SELECT 1 FROM pg_indexes WHERE tablename='tables' AND indexdef ILIKE '%(token)%' LIMIT 1`
+      );
+      if (!tokenIdx.length) {
+        await client.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tables_token ON tables(token)`);
+      }
+
+      // getOpenOrder's real query filters orders by (table_id, status) — already covered by
+      // idx_orders_table_status — then does ORDER BY created_at DESC LIMIT 1. Extending the index
+      // to include created_at lets Postgres satisfy the sort from the index itself instead of a
+      // separate Sort step once a table accumulates enough historical (closed) orders to matter.
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_orders_table_status_created ON orders(table_id, status, created_at DESC)`);
+
+      // payments.status='pending' is scanned by the reconciliation sweep every 30 seconds,
+      // forever, against the entire (never-pruned) payments table — confirmed via EXPLAIN to be
+      // a full sequential scan with no backing index at all. A partial index keyed on the status
+      // stays tiny permanently since pending rows are always a sliver of lifetime payment volume.
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_status_pending ON payments(status) WHERE status = 'pending'`);
+
+      // payments.mia_payment_id is looked up on every MIA webhook callback and on socket
+      // reconnect/payment-recovery — confirmed via EXPLAIN to be a full sequential scan with no
+      // backing index. Partial (non-null only) keeps it small since most historical rows never
+      // carry a provider id once settled long enough ago to be irrelevant to lookups.
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_payments_mia_payment_id ON payments(mia_payment_id) WHERE mia_payment_id IS NOT NULL`);
+
+      // referrals.referrer_id had no index at all (only referred_id, via its own UNIQUE) —
+      // every Club Eats member's Profil/referral view counts rows WHERE referrer_id=$1.
+      await client.query(`CREATE INDEX IF NOT EXISTS idx_referrals_referrer ON referrals(referrer_id)`);
+    } catch (err) {
+      console.error('[setup-db] hot-path index audit failed (non-fatal):', err.message);
+    }
 
     await client.query('COMMIT');
     console.log('✅ Database schema ready.');

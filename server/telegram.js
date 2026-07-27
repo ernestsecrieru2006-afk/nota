@@ -10,6 +10,7 @@
 
 import { pool } from './db.js';
 import { decryptSecret } from './secrets.js';
+import { sweepByAge } from './mem-sweep.js';
 
 const TELEGRAM_API = 'https://api.telegram.org/bot';
 
@@ -71,6 +72,19 @@ export function notifyTelegram(restaurantId, text, { dedupeKey } = {}) {
     }
   })();
 }
+
+// Called from server.js's periodic sweep — see mem-sweep.js. dedupeCache only needs to remember
+// entries within DEDUPE_WINDOW_MS; rateWindows resets itself every RATE_LIMIT_WINDOW_MS via
+// shouldSend, so anything past that window is dead weight kept only by restaurants that stopped
+// sending notifications.
+export function sweepTelegramMaps() {
+  const dedupe = sweepByAge(dedupeCache, ts => ts, { maxAgeMs: DEDUPE_WINDOW_MS, maxSize: 5000 });
+  const rate   = sweepByAge(rateWindows, w => w.resetAt - RATE_LIMIT_WINDOW_MS, { maxAgeMs: RATE_LIMIT_WINDOW_MS, maxSize: 2000 });
+  return { dedupe, rate };
+}
+
+// Read-only sizes for the internal metrics endpoint.
+export function telegramMapSizes() { return { dedupe: dedupeCache.size, rate: rateWindows.size }; }
 
 // The one awaited, result-surfacing call site — used by the dashboard's "Trimite mesaj de test".
 export async function sendTelegramTest(restaurantId) {

@@ -20,6 +20,7 @@
 
 import crypto from 'crypto';
 import { pool } from './db.js';
+import { sweepAttemptMap } from './mem-sweep.js';
 
 const BASE_SECRET  = process.env.JWT_SECRET || 'nota-dev-secret-change-in-production';
 const STAFF_SECRET = BASE_SECRET + ':staff'; // distinct from restaurant AND member JWTs
@@ -104,8 +105,17 @@ function recordFailure(key) {
   s.failures++;
   const ms = getLockoutMs(s.failures);
   s.lockedUntil = ms > 0 ? Date.now() + ms : null;
+  s.updatedAt = Date.now();
   staffAttempts.set(key, s);
 }
+
+// Called from server.js's periodic sweep — see mem-sweep.js.
+export function sweepStaffAttempts() {
+  return sweepAttemptMap(staffAttempts);
+}
+
+// Read-only size for the internal metrics endpoint — no entries, no keys, just a count.
+export function staffAttemptsSize() { return staffAttempts.size; }
 
 function clearAttempts(key) { staffAttempts.delete(key); }
 

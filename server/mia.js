@@ -36,6 +36,7 @@
  */
 
 import crypto from 'crypto';
+import { sweepByAge } from './mem-sweep.js';
 
 const PROD_BASE    = 'https://api.maibmerchants.md';
 const SANDBOX_BASE = 'https://sandbox.maibmerchants.md';
@@ -119,6 +120,16 @@ async function getAccessToken(ctx) {
   _tokenCache.set(key, entry);
   return entry.accessToken;
 }
+
+// Called from server.js's periodic sweep — see mem-sweep.js. Naturally small (one entry per
+// restaurant's maib credential set), but expired tokens are still worth clearing promptly rather
+// than holding stale secrets in memory until the next natural refresh touches that same key.
+export function sweepMiaTokenCache() {
+  return sweepByAge(_tokenCache, entry => entry.expiresAt - 30_000, { maxAgeMs: 0, maxSize: 2000 });
+}
+
+// Read-only size for the internal metrics endpoint.
+export function miaTokenCacheSize() { return _tokenCache.size; }
 
 async function authedFetch(ctx, path, { method = 'GET', body } = {}) {
   const token = await getAccessToken(ctx);

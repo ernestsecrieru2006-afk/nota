@@ -30,16 +30,19 @@ import helmet          from 'helmet';
 import rateLimit       from 'express-rate-limit';
 import QRCode           from 'qrcode';
 
-import { pool } from './db.js';
+import { pool, poolStats } from './db.js';
 import { getOpenOrder, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCallback, cancelPayment,
-         refundPayment, simulatePayment, setMockFailNext, MIA_DEFAULT_MODE } from './mia.js';
-import { register, login, me, requireAuth, verifyJWT } from './auth.js';
+         refundPayment, simulatePayment, setMockFailNext, MIA_DEFAULT_MODE,
+         sweepMiaTokenCache, miaTokenCacheSize } from './mia.js';
+import { register, login, me, requireAuth, verifyJWT, sweepLoginAttempts, loginAttemptsSize } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, memberStats, getActiveMemberBonus,
-         requireMemberAuth, verifyMemberJWT } from './members.js';
-import { hashPin, redeemStaffLink, requireStaffAuth, verifyStaffJWT } from './staff.js';
-import { notifyTelegram, sendTelegramTest } from './telegram.js';
+         requireMemberAuth, verifyMemberJWT, sweepMemberAttempts, memberAttemptsSize } from './members.js';
+import { hashPin, redeemStaffLink, requireStaffAuth, verifyStaffJWT, sweepStaffAttempts, staffAttemptsSize } from './staff.js';
+import { notifyTelegram, sendTelegramTest, sweepTelegramMaps, telegramMapSizes } from './telegram.js';
+import { sendReceiptEmail, sendApologyEmail } from './email.js';
 import { encryptSecret, decryptSecret } from './secrets.js';
+import { sweepByAge } from './mem-sweep.js';
 import multer from 'multer';
 import { processAndStore } from './storage.js';
 
@@ -131,6 +134,12 @@ function uploadMenuImage(req, res, next) {
 }
 
 const roundLei = v => Math.round(Number(v) * 100) / 100;
+
+// An order_item is no longer payable through nota. once it's 'paid' (settled via nota.) or
+// 'paid_external' (settled outside nota. — cash/card at the counter, or the POS closed the
+// order). Every "how much is left to pay" computation must treat both the same way, or a mixed-
+// payment table risks being charged twice for the same item.
+const isSettledItemStatus = s => s === 'paid' || s === 'paid_external';
 
 // The dashboard's table grid only ever refreshed on 'payment-made' or 'waiter-called' — both
 // only fire on a *settled* payment, so claims, deselects, and in-flight/failed/expired payments
@@ -647,10 +656,11 @@ app.post('/api/dashboard/payments/:id/refund', requireAuth, async (req, res) => 
 // analytics fields, only each table's own occupancy + unpaid total.
 async function getTablesForRestaurant(restaurantId) {
   const { rows } = await pool.query(`
-    SELECT t.number,
-           COUNT(oi.id) FILTER (WHERE oi.status = 'available') AS available,
-           COUNT(oi.id) FILTER (WHERE oi.status = 'claimed')   AS claimed,
-           COUNT(oi.id) FILTER (WHERE oi.status = 'paid')      AS paid,
+    SELECT t.number, o.id AS order_id,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'available')      AS available,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'claimed')        AS claimed,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'paid')           AS paid,
+           COUNT(oi.id) FILTER (WHERE oi.status = 'paid_external')  AS paid_external,
            COALESCE(SUM(oi.price) FILTER (WHERE oi.status IN ('available','claimed')), 0) AS unpaid_lei,
            EXISTS (SELECT 1 FROM payments p WHERE p.order_id = o.id AND p.status = 'pending') AS payment_pending
     FROM tables t
@@ -667,6 +677,53 @@ app.get('/api/dashboard/tables', requireAuth, async (req, res) => {
     res.json(await getTablesForRestaurant(req.restaurant.restaurantId));
   } catch (err) {
     console.error('[tables]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// ─── Mixed-payment safety: mark part (or all) of a table's open order as settled outside nota. ──
+// Covers the common real-world case a QR-only competitor typically mishandles: a guest pays cash
+// or card at the counter, or the POS just closes the table. Marking items 'paid_external' (rather
+// than deleting them or leaving them 'available') means:
+//   - claim-items / pay-claimed / pay-flat all already whitelist on 'available'/'claimed' only,
+//     so a paid_external item can never be claimed or charged again — no double-charge is
+//     possible by construction, not just by convention.
+//   - remaining guests can still pay for whatever's still actually available, normally.
+//   - the guest app can tell "settled at the counter" apart from "settled through nota." and show
+//     the right message instead of a generic empty bill.
+app.post('/api/dashboard/tables/:number/settle-external', requireAuth, async (req, res) => {
+  const tableNumber = Number(req.params.number);
+  if (!Number.isInteger(tableNumber) || tableNumber <= 0) {
+    return res.status(400).json({ error: 'Masă invalidă' });
+  }
+  const itemIds = Array.isArray(req.body?.itemIds) ? req.body.itemIds.filter(id => Number.isInteger(id) && id > 0) : null;
+  try {
+    const rId = req.restaurant.restaurantId;
+    const { rows: [tbl] } = await pool.query(
+      `SELECT o.id AS order_id FROM tables t JOIN orders o ON o.table_id = t.id
+       WHERE t.restaurant_id=$1 AND t.number=$2 AND o.status='open'
+       ORDER BY o.created_at DESC LIMIT 1`,
+      [rId, tableNumber]
+    );
+    if (!tbl) return res.status(404).json({ error: 'Nicio comandă deschisă la această masă' });
+
+    const params = itemIds?.length ? [tbl.order_id, itemIds] : [tbl.order_id];
+    const itemFilter = itemIds?.length ? 'AND id = ANY($2)' : '';
+    const { rows: settled } = await pool.query(
+      `UPDATE order_items SET status='paid_external', claimed_by=NULL
+       WHERE order_id=$1 AND status IN ('available','claimed') ${itemFilter}
+       RETURNING id`,
+      params
+    );
+    if (!settled.length) return res.status(400).json({ error: 'Nimic de marcat — totul este deja achitat.' });
+
+    const fresh = await getOpenOrder(tableNumber, rId);
+    const activeOffer = await getActiveOffer(rId);
+    io.to(`table-${rId}-${tableNumber}`).emit('order-update', { ...fresh, activeOffer: activeOffer || null });
+    notifyDashboardActivity(rId, tableNumber);
+    res.json({ ok: true, settledCount: settled.length });
+  } catch (err) {
+    console.error('[settle-external]', err);
     res.status(500).json({ error: 'Eroare internă' });
   }
 });
@@ -1468,6 +1525,33 @@ app.put('/api/dashboard/settings', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Card-free repeat-visit loyalty rule (one simple rule per restaurant) ─────────────────────
+app.get('/api/dashboard/loyalty', requireAuth, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query(
+      'SELECT loyalty_enabled, loyalty_mode, loyalty_n, loyalty_pct FROM restaurants WHERE id=$1',
+      [req.restaurant.restaurantId]
+    );
+    res.json(r);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.put('/api/dashboard/loyalty', requireAuth, async (req, res) => {
+  const { enabled, mode, n, pct } = req.body || {};
+  if (!['every_nth', 'visits_30d'].includes(mode)) return res.status(400).json({ error: 'Mod invalid' });
+  const nVal   = Number(n);
+  const pctVal = Number(pct);
+  if (!Number.isInteger(nVal) || nVal < 2 || nVal > 100) return res.status(400).json({ error: 'N trebuie să fie între 2 și 100' });
+  if (!Number.isInteger(pctVal) || pctVal < 1 || pctVal > 50) return res.status(400).json({ error: 'Procentul trebuie să fie între 1 și 50' });
+  try {
+    await pool.query(
+      `UPDATE restaurants SET loyalty_enabled=$1, loyalty_mode=$2, loyalty_n=$3, loyalty_pct=$4 WHERE id=$5`,
+      [!!enabled, mode, nVal, pctVal, req.restaurant.restaurantId]
+    );
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Onboarding wizard ──────────────────────────────────────────────────────
 // Progress lives on the restaurant record itself (onboarding_step / onboarding_complete), so
 // leaving and coming back just re-fetches this — no separate session/draft state to lose.
@@ -1762,11 +1846,43 @@ app.get('/api/admin/restaurants', requireAdminAuth, async (_req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// Internal overload/observability snapshot — how we spot trouble before customers do.
+// Deliberately on requireAdminAuth (dev key only, no restaurant-JWT fallback): this exposes
+// process-wide operational state across every tenant, not anything scoped to one restaurant.
+app.get('/api/internal/metrics', requireAdminAuth, async (_req, res) => {
+  try {
+    const { rows: [pending] } = await pool.query(`SELECT COUNT(*)::int AS count FROM payments WHERE status='pending'`);
+    const rooms = io.sockets.adapter.rooms;
+    const socketIds = new Set(io.sockets.sockets.keys());
+    const namedRooms = [...rooms.keys()].filter(r => !socketIds.has(r)); // exclude per-socket implicit rooms
+    res.json({
+      uptimeSec: Math.round(process.uptime()),
+      build: BUILD,
+      sockets: { connected: io.sockets.sockets.size, rooms: namedRooms.length },
+      pool: poolStats(),
+      pendingPayments: pending.count,
+      maps: {
+        paymentMeta: paymentMeta.size,
+        socketInflight: socketInflight.size,
+        socketThrottle: socketThrottle.size,
+        waiterCallThrottle: waiterCallThrottle.size,
+        activeWaiterCalls: activeWaiterCalls.size,
+        staffSocketsByLinkId: staffSocketsByLinkId.size,
+        loginAttempts: loginAttemptsSize(),
+        memberAttempts: memberAttemptsSize(),
+        staffAttempts: staffAttemptsSize(),
+        telegram: telegramMapSizes(),
+        miaTokenCache: miaTokenCacheSize(),
+      },
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Feedback: submit (public, rate-limited) ──────────────────────────────────
 
 app.post('/api/feedback', limiterAuth, async (req, res) => {
   const { restaurantId, paymentId, rating, comment, deviceId,
-          nudgeShown = false, nudgeTapped = false, memberToken } = req.body;
+          nudgeShown = false, nudgeTapped = false, memberToken, guestEmail } = req.body;
   const rId = parseInt(restaurantId);
   const pId = parseInt(paymentId);
   const r   = parseInt(rating);
@@ -1776,6 +1892,10 @@ app.post('/api/feedback', limiterAuth, async (req, res) => {
   const memberId    = membPayload?.memberId ?? null;
   const dId         = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
   const cmt         = (typeof comment === 'string' && comment.trim()) ? comment.trim().slice(0, 1000) : null;
+  // Only meaningful on a low rating (service recovery) — but harmless to accept generally, so a
+  // guest who typed it in before picking a star doesn't lose it.
+  const gEmail = (typeof guestEmail === 'string' && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(guestEmail.trim()) && guestEmail.length < 200)
+    ? guestEmail.trim() : null;
 
   try {
     // Verify restaurantId exists (also get order_id from payment if provided)
@@ -1794,9 +1914,9 @@ app.post('/api/feedback', limiterAuth, async (req, res) => {
 
     const { rows: [fb] } = await pool.query(
       `INSERT INTO feedback (restaurant_id, order_id, payment_id, rating, comment,
-                             nudge_shown, nudge_tapped, member_id, device_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id, created_at`,
-      [rId, orderId, pId || null, r, cmt, !!nudgeShown, !!nudgeTapped, memberId, dId]
+                             nudge_shown, nudge_tapped, member_id, device_id, guest_email)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id, created_at`,
+      [rId, orderId, pId || null, r, cmt, !!nudgeShown, !!nudgeTapped, memberId, dId, gEmail]
     );
 
     // Push live to dashboard
@@ -1836,6 +1956,50 @@ app.put('/api/feedback/link-payment', requireMemberAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Email receipt — optional, post-payment only, nothing stored ────────────────
+// The email address is used for exactly this one send and is never written to the database —
+// only the payment's own DB-authoritative amount/tip/restaurant/timestamp back the numbers shown;
+// the descriptive item names are supplied by the client (whatever's already rendered on the
+// success screen) since payments don't retain a durable per-payment item list, and this is a
+// courtesy copy, not the fiscal record (the restaurant's own till still issues that).
+app.post('/api/receipts/send', limiterAuth, async (req, res) => {
+  const { paymentId, email, itemLines } = req.body || {};
+  const pId = parseInt(paymentId);
+  if (!pId) return res.status(400).json({ error: 'Plată invalidă' });
+  if (typeof email !== 'string' || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || email.length > 200) {
+    return res.status(400).json({ error: 'Email invalid' });
+  }
+  const lines = Array.isArray(itemLines)
+    ? itemLines.slice(0, 50)
+        .filter(l => l && typeof l.name === 'string' && (typeof l.price === 'string' || typeof l.price === 'number'))
+        .map(l => ({ name: l.name.slice(0, 120), price: String(l.price).slice(0, 20) }))
+    : [];
+  try {
+    const { rows: [pmt] } = await pool.query(
+      `SELECT p.amount_lei, p.tip_lei, p.paid_at, r.name AS restaurant_name
+       FROM payments p JOIN restaurants r ON r.id = p.restaurant_id
+       WHERE p.id=$1 AND p.status='paid'`,
+      [pId]
+    );
+    if (!pmt) return res.status(404).json({ error: 'Plată negăsită' });
+
+    const totalLei = roundLei(Number(pmt.amount_lei) + Number(pmt.tip_lei));
+    const result = await sendReceiptEmail({
+      to: email,
+      restaurantName: pmt.restaurant_name,
+      itemLines: lines,
+      tipLei: roundLei(pmt.tip_lei),
+      totalLei,
+      paidAt: pmt.paid_at,
+    });
+    if (!result.ok) return res.status(502).json({ error: result.error });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[receipts/send]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
 // ─── Feedback: dashboard stats ────────────────────────────────────────────────
 
 app.get('/api/dashboard/feedback', requireAuth, async (req, res) => {
@@ -1861,7 +2025,8 @@ app.get('/api/dashboard/feedback', requireAuth, async (req, res) => {
         GROUP BY rating ORDER BY rating DESC
       `, [rId]),
       pool.query(`
-        SELECT rating, comment, created_at
+        SELECT id, rating, comment, created_at, guest_email, member_id, replied_at,
+               (guest_email IS NOT NULL OR member_id IS NOT NULL) AS reachable
         FROM feedback
         WHERE restaurant_id = $1 AND rating <= 3 AND comment IS NOT NULL
           AND created_at >= ${since}
@@ -1877,6 +2042,56 @@ app.get('/api/dashboard/feedback', requireAuth, async (req, res) => {
     ]);
     res.json({ period: req.query.period || '7d', totals, distribution: dist, recentCritical: recent, nudge });
   } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// ─── Service recovery: one-tap owner reply to a low-rating comment ───────────────
+// Deliberately no inbox/thread — a single reply per feedback row, sent one of two ways
+// depending on what the guest gave us: an apology email (if they left one), and/or a stored
+// Club Eats offer redeemable on their next visit (if they're a member) — reusing the exact same
+// members.bonus_pct/bonus_expires mechanism referrals already use, so it applies automatically
+// at their next payment through the existing discount choke point with zero new payment code.
+app.post('/api/dashboard/feedback/:id/reply', requireAuth, async (req, res) => {
+  const fbId = parseInt(req.params.id);
+  const { message, grantOfferPct, grantOfferDays } = req.body || {};
+  if (!fbId) return res.status(400).json({ error: 'Feedback invalid' });
+  const msg = (typeof message === 'string' && message.trim()) ? message.trim().slice(0, 1000) : null;
+  const pct  = Number(grantOfferPct);
+  const days = Number(grantOfferDays);
+  const wantsOffer = Number.isInteger(pct) && pct > 0 && pct <= 50;
+  if (!msg && !wantsOffer) return res.status(400).json({ error: 'Nimic de trimis — scrie un mesaj sau acordă o ofertă.' });
+
+  try {
+    const { rows: [fb] } = await pool.query(
+      `SELECT f.id, f.guest_email, f.member_id, f.replied_at, r.name AS restaurant_name
+       FROM feedback f JOIN restaurants r ON r.id = f.restaurant_id
+       WHERE f.id=$1 AND f.restaurant_id=$2`,
+      [fbId, req.restaurant.restaurantId]
+    );
+    if (!fb) return res.status(404).json({ error: 'Feedback negăsit' });
+
+    let emailed = false, offerGranted = false;
+    if (msg && fb.guest_email) {
+      const result = await sendApologyEmail({ to: fb.guest_email, restaurantName: fb.restaurant_name, message: msg });
+      emailed = result.ok;
+    }
+    if (wantsOffer && fb.member_id) {
+      const d = Number.isInteger(days) && days > 0 && days <= 365 ? days : 30;
+      await pool.query(
+        `UPDATE members SET bonus_pct=$1, bonus_expires=NOW() + ($2 || ' days')::interval WHERE id=$3`,
+        [pct, d, fb.member_id]
+      );
+      offerGranted = true;
+    }
+    if (!emailed && !offerGranted) {
+      return res.status(400).json({ error: 'Oaspetele nu poate fi contactat (fără email sau cont Club Eats).' });
+    }
+
+    await pool.query(`UPDATE feedback SET replied_at=NOW() WHERE id=$1`, [fbId]);
+    res.json({ ok: true, emailed, offerGranted });
+  } catch (err) {
+    console.error('[feedback reply]', err);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
 });
 
 // ─── /oferte public discovery page ───────────────────────────────────────────
@@ -2076,6 +2291,12 @@ app.post('/api/dev/seed-payments', requireDevAuth, async (req, res) => {
 app.post('/api/dev/mock-fail-next', requireDevAuth, (req, res) => {
   setMockFailNext();
   res.json({ ok: true, message: 'Next mock payment will be declined' });
+});
+
+// Manually trigger the periodic in-memory-Map sweep (normally every 5 minutes) — for testing
+// eviction behavior on demand and for ops to force a sweep without waiting out the interval.
+app.post('/api/dev/sweep', requireDevAuth, (req, res) => {
+  res.json(sweepServerMaps());
 });
 
 // Sandbox-only: trigger maib's test-pay endpoint to complete a live sandbox QR, so the full
@@ -2369,6 +2590,93 @@ function checkThrottle(socket) {
   return false;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// Periodic sweep — evicts stale/expired entries from every unbounded in-memory Map in the
+// process (this file's own six, plus one exported from each of auth.js/members.js/staff.js/
+// telegram.js/mia.js). None of these Maps are a source of truth — Postgres always is, and
+// payments in particular fall back to a full DB-based reconciliation path (releaseFromDB /
+// settleFromDB) whenever paymentMeta doesn't have an entry — so evicting a stale entry here can
+// never desync state, only force the next read down its already-existing DB-backed slow path.
+// Runs every 5 minutes; sizes are logged each run so unbounded growth would show up in the logs
+// long before it became a real memory problem.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const SWEEP_INTERVAL_MS = 5 * 60_000;
+
+// paymentMeta: reconciliation already resolves anything DB-pending past 3 minutes (see
+// reconcilePendingPayments below) — 10 minutes gives that a wide safety margin, so anything
+// still here past that point is a genuine leak, not a payment mid-flight.
+const PAYMENT_META_MAX_AGE_MS = 10 * 60_000;
+// waiterCallThrottle only matters for its 60s cooldown window; stale far sooner than this.
+const WAITER_THROTTLE_MAX_AGE_MS = 60 * 60_000;
+// activeWaiterCalls: an unacknowledged call older than this almost certainly means the shift
+// ended without anyone tapping "Preiau" — auto-acknowledge so the map (and any stale dashboard/
+// staff badge) doesn't persist forever.
+const ACTIVE_CALL_MAX_AGE_MS = 4 * 60 * 60_000;
+// socketThrottle already cleans up on disconnect; this is only a backstop for a missed event.
+const SOCKET_THROTTLE_MAX_AGE_MS = 60 * 60_000;
+
+function sweepServerMaps() {
+  const now = Date.now();
+
+  const paymentMetaResult = sweepByAge(paymentMeta, m => m.createdAt, { maxAgeMs: PAYMENT_META_MAX_AGE_MS, maxSize: 10_000, now });
+  if (paymentMetaResult.evicted) console.warn(`[sweep] evicted ${paymentMetaResult.evicted} stale paymentMeta entries (reconciliation should have handled these already)`);
+
+  // socketInflight entries are only ever useful while their paymentMeta sibling still exists —
+  // once that's gone (settled, released, or just evicted above), a leftover pointer here is dead
+  // weight that cleanupMeta should have cleared but, for whatever reason, didn't.
+  let orphanedInflight = 0;
+  for (const [socketId, miaId] of socketInflight) {
+    if (!paymentMeta.has(miaId)) { socketInflight.delete(socketId); orphanedInflight++; }
+  }
+
+  const socketThrottleResult = sweepByAge(socketThrottle, s => s.resetAt - 10_000, { maxAgeMs: SOCKET_THROTTLE_MAX_AGE_MS, maxSize: 20_000, now });
+  const waiterThrottleResult = sweepByAge(waiterCallThrottle, ts => ts, { maxAgeMs: WAITER_THROTTLE_MAX_AGE_MS, maxSize: 5_000, now });
+
+  // Unacknowledged waiter calls past the cutoff: reuse ackWaiterCall so listeners (dashboard,
+  // staff view) get the same "cleared" event a real tap would produce, not a silent disappearance.
+  let expiredCalls = 0;
+  for (const [key, calledAt] of activeWaiterCalls) {
+    if (now - calledAt > ACTIVE_CALL_MAX_AGE_MS) {
+      const sep = key.lastIndexOf('-');
+      const restaurantId = Number(key.slice(0, sep));
+      const tableNumber  = Number(key.slice(sep + 1));
+      ackWaiterCall(restaurantId, tableNumber);
+      expiredCalls++;
+    }
+  }
+
+  // staffSocketsByLinkId already self-cleans via untrackStaffSocket on disconnect; backstop for
+  // any socket whose disconnect event was somehow missed, plus empty-set cleanup.
+  let deadStaffSockets = 0;
+  for (const [linkId, sockets] of staffSocketsByLinkId) {
+    for (const s of sockets) {
+      if (!s.connected) { sockets.delete(s); deadStaffSockets++; }
+    }
+    if (!sockets.size) staffSocketsByLinkId.delete(linkId);
+  }
+
+  const loginResult    = sweepLoginAttempts();
+  const memberResult   = sweepMemberAttempts();
+  const staffResult    = sweepStaffAttempts();
+  const telegramResult = sweepTelegramMaps();
+  const miaResult      = sweepMiaTokenCache();
+
+  const summary = {
+    paymentMeta:        paymentMetaResult,
+    socketInflight:     { orphansEvicted: orphanedInflight, size: socketInflight.size },
+    socketThrottle:     socketThrottleResult,
+    waiterCallThrottle: waiterThrottleResult,
+    activeWaiterCalls:  { expired: expiredCalls, size: activeWaiterCalls.size },
+    staffSockets:       { deadRemoved: deadStaffSockets, linkIds: staffSocketsByLinkId.size },
+    loginAttempts: loginResult, memberAttempts: memberResult, staffAttempts: staffResult,
+    telegram: telegramResult, miaTokenCache: miaResult,
+  };
+  console.log('[sweep]', JSON.stringify(summary));
+  return summary;
+}
+setInterval(sweepServerMaps, SWEEP_INTERVAL_MS);
+
 // ─── Socket.io ────────────────────────────────────────────────────────────────
 
 io.on('connection', socket => {
@@ -2578,16 +2886,17 @@ io.on('connection', socket => {
     const dId = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
     try {
       const tbl   = currentTable;
-      const [order, offer, memberBonus] = await Promise.all([
+      const [order, offer, memberBonus, loyaltyPct] = await Promise.all([
         getOpenOrder(tbl, currentRestaurantId),
         getActiveOffer(currentRestaurantId, { memberId: currentMemberId }),
         getActiveMemberBonus(currentMemberId),
+        getLoyaltyDiscountPct(currentRestaurantId, { memberId: currentMemberId, deviceId: dId }),
       ]);
       const mine  = order.items.filter(it => it.claimed_by === socket.id && it.status === 'claimed');
       if (!mine.length) return ack?.({ error: 'No claimed items' });
 
       const gross       = mine.reduce((s, it) => s + Number(it.price), 0);
-      const effectivePct = Math.min((offer?.discount_pct || 0) + (memberBonus?.bonus_pct || 0), 50);
+      const effectivePct = Math.min((offer?.discount_pct || 0) + (memberBonus?.bonus_pct || 0) + loyaltyPct, 50);
       const discountLei  = effectivePct > 0 ? roundLei(gross * effectivePct / 100) : 0;
       const netAmount    = roundLei(gross - discountLei);
       const dbPmtId      = await createPendingPayment({
@@ -2626,6 +2935,7 @@ io.on('connection', socket => {
         bonusApplied: !!(memberBonus && memberBonus.bonus_pct > 0),
         bonusPct: memberBonus?.bonus_pct || 0,
         bonusExpires: memberBonus?.bonus_expires || null,
+        createdAt: Date.now(),
       };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
@@ -2662,15 +2972,16 @@ io.on('connection', socket => {
     const dId = (typeof deviceId === 'string' && deviceId.length < 128) ? deviceId : null;
     try {
       const tbl   = currentTable;
-      const [order, offer, memberBonus] = await Promise.all([
+      const [order, offer, memberBonus, loyaltyPct] = await Promise.all([
         getOpenOrder(tbl, currentRestaurantId),
         getActiveOffer(currentRestaurantId, { memberId: currentMemberId }),
         getActiveMemberBonus(currentMemberId),
+        getLoyaltyDiscountPct(currentRestaurantId, { memberId: currentMemberId, deviceId: dId }),
       ]);
       if (!order.id) return ack?.({ error: 'Nicio comandă deschisă' });
 
       const remaining = order.items
-        .filter(it => it.status !== 'paid')
+        .filter(it => !isSettledItemStatus(it.status))
         .reduce((s, it) => s + Number(it.price), 0);
 
       // Server is authoritative: 'rest' uses full remaining; 'equal' caps at remaining
@@ -2682,7 +2993,7 @@ io.on('connection', socket => {
       }
       if (grossAmount <= 0) return ack?.({ error: 'Nimic de plătit' });
 
-      const effectivePct = Math.min((offer?.discount_pct || 0) + (memberBonus?.bonus_pct || 0), 50);
+      const effectivePct = Math.min((offer?.discount_pct || 0) + (memberBonus?.bonus_pct || 0) + loyaltyPct, 50);
       const discountLei  = effectivePct > 0 ? roundLei(grossAmount * effectivePct / 100) : 0;
       const netAmount    = roundLei(grossAmount - discountLei);
 
@@ -2712,6 +3023,7 @@ io.on('connection', socket => {
         bonusApplied: !!(memberBonus && memberBonus.bonus_pct > 0),
         bonusPct: memberBonus?.bonus_pct || 0,
         bonusExpires: memberBonus?.bonus_expires || null,
+        createdAt: Date.now(),
       };
       paymentMeta.set(payment.paymentId, meta);
       socketInflight.set(socket.id, payment.paymentId);
@@ -2796,6 +3108,43 @@ async function getActiveOffer(restaurantId, { memberId = null, atTime = new Date
     ORDER BY discount_pct DESC LIMIT 1
   `, [restaurantId, dow, t, !!memberId]);
   return rows[0] || null;
+}
+
+// Card-free repeat-visit loyalty: one simple rule per restaurant, applied automatically at
+// payment via the same member_id/device_id identity payments already carry. "Visit" = a distinct
+// order this identity has a paid payment against (splitting a bill across several payments at
+// the same table is still one visit, not several).
+async function getLoyaltyDiscountPct(restaurantId, { memberId = null, deviceId = null } = {}) {
+  if (!restaurantId || (!memberId && !deviceId)) return 0;
+  try {
+    const { rows: [rule] } = await pool.query(
+      `SELECT loyalty_enabled, loyalty_mode, loyalty_n, loyalty_pct FROM restaurants WHERE id=$1`,
+      [restaurantId]
+    );
+    if (!rule?.loyalty_enabled || !rule.loyalty_n || !rule.loyalty_pct) return 0;
+
+    const identityFilter = memberId ? 'member_id = $2' : 'device_id = $2';
+    const identityValue   = memberId ?? deviceId;
+    const { rows: [counts] } = await pool.query(
+      `SELECT
+         COUNT(DISTINCT order_id)::int AS visits_alltime,
+         COUNT(DISTINCT order_id) FILTER (WHERE paid_at >= NOW() - INTERVAL '30 days')::int AS visits_30d
+       FROM payments
+       WHERE restaurant_id = $1 AND status = 'paid' AND ${identityFilter}`,
+      [restaurantId, identityValue]
+    );
+
+    if (rule.loyalty_mode === 'visits_30d') {
+      return counts.visits_30d >= rule.loyalty_n ? rule.loyalty_pct : 0;
+    }
+    // 'every_nth' (default): the count doesn't include the payment in flight right now, so the
+    // visit this payment belongs to is visits_alltime + 1.
+    const currentVisitNumber = counts.visits_alltime + 1;
+    return (currentVisitNumber % rule.loyalty_n === 0) ? rule.loyalty_pct : 0;
+  } catch (err) {
+    console.error('[loyalty]', err.message);
+    return 0; // never let a loyalty-computation error block a payment
+  }
 }
 
 async function createPendingPayment({ orderId, amountLei, tipLei, socketId, mode,
@@ -3242,8 +3591,21 @@ app.use((err, req, res, _next) => {
   res.status(500).json({ error: 'Eroare internă' });
 });
 
-process.on('uncaughtException',  err  => console.error('[uncaughtException]',  err));
-process.on('unhandledRejection', err  => console.error('[unhandledRejection]', err));
+// Node's own guidance: it is not safe to resume normal operation after uncaughtException — the
+// process may be left with a broken event loop, a listener mid-registration, a lock never
+// released, etc. Logging and continuing (the previous behavior here) risks quietly serving a
+// half-working process indefinitely. Every actual request/socket handler in this file already
+// wraps its own logic in try/catch and turns failures into a normal error response — so anything
+// that reaches these top-level handlers is, by definition, something that slipped past all of
+// that, i.e. already anomalous. Exit deliberately so Railway (or any process manager) restarts
+// us clean, rather than trying to guess which errors are "safe" to ignore.
+function fatalShutdown(kind, err) {
+  console.error(`[${kind}] FATAL — exiting for a clean restart`, err);
+  // Give the log line a moment to flush to stdout before the process dies.
+  setTimeout(() => process.exit(1), 200);
+}
+process.on('uncaughtException',  err => fatalShutdown('uncaughtException', err));
+process.on('unhandledRejection', err => fatalShutdown('unhandledRejection', err));
 
 // ─── startup helpers ──────────────────────────────────────────────────────────
 

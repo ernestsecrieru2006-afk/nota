@@ -15,6 +15,7 @@
 
 import crypto from 'crypto';
 import { pool } from './db.js';
+import { sweepAttemptMap } from './mem-sweep.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'nota-dev-secret-change-in-production';
 if (!process.env.JWT_SECRET) {
@@ -116,12 +117,21 @@ function recordFailure(key) {
   s.failures++;
   const ms = getLockoutMs(s.failures);
   s.lockedUntil = ms > 0 ? Date.now() + ms : null;
+  s.updatedAt = Date.now();
   loginAttempts.set(key, s);
 }
 
 function clearAttempts(key) {
   loginAttempts.delete(key);
 }
+
+// Called from server.js's periodic sweep — see mem-sweep.js.
+export function sweepLoginAttempts() {
+  return sweepAttemptMap(loginAttempts);
+}
+
+// Read-only size for the internal metrics endpoint — no entries, no keys, just a count.
+export function loginAttemptsSize() { return loginAttempts.size; }
 
 // ─── route handlers ───────────────────────────────────────────────────────────
 

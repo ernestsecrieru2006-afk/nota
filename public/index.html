@@ -258,6 +258,15 @@
     .pow-brand { font-family: 'Playfair Display', serif; font-weight: 700; color: var(--primary); }
     .pow-brand span { color: var(--brass); }
 
+    .rcpt-email-row { display: flex; gap: 8px; padding: 10px 16px 0; }
+    .rcpt-email-inp { flex: 1; min-width: 0; border: 1px solid var(--outline-variant); border-radius: 8px;
+      padding: 9px 12px; font-size: 13px; font-family: inherit; color: var(--on-surface); outline: none; }
+    .rcpt-email-inp:focus { border-color: var(--brass); }
+    .rcpt-email-btn { background: var(--primary); color: #fff; border: none; border-radius: 8px;
+      padding: 9px 14px; font-size: 12.5px; font-weight: 700; font-family: inherit; cursor: pointer; white-space: nowrap; }
+    .rcpt-email-btn:disabled { opacity: .6; }
+    .rcpt-email-msg { text-align: center; font-size: 11.5px; color: var(--on-sv); padding: 6px 16px 0; min-height: 14px; }
+
     /* ══ ERROR / FAIL SCREENS ══════════════════════════ */
     .center-screen { text-align: center; padding: 60px 20px; }
     .cs-icon { margin-bottom: 16px; color: var(--outline); }
@@ -372,7 +381,7 @@
       <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
     </div>
 
-    <div class="settled-banner" id="settled" data-i18n="settled_banner">✓ Nota a fost achitată integral!</div>
+    <div class="settled-banner" id="settled">✓ Nota a fost achitată integral!</div>
 
     <div class="mode-pill">
       <button class="m-tab active" id="tab-mine"  data-i18n="tab_mine">Pozițiile mele</button>
@@ -603,6 +612,13 @@
         <span data-i18n="powered_by">plată securizată</span>
       </div>
 
+      <!-- ── Optional email receipt — post-payment only, fully skippable ── -->
+      <div class="rcpt-email-row" id="rcpt-email-row">
+        <input type="email" class="rcpt-email-inp" id="rcpt-email-inp" data-i18n-ph="rcpt_email_ph" placeholder="Email (opțional)" autocomplete="email">
+        <button class="rcpt-email-btn" id="rcpt-email-btn" data-i18n="rcpt_email_btn">Trimite bonul</button>
+      </div>
+      <div class="rcpt-email-msg" id="rcpt-email-msg"></div>
+
       <!-- ── Post-payment feedback widget ── -->
       <div class="fb-card" id="fb-card" style="display:none">
         <div id="fb-rating-phase">
@@ -620,6 +636,7 @@
         <div id="fb-critical-phase" class="fb-followup" style="display:none">
           <div class="fb-question" id="fb-sorry-title">Ne pare rău să auzim asta.</div>
           <textarea class="fb-textarea" id="fb-comment" rows="3" placeholder="Spune-ne ce putem îmbunătăți…"></textarea>
+          <input type="email" class="fb-inp" id="fb-critical-email" data-i18n-ph="fb_critical_email_ph" placeholder="Email (opțional — ca să-ți răspundem)" autocomplete="email">
           <button class="fb-submit-btn" id="fb-submit-critical">Trimite feedback</button>
           <button class="fb-skip" id="fb-skip-critical">Omit</button>
         </div>
@@ -669,6 +686,7 @@
       prog_paid: 'Masa a achitat: ',
       prog_of: ' din ',
       settled_banner: '✓ Nota a fost achitată integral!',
+      settled_external_banner: '✓ Nota a fost achitată la casă.',
       tab_mine: 'Pozițiile mele',
       tab_equal: 'Împărțim egal',
       tab_rest: 'Plătesc restul',
@@ -679,6 +697,7 @@
       empty_order: 'Nu sunt preparate la această masă.',
       item_reserved: 'rezervat de altcineva',
       item_paid: 'achitat',
+      item_paid_external: 'achitat la casă',
       tot_mine: 'Total selectat',
       tot_equal: 'Estimat per persoană',
       service_vat: 'Serviciu și TVA incluse',
@@ -723,6 +742,12 @@
       rcpt_tva_prefix: 'incl. TVA 20% —',
       iiko_tag: 'BON FISCAL ELECTRONIC emis prin iiko',
       powered_by: 'plată securizată',
+      rcpt_email_ph: 'Email (opțional)',
+      rcpt_email_btn: 'Trimite bonul',
+      rcpt_email_missing: 'Introdu adresa de email.',
+      rcpt_email_sending: 'Se trimite…',
+      rcpt_email_sent: '✓ Bonul a fost trimis!',
+      rcpt_email_err: 'Trimiterea a eșuat — încearcă din nou.',
       waiter_btn_title: 'Cheamă ospătarul',
       back_to_menu: 'Meniu',
       waiter_confirmed: 'Ospătarul a fost anunțat ✓',
@@ -740,6 +765,7 @@
       fb_google: 'Lasă o recenzie pe Google',
       fb_later: 'Mai târziu',
       fb_thanks: 'Mulțumim pentru feedback! ✓',
+      fb_critical_email_ph: 'Email (opțional — ca să-ți răspundem)',
       fb_club_title: 'Vrei reduceri la următoarea vizită?',
       fb_club_btn: 'Alătură-te Club Eats gratuit',
       fb_club_member_ok: '✨ Ești deja membru Club Eats',
@@ -751,6 +777,7 @@
       prog_paid: 'Стол оплатил: ',
       prog_of: ' из ',
       settled_banner: '✓ Счёт полностью оплачен!',
+      settled_external_banner: '✓ Счёт оплачен на кассе.',
       tab_mine: 'Мои позиции',
       tab_equal: 'Делим поровну',
       tab_rest: 'Оплачу остаток',
@@ -761,6 +788,7 @@
       empty_order: 'На этом столе нет позиций.',
       item_reserved: 'занято другим',
       item_paid: 'оплачено',
+      item_paid_external: 'оплачено на кассе',
       tot_mine: 'Выбранная сумма',
       tot_equal: 'Примерно на человека',
       service_vat: 'Сервисный сбор и НДС включены',
@@ -805,6 +833,12 @@
       rcpt_tva_prefix: 'вкл. НДС 20% —',
       iiko_tag: 'ЭЛЕКТРОННЫЙ ФИСКАЛЬНЫЙ ЧЕК выдан через iiko',
       powered_by: 'безопасный платёж',
+      rcpt_email_ph: 'Email (необязательно)',
+      rcpt_email_btn: 'Отправить чек',
+      rcpt_email_missing: 'Введите адрес email.',
+      rcpt_email_sending: 'Отправка…',
+      rcpt_email_sent: '✓ Чек отправлен!',
+      rcpt_email_err: 'Не удалось отправить — попробуйте снова.',
       waiter_btn_title: 'Вызвать официанта',
       back_to_menu: 'Меню',
       waiter_confirmed: 'Официант уведомлён ✓',
@@ -822,6 +856,7 @@
       fb_google: 'Оставить отзыв на Google',
       fb_later: 'Позже',
       fb_thanks: 'Спасибо за отзыв! ✓',
+      fb_critical_email_ph: 'Email (необязательно — чтобы мы ответили)',
       fb_club_title: 'Хотите скидку при следующем визите?',
       fb_club_btn: 'Присоединиться к Club Eats бесплатно',
       fb_club_member_ok: '✨ Вы уже участник Club Eats',
@@ -902,6 +937,14 @@
       .catch(() => {});
   }
 
+  let lastReceiptPaymentId = null;
+  let lastReceiptItemsData = [];
+
+  // An item is no longer payable once it's 'paid' (settled through nota.) or 'paid_external'
+  // (settled at the counter / by the POS closing the order) — every place that decides what's
+  // still selectable or still owed must treat both the same way.
+  const isSettledStatus = s => s === 'paid' || s === 'paid_external';
+
   // ── App state ─────────────────────────────────────────────────────────────────
   let order            = null;
   let resolvedTable    = null;
@@ -944,7 +987,7 @@
     }
     if (splitMode === 'mine' && order?.items) {
       for (const it of order.items) {
-        if (mySelected.has(it.id) && (it.status === 'paid' || (it.status === 'claimed' && it.claimed_by !== socket.id))) {
+        if (mySelected.has(it.id) && (isSettledStatus(it.status) || (it.status === 'claimed' && it.claimed_by !== socket.id))) {
           mySelected.delete(it.id);
         }
       }
@@ -985,7 +1028,7 @@
     if (splitMode === 'mine') {
       for (const p of patches) {
         if (mySelected.has(p.id) &&
-            (p.status === 'paid' || (p.status === 'claimed' && p.claimed_by !== socket.id))) {
+            (isSettledStatus(p.status) || (p.status === 'claimed' && p.claimed_by !== socket.id))) {
           mySelected.delete(p.id);
         }
       }
@@ -1003,16 +1046,19 @@
     const now = new Date().toLocaleDateString('ro-MD', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
 
     let itemLines = '';
+    let receiptItemsData = [];
     if (paidMode === 'claimed' && itemIds.length > 0) {
       const items = itemIds.map(id => order?.items?.find(i => i.id === id)).filter(Boolean);
       itemLines = items.map(it =>
         `<div class="rcpt-line"><span>${esc(it.name)}</span><span>${fmt0(it.price)} MDL</span></div>`
       ).join('');
+      receiptItemsData = items.map(it => ({ name: it.name, price: `${fmt0(it.price)} MDL` }));
     } else {
       const items = (order?.items || []).filter(it => it.status === 'paid');
       itemLines = items.map(it =>
         `<div class="rcpt-line"><span>${esc(it.name)}</span><span>${fmt0(it.price)} MDL</span></div>`
       ).join('');
+      receiptItemsData = items.map(it => ({ name: it.name, price: `${fmt0(it.price)} MDL` }));
       if (splitMode === 'equal') {
         itemLines += `<div class="rcpt-line" style="color:var(--on-sv);font-style:italic"><span>${t('rcpt_contribution')} (1/${guestCount})</span></div>`;
       }
@@ -1020,6 +1066,10 @@
     if (Number(tipLei) > 0) {
       itemLines += `<div class="rcpt-line"><span>${t('rcpt_tip')} (${tipPercent}%)</span><span>${fmtMDL(tipLei)}</span></div>`;
     }
+    lastReceiptPaymentId = dbPaymentId;
+    lastReceiptItemsData = receiptItemsData;
+    document.getElementById('rcpt-email-msg').textContent = '';
+    document.getElementById('rcpt-email-inp').value = '';
 
     const tableWord = t('table_word');
     document.getElementById('suc-amt').textContent = fmtMDL(total);
@@ -1170,7 +1220,7 @@
   function toggleItem(id) {
     if (splitMode !== 'mine') return;
     const it = order?.items?.find(i => i.id === id);
-    if (!it || it.status === 'paid') return;
+    if (!it || isSettledStatus(it.status)) return;
     if (it.status === 'claimed' && it.claimed_by !== socket.id) return;
 
     if (mySelected.has(id)) {
@@ -1212,27 +1262,31 @@
       return;
     }
 
-    const allPaid    = items.every(it => it.status === 'paid');
+    const allSettled = items.every(it => isSettledStatus(it.status));
+    const allExternalOnly = allSettled && items.every(it => it.status !== 'paid');
     emptyEl.style.display = 'none';
-    settled.style.display = allPaid ? 'block' : 'none';
+    settled.style.display = allSettled ? 'block' : 'none';
+    settled.textContent = allExternalOnly ? t('settled_external_banner') : t('settled_banner');
     const isReadonly = splitMode !== 'mine';
 
     list.innerHTML = items.map(it => {
-      const isPaid  = it.status === 'paid';
-      const isMine  = !isReadonly && mySelected.has(it.id) && !isPaid;
+      const isSettled  = isSettledStatus(it.status);
+      const isExternal = it.status === 'paid_external';
+      const isMine  = !isReadonly && mySelected.has(it.id) && !isSettled;
       const isOther = !isMine && it.status === 'claimed' && it.claimed_by !== socket.id;
 
       let cls = 'item-card';
-      if (isPaid)        cls += ' paid';
+      if (isSettled)     cls += ' paid';
       else if (isMine)   cls += ' sel';
       else if (isOther)  cls += ' rsv';
       else if (isReadonly) cls += ' readonly';
 
-      const nCls  = isPaid ? 'item-name g' : 'item-name';
-      const pCls  = isPaid ? 'item-price g' : 'item-price';
-      const chk   = (isMine || isPaid) ? '&#10003;' : '';
+      const nCls  = isSettled ? 'item-name g' : 'item-name';
+      const pCls  = isSettled ? 'item-price g' : 'item-price';
+      const chk   = (isMine || isSettled) ? '&#10003;' : '';
       const meta  = isOther ? `<div class="item-meta">${t('item_reserved')}</div>`
-                  : isPaid  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
+                  : isExternal ? `<div class="item-meta" style="color:var(--green)">${t('item_paid_external')}</div>`
+                  : isSettled  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
       return `<div class="${cls}" data-item-id="${it.id}">
         <div class="item-info"><div class="${nCls}">${esc(it.name)}</div>${meta}</div>
         <div class="${pCls}">${fmt0(it.price)} MDL</div>
@@ -1256,18 +1310,20 @@
       const el = list.querySelector(`[data-item-id="${id}"]`);
       if (!it || !el) continue;
 
-      const isPaid  = it.status === 'paid';
-      const isMine  = !isReadonly && mySelected.has(it.id) && !isPaid;
+      const isSettled  = isSettledStatus(it.status);
+      const isExternal = it.status === 'paid_external';
+      const isMine  = !isReadonly && mySelected.has(it.id) && !isSettled;
       const isOther = !isMine && it.status === 'claimed' && it.claimed_by !== socket.id;
 
       el.className = 'item-card' +
-        (isPaid ? ' paid' : isMine ? ' sel' : isOther ? ' rsv' : isReadonly ? ' readonly' : '');
+        (isSettled ? ' paid' : isMine ? ' sel' : isOther ? ' rsv' : isReadonly ? ' readonly' : '');
 
-      const nCls = isPaid ? 'item-name g' : 'item-name';
-      const pCls = isPaid ? 'item-price g' : 'item-price';
-      const chk  = (isMine || isPaid) ? '&#10003;' : '';
+      const nCls = isSettled ? 'item-name g' : 'item-name';
+      const pCls = isSettled ? 'item-price g' : 'item-price';
+      const chk  = (isMine || isSettled) ? '&#10003;' : '';
       const meta = isOther ? `<div class="item-meta">${t('item_reserved')}</div>`
-                 : isPaid  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
+                 : isExternal ? `<div class="item-meta" style="color:var(--green)">${t('item_paid_external')}</div>`
+                 : isSettled  ? `<div class="item-meta" style="color:var(--green)">${t('item_paid')}</div>` : '';
 
       const infoEl  = el.querySelector('.item-info');
       const priceEl = el.querySelector('.item-price');
@@ -1277,18 +1333,21 @@
       if (cbEl)    cbEl.innerHTML = chk;
     }
 
-    const allPaid = items.every(i => i.status === 'paid');
-    document.getElementById('settled').style.display = allPaid ? 'block' : 'none';
+    const allSettled = items.every(i => isSettledStatus(i.status));
+    const allExternalOnly = allSettled && items.every(i => i.status !== 'paid');
+    const settledEl = document.getElementById('settled');
+    settledEl.style.display = allSettled ? 'block' : 'none';
+    settledEl.textContent = allExternalOnly ? t('settled_external_banner') : t('settled_banner');
     updateProgress();
   }
 
   // ── Progress & share ──────────────────────────────────────────────────────────
   function calcShare() {
     const items     = order?.items || [];
-    const remaining = items.filter(it => it.status !== 'paid');
+    const remaining = items.filter(it => !isSettledStatus(it.status));
     if (splitMode === 'mine') {
       return items
-        .filter(it => mySelected.has(it.id) && it.status !== 'paid')
+        .filter(it => mySelected.has(it.id) && !isSettledStatus(it.status))
         .reduce((s, it) => s + +it.price, 0);
     }
     if (splitMode === 'rest') return remaining.reduce((s, it) => s + +it.price, 0);
@@ -1299,7 +1358,7 @@
   function updateProgress() {
     const items = order?.items || [];
     const total = items.reduce((s, it) => s + +it.price, 0);
-    const paid  = items.filter(it => it.status === 'paid').reduce((s, it) => s + +it.price, 0);
+    const paid  = items.filter(it => isSettledStatus(it.status)).reduce((s, it) => s + +it.price, 0);
     const pct   = total > 0 ? (paid / total * 100) : 0;
 
     document.getElementById('prog-text').textContent =
@@ -1402,6 +1461,30 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
+  // ── Email receipt (optional, skippable, post-payment only) ───────────────────
+  async function sendReceiptEmailNow() {
+    const inp = document.getElementById('rcpt-email-inp');
+    const msg = document.getElementById('rcpt-email-msg');
+    const btn = document.getElementById('rcpt-email-btn');
+    const email = inp.value.trim();
+    if (!email) { msg.textContent = t('rcpt_email_missing'); return; }
+    if (!lastReceiptPaymentId) { msg.textContent = t('rcpt_email_err'); return; }
+    btn.disabled = true;
+    msg.textContent = t('rcpt_email_sending');
+    try {
+      const res = await fetch('/api/receipts/send', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentId: lastReceiptPaymentId, email, itemLines: lastReceiptItemsData }),
+      });
+      const data = await res.json();
+      msg.textContent = res.ok ? t('rcpt_email_sent') : (data.error || t('rcpt_email_err'));
+    } catch {
+      msg.textContent = t('rcpt_email_err');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   // ── Post-payment feedback widget ──────────────────────────────────────────────
   let fbState = { paymentId: null, restaurantId: null, googleReviewUrl: null,
                   chosenRating: null, nudgeShown: false };
@@ -1420,6 +1503,7 @@
     document.getElementById('fb-club-email').value              = '';
     document.getElementById('fb-club-pw').value                 = '';
     document.getElementById('fb-comment').value                 = '';
+    document.getElementById('fb-critical-email').value          = '';
 
     // Apply i18n
     document.getElementById('fb-question').textContent    = t('fb_question');
@@ -1478,7 +1562,7 @@
     }
   }
 
-  async function postFeedback({ rating, comment, nudgeShown = false, nudgeTapped = false }) {
+  async function postFeedback({ rating, comment, nudgeShown = false, nudgeTapped = false, guestEmail }) {
     try {
       const memberToken = localStorage.getItem('nota_club_token') || undefined;
       const deviceId    = localStorage.getItem('nota_device_id') || undefined;
@@ -1488,15 +1572,16 @@
         body: JSON.stringify({
           restaurantId: fbState.restaurantId,
           paymentId: fbState.paymentId,
-          rating, comment, deviceId, nudgeShown, nudgeTapped, memberToken,
+          rating, comment, deviceId, nudgeShown, nudgeTapped, memberToken, guestEmail,
         }),
       });
     } catch { /* non-blocking */ }
   }
 
   async function fbSubmitCritical() {
-    const comment = document.getElementById('fb-comment').value.trim();
-    await postFeedback({ rating: fbState.chosenRating, comment, nudgeShown: false });
+    const comment    = document.getElementById('fb-comment').value.trim();
+    const guestEmail = document.getElementById('fb-critical-email').value.trim() || undefined;
+    await postFeedback({ rating: fbState.chosenRating, comment, nudgeShown: false, guestEmail });
     document.getElementById('fb-critical-phase').style.display = 'none';
     document.getElementById('fb-thanks-phase').style.display   = '';
     document.getElementById('fb-thanks-msg').textContent       = t('fb_thanks');
@@ -1566,6 +1651,20 @@
   // Header
   document.getElementById('lang-btn').addEventListener('click', toggleLang);
   document.getElementById('waiter-btn').addEventListener('click', callWaiter);
+  document.getElementById('rcpt-email-btn').addEventListener('click', sendReceiptEmailNow);
+  // One field serves all three email prompts on this screen (receipt, low-rating follow-up,
+  // Club Eats signup) — whichever the guest fills in first prefills the others, so they never
+  // have to type the same address twice.
+  const EMAIL_SYNC_IDS = ['rcpt-email-inp', 'fb-critical-email', 'fb-club-email'];
+  EMAIL_SYNC_IDS.forEach(id => {
+    document.getElementById(id).addEventListener('input', e => {
+      for (const otherId of EMAIL_SYNC_IDS) {
+        if (otherId === id) continue;
+        const el = document.getElementById(otherId);
+        if (el && !el.value) el.value = e.target.value;
+      }
+    });
+  });
 
   // Split-mode tabs
   document.getElementById('tab-mine').addEventListener('click',  () => setSplit('mine'));

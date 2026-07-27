@@ -367,8 +367,11 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   }
 
   function applyUnpaidItems(items) {
+    // 'paid' (via nota.) and 'paid_external' (settled at the counter / by the POS) are both no
+    // longer owed — the live total must exclude both or a guest could be shown (and asked to pay)
+    // for something already settled outside nota.
     lastUnpaidLei = (items || [])
-      .filter(i => i.status !== 'paid')
+      .filter(i => i.status !== 'paid' && i.status !== 'paid_external')
       .reduce((s, i) => s + Number(i.price), 0);
     const lbl = document.getElementById('pay-lbl');
     lbl.textContent = lastUnpaidLei > 0 ? `${t('pay_bill')} · ${Math.round(lastUnpaidLei)} lei` : t('pay_bill');
