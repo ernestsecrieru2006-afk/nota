@@ -1320,6 +1320,40 @@ app.get('/api/dashboard/profile/cover-image', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── Dashboard branding logo (sidebar header + top-bar mark; falls back to a gold monogram) ────
+
+app.post('/api/dashboard/profile/logo', requireAuth, uploadMenuImage, async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'Nicio imagine primită.' });
+  try {
+    const rId = req.restaurant.restaurantId;
+    const processed = await processAndStore({ buffer: req.file.buffer, restaurantId: rId });
+    const { rows: [row] } = await pool.query(
+      `INSERT INTO menu_images (restaurant_id, mime_type, full_data, thumb_data, full_url, thumb_url, width, height)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+      [rId, processed.mime_type, processed.full_data, processed.thumb_data, processed.full_url, processed.thumb_url, processed.width, processed.height]
+    );
+    await pool.query('UPDATE restaurants SET logo_image_id=$1 WHERE id=$2', [row.id, rId]);
+    res.json({ id: row.id, url: `/api/images/${row.id}`, thumbUrl: `/api/images/${row.id}/thumb` });
+  } catch (err) {
+    console.error('[logo upload]', err.message);
+    res.status(400).json({ error: 'Imaginea nu a putut fi procesată. Încearcă alt fișier.' });
+  }
+});
+
+app.get('/api/dashboard/profile/logo', requireAuth, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query('SELECT logo_image_id FROM restaurants WHERE id=$1', [req.restaurant.restaurantId]);
+    res.json({ logo: imageUrls(r?.logo_image_id) });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/dashboard/profile/logo', requireAuth, async (req, res) => {
+  try {
+    await pool.query('UPDATE restaurants SET logo_image_id=NULL WHERE id=$1', [req.restaurant.restaurantId]);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── Menu (dashboard CRUD, tenant-scoped) ──────────────────────────────────────
 
 const DIETARY_TAGS = ['vegetarian', 'vegan', 'gluten_free', 'spicy'];

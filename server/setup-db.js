@@ -347,6 +347,11 @@ async function setup() {
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS cover_image_id INT REFERENCES menu_images(id) ON DELETE SET NULL`);
     } catch { /* already exists */ }
 
+    // ── Dashboard branding: restaurant's own logo (sidebar header + top-bar mark) ──
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS logo_image_id INT REFERENCES menu_images(id) ON DELETE SET NULL`);
+    } catch { /* already exists */ }
+
     // ── Staff access (floor-staff notification domain — separate auth from owner/member) ──
     // One active link per restaurant at a time (partial unique index below). Regenerate/revoke
     // always deactivate the current row rather than updating it in place, so a JWT's embedded

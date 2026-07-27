@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#0A0A0A">
+<meta name="theme-color" content="#14120F">
 <title>nota. — Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,37 +11,46 @@
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2300333c'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='38' font-weight='700' fill='%23C5A059' text-anchor='middle'%3En.%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <style>
-/* ── Design tokens: Minimalist Graphite + Emerald accent ── */
+/* ── Design tokens: nota. brand — warm graphite + brass gold ──
+   Rebrand note: the --em/--em-hi/--em-dim/--em-bg/--em-bg2 variable NAMES are kept as-is
+   (still meaning "primary accent," a holdover from the old emerald palette) to minimize
+   find/replace risk across this file — their VALUES now render the brand's brass gold
+   (#C5A059), the same accent used on the guest app and Club Eats. --brass is a plain alias
+   for new code that wants the literal brand name rather than the legacy "em" one. */
 :root {
-  /* Graphite base */
-  --bg:      #0A0A0A;
-  --panel:   #141414;
-  --card:    #1A1A1A;
-  --surface: #202020;
-  --border:  #2A2A2A;
-  --border2: #383838;
+  /* Warm graphite base — layered background → panel → card → surface for depth */
+  --bg:      #14120F;
+  --panel:   #1C1815;
+  --card:    #221D18;
+  --surface: #2A241E;
+  --border:  #362F26;
+  --border2: #453C30;
 
-  /* Typography */
-  --text:    #F0F0F0;
-  --text2:   #A3A3A3;
-  --muted:   #737373;
-  --muted2:  #404040;
+  /* Typography — warm off-white/grays, not cold pure gray */
+  --text:    #F5F0E8;
+  --text2:   #B5AB9B;
+  --muted:   #8A8071;
+  --muted2:  #52493C;
 
-  /* Emerald — restrained primary accent */
-  --em:      #10B981;
-  --em-hi:   #4EDEA3;
-  --em-dim:  #059669;
-  --em-bg:   rgba(16,185,129,.07);
-  --em-bg2:  rgba(16,185,129,.13);
+  /* Brass gold — restrained primary accent (~10% of surface: active nav, KPI values,
+     chart hero series, primary buttons) */
+  --em:      #C5A059;
+  --em-hi:   #E0C078;
+  --em-dim:  #9C7D42;
+  --em-bg:   rgba(197,160,89,.08);
+  --em-bg2:  rgba(197,160,89,.14);
+  --brass:    var(--em);
+  --brass-hi: var(--em-hi);
+  --brass-dim:var(--em-dim);
 
-  /* Supporting accents — muted, not neon */
-  --amber:   #D97706;
-  --amber-hi:#F59E0B;
-  --amber-bg:rgba(217,119,6,.08);
-  --red:     #EF4444;
-  --red-bg:  rgba(239,68,68,.08);
-  --blue:    #3B82F6;
-  --blue-bg: rgba(59,130,246,.08);
+  /* Supporting accents — retuned warmer so they sit harmoniously with the gold, not neon */
+  --amber:   #C97A45;
+  --amber-hi:#E0985F;
+  --amber-bg:rgba(201,122,69,.10);
+  --red:     #D9605C;
+  --red-bg:  rgba(217,96,92,.10);
+  --blue:    #6C93B8;
+  --blue-bg: rgba(108,147,184,.10);
 
   --r:  8px;
   --rl: 12px;
@@ -70,7 +79,7 @@ html, body {
   justify-content: center;
   padding: 20px;
   background:
-    radial-gradient(ellipse at 50% 0%, rgba(16,185,129,.06) 0%, transparent 60%);
+    radial-gradient(ellipse at 50% 0%, rgba(197,160,89,.06) 0%, transparent 60%);
 }
 .login-card {
   background: var(--card);
@@ -104,7 +113,7 @@ html, body {
 }
 .field input:focus {
   border-color: var(--em);
-  box-shadow: 0 0 0 3px rgba(16,185,129,.12);
+  box-shadow: 0 0 0 3px rgba(197,160,89,.12);
 }
 #login-btn {
   width: 100%; margin-top: 8px; padding: 13px;
@@ -153,13 +162,26 @@ html, body {
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
-.s-brand {
-  font-family: 'Playfair Display', serif;
-  font-size: 24px; font-weight: 700;
-  color: var(--text); letter-spacing: -0.5px;
+/* Restaurant's own identity leads the sidebar header — nota.'s brand stays present but
+   subtle ("by nota."), the reverse of how prominently it used to appear here. */
+.sb-brand { display: flex; align-items: center; gap: 11px; }
+.sb-logo {
+  width: 40px; height: 40px; border-radius: 9px;
+  background: var(--em-bg2); border: 1px solid var(--border2);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Playfair Display', serif; font-size: 17px; font-weight: 700;
+  color: var(--em); flex-shrink: 0; overflow: hidden;
 }
-.s-brand span { color: #C5A059; }
-.s-tagline { font-size: 11px; color: var(--muted); margin-top: 3px; }
+.sb-logo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.sb-brand-text { min-width: 0; }
+.sb-rest-name {
+  font-family: 'Playfair Display', serif;
+  font-size: 16px; font-weight: 700;
+  color: var(--text); letter-spacing: -0.3px; line-height: 1.25;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.sb-by-nota { font-size: 10px; color: var(--muted); margin-top: 2px; letter-spacing: .02em; }
+.sb-by-nota span { color: var(--em); }
 
 .sidebar-nav { flex: 1; padding: 14px 10px; overflow-y: auto; }
 .nav-group-label {
@@ -238,23 +260,38 @@ html, body {
   padding: 28px 28px 40px;
   display: flex; flex-direction: column; gap: 22px;
 }
+.topbar { display: flex; justify-content: flex-end; align-items: center; position: relative; min-height: 26px; }
+.topbar-mark { width: 26px; height: 26px; border-radius: 6px; font-size: 11px; }
+.mobile-menu-btn {
+  display: none; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+  width: 34px; height: 34px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--text);
+  align-items: center; justify-content: center; font-size: 16px; cursor: pointer;
+  font-family: inherit; padding: 0;
+}
 
 .main-header {
-  display: flex; align-items: flex-start;
-  justify-content: space-between; gap: 16px;
+  display: flex; align-items: flex-start; flex-wrap: wrap;
+  justify-content: space-between; gap: 10px 16px;
   padding-bottom: 4px;
 }
 .main-title {
-  font-size: 22px; font-weight: 800;
+  font-size: 22px; font-weight: 700;
   letter-spacing: -.4px; color: var(--text);
-  font-family: 'Manrope', sans-serif;
+  font-family: 'Playfair Display', serif;
+}
+/* The other 6 views have no page-level .main-header — their first .section-title already
+   functions as the view's headline, so it gets the same Playfair treatment for consistency. */
+.view-title.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 19px; font-weight: 700;
 }
 .main-date { font-size: 12px; color: var(--muted); margin-top: 3px; }
 
 .live-pill {
   display: flex; align-items: center; gap: 6px;
   font-size: 11px; font-weight: 600; color: var(--em);
-  background: var(--em-bg); border: 1px solid rgba(16,185,129,.18);
+  background: var(--em-bg); border: 1px solid rgba(197,160,89,.18);
   padding: 6px 12px; border-radius: 20px; flex-shrink: 0;
 }
 .live-dot {
@@ -288,9 +325,10 @@ html, body {
   color: var(--muted); margin-bottom: 10px;
 }
 .sc-val {
-  font-size: 28px; font-weight: 800;
+  font-family: 'Playfair Display', serif;
+  font-size: 28px; font-weight: 700;
   font-variant-numeric: tabular-nums;
-  letter-spacing: -.8px; line-height: 1.1;
+  letter-spacing: -.5px; line-height: 1.1;
   color: var(--text);
 }
 .sc-val.em { color: var(--em); }
@@ -319,27 +357,63 @@ html, body {
   font-size: 11px; font-weight: 700;
   padding: 3px 9px; border-radius: 6px;
   background: var(--em-bg); color: var(--em);
-  border: 1px solid rgba(16,185,129,.18);
+  border: 1px solid rgba(197,160,89,.18);
   flex-shrink: 0; font-variant-numeric: tabular-nums;
 }
 .chart-area  { position: relative; height: 176px; }
 .donut-area  { position: relative; height: 200px; }
 .donut-wrap  { position: relative; }
+/* Constrained to the ring's actual hole (~68% cutout of the 200px-tall donut-area = ~136px
+   diameter; min() with a 68% fallback protects narrow viewports where the card's own width,
+   not the fixed height, ends up the limiting dimension). Root-caused overflow was: no width
+   constraint here at all, plus an un-abbreviated raw number (see loadTopDishes/formatLeiAbbrev)
+   — both are fixed together so 3/5/7-digit totals all sit cleanly inside the ring. */
 .donut-center {
   position: absolute; inset: 0;
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
+  max-width: min(140px, 68%);
+  margin: 0 auto;
   pointer-events: none;
 }
 .donut-cval {
   font-size: 20px; font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--text); letter-spacing: -.5px;
+  white-space: nowrap; line-height: 1.15;
+  max-width: 100%;
 }
+/* Length-based steps applied by JS (setDonutCenterValue) — abbreviation alone keeps strings
+   short (max "999k"/"1,25M" territory), this is a second line of defense for edge cases. */
+.donut-cval.donut-cval--md { font-size: 17px; }
+.donut-cval.donut-cval--sm { font-size: 14px; }
 .donut-clbl {
   font-size: 10px; color: var(--muted);
   text-transform: uppercase; letter-spacing: .08em;
   font-weight: 600; margin-top: 1px;
+}
+/* Real HTML legend, not Chart.js's canvas-drawn one — the built-in legend rendered inside the
+   same 200px canvas as the ring, so a wide/long dish name list squeezed the ring upward and threw
+   off .donut-center's vertical centering (which assumes the ring fills the full donut-area box).
+   Moving the legend out to flow below fixes that misalignment and lets it wrap freely. */
+.donut-legend {
+  display: flex; flex-wrap: wrap;
+  justify-content: center; gap: 6px 14px;
+  margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.donut-legend-item {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text2); font-weight: 600;
+  max-width: 140px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.donut-legend-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  flex-shrink: 0;
+}
+.donut-legend-empty {
+  font-size: 11px; color: var(--muted); font-style: italic;
 }
 
 /* ── TABLES GRID ────────────────────────────────────────── */
@@ -363,10 +437,10 @@ html, body {
   transition: border-color .18s, background .18s;
 }
 .t-tile.t-active { border-color: var(--amber); background: var(--amber-bg); }
-.t-tile.t-paid   { border-color: rgba(16,185,129,.35); background: var(--em-bg); }
+.t-tile.t-paid   { border-color: rgba(197,160,89,.35); background: var(--em-bg); }
 .t-tile.t-empty  { opacity: .38; }
 .t-tile.t-pending { border-color: var(--blue); background: var(--blue-bg); }
-.t-pending .t-indicator { background: var(--blue); box-shadow: 0 0 6px rgba(59,130,246,.5); animation: pulse 1s infinite; }
+.t-pending .t-indicator { background: var(--blue); box-shadow: 0 0 6px rgba(108,147,184,.5); animation: pulse 1s infinite; }
 .t-pending .t-status    { color: var(--blue); }
 
 .t-num {
@@ -379,9 +453,9 @@ html, body {
   margin: 0 auto 7px; background: var(--muted2);
 }
 .t-active .t-indicator { background: var(--amber-hi); box-shadow: 0 0 6px rgba(245,158,11,.45); }
-.t-paid   .t-indicator { background: var(--em);       box-shadow: 0 0 6px rgba(16,185,129,.4); }
+.t-paid   .t-indicator { background: var(--em);       box-shadow: 0 0 6px rgba(197,160,89,.4); }
 .t-waiter { border-color: var(--red) !important; background: var(--red-bg) !important; }
-.t-waiter .t-indicator { background: var(--red); box-shadow: 0 0 6px rgba(239,68,68,.5); animation: pulse 1s infinite; }
+.t-waiter .t-indicator { background: var(--red); box-shadow: 0 0 6px rgba(217,96,92,.5); animation: pulse 1s infinite; }
 .t-waiter .t-status    { color: var(--red) !important; }
 
 .t-amount {
@@ -425,8 +499,8 @@ html, body {
 }
 .cs-card:hover { box-shadow: 0 6px 32px rgba(0,0,0,.6); }
 
-.cs-card.ce { border: 1px solid rgba(16,185,129,.3); }
-.cs-card.ai { border: 1px solid rgba(217,119,6,.3); }
+.cs-card.ce { border: 1px solid rgba(197,160,89,.3); }
+.cs-card.ai { border: 1px solid rgba(201,122,69,.3); }
 
 /* Accent glow in top-right corner */
 .cs-glow {
@@ -434,8 +508,8 @@ html, body {
   width: 200px; height: 200px; border-radius: 50%;
   filter: blur(80px); opacity: .1; pointer-events: none;
 }
-.ce .cs-glow { background: #10B981; }
-.ai .cs-glow { background: #F59E0B; }
+.ce .cs-glow { background: #C5A059; }
+.ai .cs-glow { background: #E0985F; }
 
 /* "În curând" badge — prominent, not locked */
 .cs-badge {
@@ -447,11 +521,11 @@ html, body {
 }
 .ce .cs-badge {
   background: var(--em-bg2); color: var(--em-hi);
-  border: 1px solid rgba(16,185,129,.3);
+  border: 1px solid rgba(197,160,89,.3);
 }
 .ai .cs-badge {
   background: var(--amber-bg); color: var(--amber-hi);
-  border: 1px solid rgba(217,119,6,.3);
+  border: 1px solid rgba(201,122,69,.3);
 }
 .cs-badge-dot {
   width: 5px; height: 5px; border-radius: 50%;
@@ -507,7 +581,7 @@ html, body {
 .feed-badge {
   font-size: 10px; font-weight: 700;
   background: var(--em-bg); color: var(--em);
-  border: 1px solid rgba(16,185,129,.18);
+  border: 1px solid rgba(197,160,89,.18);
   padding: 2px 9px; border-radius: 10px;
 }
 
@@ -607,11 +681,22 @@ html, body {
 }
 @media (max-width: 640px) {
   .dash-layout { grid-template-columns: 1fr; }
-  .sidebar     { display: none; }
+  /* Off-canvas drawer instead of hiding the sidebar outright — hiding it with nothing to
+     replace it left phone users with no way to switch views at all. */
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; width: 260px; z-index: 100;
+    transform: translateX(-100%);
+    transition: transform .22s ease;
+    box-shadow: var(--shd);
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop.open { display: block; }
+  .mobile-menu-btn { display: flex; }
   .stat-grid   { grid-template-columns: 1fr 1fr; }
   .cs-grid     { grid-template-columns: 1fr; }
   .main        { padding: 18px; }
 }
+.sidebar-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 99; }
 
 /* ── CLUB EATS PANEL ────────────────────────────────────── */
 .ce-section { margin-top: 36px; }
@@ -671,7 +756,7 @@ html, body {
 /* Item card thumbnail + tags in the category list */
 .mi-list-thumb { width: 40px; height: 40px; border-radius: 6px; object-fit: cover; flex-shrink: 0; background: var(--surface); }
 .mi-list-tags { display: flex; gap: 3px; margin-top: 3px; }
-.mi-featured-badge { font-size: 10px; font-weight: 700; color: var(--amber-hi); background: rgba(217,119,6,.12); border: 1px solid rgba(217,119,6,.3); border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
+.mi-featured-badge { font-size: 10px; font-weight: 700; color: var(--amber-hi); background: rgba(201,122,69,.12); border: 1px solid rgba(201,122,69,.3); border-radius: 5px; padding: 1px 6px; margin-left: 6px; }
 
 /* Editor + live preview two-column layout */
 .menu-editor-layout { display: flex; gap: 28px; align-items: flex-start; margin-top: 16px; }
@@ -714,8 +799,8 @@ html, body {
   display: none; align-items: center; justify-content: center; gap: 14px;
   padding: 9px 16px; font-size: 12.5px; font-weight: 600; text-align: center;
 }
-#demo-mode-banner { background: var(--amber-bg); color: var(--amber-hi); border-bottom: 1px solid rgba(217,119,6,.3); }
-#setup-banner { background: var(--blue-bg); color: var(--blue); border-bottom: 1px solid rgba(59,130,246,.3); }
+#demo-mode-banner { background: var(--amber-bg); color: var(--amber-hi); border-bottom: 1px solid rgba(201,122,69,.3); }
+#setup-banner { background: var(--blue-bg); color: var(--blue); border-bottom: 1px solid rgba(108,147,184,.3); }
 #setup-banner button, #demo-mode-banner button {
   background: none; border: 1px solid currentColor; color: inherit; font-family: inherit;
   font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 6px; cursor: pointer;
@@ -762,7 +847,7 @@ html, body {
 .ob-status-select { display: flex; gap: 8px; margin-bottom: 18px; }
 .ob-status-opt { flex: 1; text-align: center; padding: 10px; border-radius: 8px; border: 1.5px solid var(--border); font-size: 12px; font-weight: 700; cursor: pointer; color: var(--muted); }
 .ob-status-opt.sel { border-color: var(--em); color: var(--em-hi); background: var(--em-bg); }
-.ob-demo-notice { background: var(--amber-bg); border: 1px solid rgba(217,119,6,.35); color: var(--amber-hi); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
+.ob-demo-notice { background: var(--amber-bg); border: 1px solid rgba(201,122,69,.35); color: var(--amber-hi); border-radius: 8px; padding: 12px 14px; font-size: 12.5px; font-weight: 600; margin-bottom: 18px; }
 
 .ob-summary-list { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
 .ob-summary-item { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 10px 14px; background: var(--card); border: 1px solid var(--border); border-radius: 8px; }
@@ -800,7 +885,7 @@ html, body {
 .pk-svg-lbl  { font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 8px; }
 .pk-svg-preview { width: 100%; max-height: 180px; object-fit: contain; border-radius: 6px; background: #0a0a0f; }
 .btn-pk-dl { display: block; margin-top: 8px; background: var(--amber-bg); border: 1px solid var(--amber); color: var(--amber-hi); font-family: inherit; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 6px; cursor: pointer; transition: all .15s; width: 100%; }
-.btn-pk-dl:hover { background: rgba(217,119,6,.15); }
+.btn-pk-dl:hover { background: rgba(201,122,69,.15); }
 .pk-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
 .btn-pk-regen { background: var(--em-bg); border: 1px solid var(--em-dim); color: var(--em-hi); font-family: inherit; font-size: 12px; font-weight: 700; padding: 7px 18px; border-radius: var(--r); cursor: pointer; transition: all .15s; }
 .btn-pk-regen:hover { background: var(--em-bg2); }
@@ -872,8 +957,13 @@ html, body {
     <!-- ── Sidebar ──────────────────────────────────────── -->
     <aside class="sidebar">
       <div class="sidebar-top">
-        <div class="s-brand">nota<span>.</span></div>
-        <div class="s-tagline">Restaurant Intelligence</div>
+        <div class="sb-brand">
+          <div class="sb-logo" id="sb-logo">R</div>
+          <div class="sb-brand-text">
+            <div class="sb-rest-name" id="sb-rest-name">Restaurant</div>
+            <div class="sb-by-nota">by nota<span>.</span></div>
+          </div>
+        </div>
       </div>
 
       <nav class="sidebar-nav">
@@ -931,8 +1021,18 @@ html, body {
       </div>
     </aside>
 
+    <!-- Off-canvas nav backdrop (phone widths only — see .sidebar-backdrop) -->
+    <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
     <!-- ── Main ─────────────────────────────────────────── -->
     <main class="main">
+
+      <!-- Small persistent branding mark — unlike .main-header (dashboard-only), this has no
+           data-view so it's visible on all 7 views. Also hosts the phone-width nav toggle. -->
+      <div class="topbar">
+        <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Deschide meniul" title="Meniu">☰</button>
+        <div class="topbar-mark sb-logo" id="topbar-logo" title="Restaurant">R</div>
+      </div>
 
       <!-- Page header -->
       <div class="main-header" data-view="dashboard">
@@ -1005,6 +1105,7 @@ html, body {
               <div class="donut-clbl">lei total</div>
             </div>
           </div>
+          <div class="donut-legend" id="donut-legend"></div>
         </div>
       </div>
 
@@ -1023,7 +1124,7 @@ html, body {
       <div class="ce-section" id="ce-section" data-view="club offers">
         <div class="ce-header" data-subview="club">
           <div>
-            <div class="section-title" style="margin-bottom:2px">Club Eats</div>
+            <div class="section-title view-title" style="margin-bottom:2px">Club Eats</div>
             <div style="font-size:12px;color:var(--muted)">Atribuire venituri & clienți</div>
           </div>
           <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1079,7 +1180,7 @@ html, body {
         <div data-subview="offers">
           <div class="ce-header" style="margin-bottom:16px">
             <div>
-              <div class="section-title" style="margin-bottom:2px">Oferte</div>
+              <div class="section-title view-title" style="margin-bottom:2px">Oferte</div>
               <div style="font-size:12px;color:var(--muted)">Ore liniștite & reduceri Club Eats</div>
             </div>
             <button class="btn-add-offer" id="btn-add-offer">+ Ofertă nouă</button>
@@ -1200,7 +1301,7 @@ html, body {
       <div data-view="menu" id="menu-section">
         <div class="ce-header">
           <div>
-            <div class="section-title" style="margin-bottom:2px">Meniu</div>
+            <div class="section-title view-title" style="margin-bottom:2px">Meniu</div>
             <div style="font-size:12px;color:var(--muted)">Meniul restaurantului, afișat în codul QR de pe masă</div>
           </div>
           <div style="display:flex;gap:14px;align-items:center;flex-wrap:wrap">
@@ -1333,7 +1434,7 @@ html, body {
       <div id="feedback-section" style="margin-top:0" data-view="feedback">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
           <div>
-            <div class="section-title" style="margin-bottom:2px">Feedback & Recenzii</div>
+            <div class="section-title view-title" style="margin-bottom:2px">Feedback & Recenzii</div>
             <div style="font-size:12px;color:var(--muted)">Feedback-ul oaspeților și conversia spre Google Reviews</div>
           </div>
           <div style="display:flex;gap:8px">
@@ -1398,12 +1499,29 @@ html, body {
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:10px">Apare în feed-ul Club Eats — fără poză, oaspeții văd o siglă cu inițiala restaurantului.</div>
         </div>
+
+        <!-- Dashboard logo (sidebar + top bar) -->
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:16px">
+          <div class="section-title" style="font-size:12px;margin-bottom:10px">Logo restaurant</div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+            <div id="logo-preview" class="sb-logo" style="width:56px;height:56px;font-size:20px">R</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              <input type="file" id="logo-input" accept="image/jpeg,image/png,image/webp" style="display:none">
+              <div style="display:flex;gap:8px">
+                <button id="logo-pick" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Alege un logo</button>
+                <button id="logo-remove" style="display:none;background:none;border:1px solid var(--border);border-radius:8px;color:var(--muted);font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Elimină</button>
+              </div>
+              <span id="logo-status" style="font-size:11px;color:var(--muted)"></span>
+            </div>
+          </div>
+          <div style="font-size:11px;color:var(--muted);margin-top:10px">Apare în bara laterală și în antet — fără logo, se afișează o inițială aurie.</div>
+        </div>
       </div>
 
       <!-- ── Echipă & Notificări (staff access + Telegram) ─────────────── -->
       <div id="team-section" style="margin-top:0" data-view="team">
         <div style="margin-bottom:20px">
-          <div class="section-title" style="margin-bottom:2px">Echipă & Notificări</div>
+          <div class="section-title view-title" style="margin-bottom:2px">Echipă & Notificări</div>
           <div style="font-size:12px;color:var(--muted)">Acces ospătari pentru /waiter și alerte Telegram</div>
         </div>
 
@@ -1422,7 +1540,7 @@ html, body {
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button id="staff-link-generate" style="background:var(--em);border:none;border-radius:8px;color:#000;font-size:13px;font-weight:700;padding:8px 16px;cursor:pointer;font-family:inherit">Generează link</button>
-            <button id="staff-link-revoke" style="display:none;background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:8px;font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Revocă acces</button>
+            <button id="staff-link-revoke" style="display:none;background:var(--red-bg);border:1px solid rgba(217,96,92,.3);color:var(--red);border-radius:8px;font-size:13px;font-weight:600;padding:8px 16px;cursor:pointer;font-family:inherit">Revocă acces</button>
           </div>
           <div style="font-size:11px;color:var(--muted);margin-top:10px">Regenerarea sau revocarea deconectează imediat toate telefoanele ospătarilor care folosesc linkul curent — accesul e read-only, fără date de vânzări sau setări.</div>
         </div>
@@ -1478,7 +1596,7 @@ html, body {
       <div id="tips-section" style="margin-top:0" data-view="tips">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:10px">
           <div>
-            <div class="section-title" style="margin-bottom:2px">Bacșișuri</div>
+            <div class="section-title view-title" style="margin-bottom:2px">Bacșișuri</div>
             <div style="font-size:12px;color:var(--muted)">Cine a încasat ce bacșiș, pentru statul de plată</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1525,8 +1643,8 @@ html, body {
           <!-- Club Eats — live -->
           <div class="cs-card ce" style="cursor:pointer" id="ce-card-shortcut">
             <div class="cs-glow"></div>
-            <div class="cs-badge" style="background:rgba(16,185,129,.15);border:1px solid rgba(16,185,129,.3);color:#4EDEA3">
-              <span style="width:6px;height:6px;background:#10B981;border-radius:50%;display:inline-block;animation:pulse-dot 2s infinite"></span>
+            <div class="cs-badge" style="background:rgba(197,160,89,.15);border:1px solid rgba(197,160,89,.3);color:#E0C078">
+              <span style="width:6px;height:6px;background:#C5A059;border-radius:50%;display:inline-block;animation:pulse-dot 2s infinite"></span>
               Activ
             </div>
             <span class="cs-icon">🍴</span>
@@ -1832,14 +1950,15 @@ let dishesChart  = null;
 let socket;
 const waitercalls = new Set(); // tableNumbers with active waiter calls
 
-// Categorical palette for top-dishes donut — distinguishable, refined, not all-green
+// Categorical palette for top-dishes donut — brass gold hero + muted complementary tones,
+// all pulled warm so they read as one family against the graphite base, not all one hue.
 const DISH_PALETTE = [
-  '#10B981', // emerald (hero)
-  '#D97706', // amber
-  '#3B82F6', // blue
-  '#8B5CF6', // violet
-  '#F43F5E', // rose
-  '#64748B', // slate
+  '#C5A059', // brass gold (hero)
+  '#7A8B6F', // sage
+  '#6C93B8', // dusty blue
+  '#B0704F', // terracotta
+  '#8A7CA8', // muted plum
+  '#8A8071', // warm gray
 ];
 
 // ── Init ──────────────────────────────────────────────────────────────────────
@@ -1934,6 +2053,7 @@ function showDashboard() {
   const name = restaurant?.name || 'Restaurant';
   document.getElementById('rest-name').textContent  = name;
   document.getElementById('rb-avatar').textContent  = name.charAt(0).toUpperCase();
+  applyBranding(name, null); // monogram immediately; loadLogo() below swaps in the real logo if set
 
   // Include auth token in QR codes link so the page validates ownership
   document.getElementById('qr-link').href = `/qrcodes?token=${encodeURIComponent(token)}`;
@@ -1981,7 +2101,19 @@ document.querySelector('.sidebar-nav').addEventListener('click', e => {
   if (!item) return; // external links (Coduri QR) fall through untouched
   e.preventDefault();
   switchView(item.dataset.view);
+  closeMobileSidebar();
 });
+
+// ── Phone-width off-canvas nav (sidebar is fixed+off-screen below 640px — see @media) ──────────
+function closeMobileSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('open');
+}
+document.getElementById('mobile-menu-btn').addEventListener('click', () => {
+  document.querySelector('.sidebar').classList.add('open');
+  document.getElementById('sidebar-backdrop').classList.add('open');
+});
+document.getElementById('sidebar-backdrop').addEventListener('click', closeMobileSidebar);
 
 // ── Onboarding wizard ──────────────────────────────────────────────────────────
 // Progress lives on the restaurant record (onboarding_step / onboarding_complete), fetched
@@ -2061,7 +2193,11 @@ async function saveObProfile() {
   try {
     const res = await apiMut('PUT', '/api/dashboard/onboarding/profile', body);
     if (res.error) { toast('Eroare: ' + res.error); return false; }
-    if (body.name) { restaurant.name = body.name; document.getElementById('rest-name').textContent = body.name; }
+    if (body.name) {
+      restaurant.name = body.name;
+      document.getElementById('rest-name').textContent = body.name;
+      document.getElementById('sb-rest-name').textContent = body.name;
+    }
     return true;
   } catch { toast('Eroare la salvare.'); return false; }
 }
@@ -2199,7 +2335,7 @@ document.getElementById('onboarding-wizard').addEventListener('click', async e =
 });
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings(), loadLoyalty()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings(), loadLoyalty(), loadLogo()]);
   // Staff members must load before table assignments / Poster mapping (both render options from
   // staffMembersCache) and before the Bacșișuri view's assign dropdowns.
   await loadStaffMembers();
@@ -2243,24 +2379,88 @@ async function loadStats() {
 // ── Top Dishes — Donut Chart ──────────────────────────────────────────────────
 let _dishesData = [];
 
+// Abbreviates a lei total for the donut's fixed-size center label (RO decimal comma: 13290 ->
+// "13,3k", 1250000 -> "1,25M"). Root cause of the overflow bug was a raw Math.round(total) with
+// no length limit at all — this is the other half of the fix alongside the CSS max-width and
+// the length-based font stepping in setDonutCenterValue below.
+function _trimZeros(s) {
+  return s.includes('.') ? s.replace(/0+$/, '').replace(/\.$/, '') : s;
+}
+function formatLeiAbbrev(n) {
+  const v = Math.round(Number(n) || 0);
+  if (v < 1000) return String(v);
+
+  if (v < 1_000_000) {
+    const decimals = v < 100_000 ? 1 : 0;
+    const s = _trimZeros((v / 1000).toFixed(decimals));
+    // toFixed can round e.g. 999500 up to "1000" — that's really 1M, not 1000k
+    if (Number(s) >= 1000) return _trimZeros((v / 1_000_000).toFixed(2)).replace('.', ',') + 'M';
+    return s.replace('.', ',') + 'k';
+  }
+
+  const decimals = v < 10_000_000 ? 2 : v < 100_000_000 ? 1 : 0;
+  return _trimZeros((v / 1_000_000).toFixed(decimals)).replace('.', ',') + 'M';
+}
+
+// Sets the center label text + a length-based font-size step (belt-and-suspenders alongside
+// the CSS max-width — abbreviation keeps strings short, but this still shrinks the font for the
+// rare long string, e.g. a 3-digit-k value like "999k"). Full precision is always one hover/
+// long-press away via the title attribute.
+function setDonutCenterValue(text, titleText) {
+  const el = document.getElementById('donut-center-val');
+  el.textContent = text;
+  el.title = titleText || '';
+  el.classList.remove('donut-cval--md', 'donut-cval--sm');
+  if (text.length > 6) el.classList.add('donut-cval--sm');
+  else if (text.length > 4) el.classList.add('donut-cval--md');
+}
+
+const EMPTY_DONUT_COLOR = '#362F26'; // var(--border) — a quiet static ring so "no data yet" reads as an intentional state, not a blank canvas
+
+// Custom HTML legend (not Chart.js's canvas-drawn one — see the .donut-legend CSS comment for
+// why the built-in legend was moved out).
+function renderDonutLegend(items) {
+  const el = document.getElementById('donut-legend');
+  if (!items.length) {
+    el.innerHTML = '<span class="donut-legend-empty">Fără date încă</span>';
+    return;
+  }
+  el.innerHTML = items.map((d, i) => `
+    <span class="donut-legend-item" title="${esc(d.name)}">
+      <span class="donut-legend-dot" style="background:${DISH_PALETTE[i % DISH_PALETTE.length]}"></span>${esc(d.name)}
+    </span>`).join('');
+}
+
 async function loadTopDishes() {
   const dishes = await api('/api/dashboard/top-dishes');
   _dishesData  = dishes.slice(0, 6);
 
   if (!_dishesData.length) {
-    document.getElementById('donut-center-val').textContent = '—';
-    if (dishesChart) { dishesChart.data.labels = []; dishesChart.data.datasets[0].data = []; dishesChart.update(); }
-    else initDishesChart();
+    setDonutCenterValue('—', '');
+    renderDonutLegend([]);
+    if (dishesChart) {
+      dishesChart.data.labels                       = ['Fără date'];
+      dishesChart.data.datasets[0].data              = [1];
+      dishesChart.data.datasets[0].backgroundColor   = [EMPTY_DONUT_COLOR];
+      dishesChart.options.plugins.tooltip.enabled    = false;
+      dishesChart.options.events                     = [];
+      dishesChart.update();
+    } else {
+      initDishesChart();
+    }
     return;
   }
 
   const total = _dishesData.reduce((s, d) => s + Number(d.revenue_lei), 0);
-  document.getElementById('donut-center-val').textContent = Math.round(total);
+  setDonutCenterValue(formatLeiAbbrev(total), `${Math.round(total).toLocaleString('ro-RO')} lei`);
+  renderDonutLegend(_dishesData);
 
   if (dishesChart) {
     dishesChart.data.labels                        = _dishesData.map(d => d.name);
     dishesChart.data.datasets[0].data              = _dishesData.map(d => Number(d.revenue_lei));
     dishesChart.data.datasets[0].backgroundColor   = DISH_PALETTE;
+    dishesChart.options.plugins.tooltip.enabled    = true;
+    dishesChart.options.events                     = ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'];
     dishesChart.update('active');
   } else {
     initDishesChart();
@@ -2268,38 +2468,37 @@ async function loadTopDishes() {
 }
 
 function initDishesChart() {
+  const empty = !_dishesData.length;
   const ctx = document.getElementById('dishes-chart').getContext('2d');
   dishesChart = new Chart(ctx, {
     type: 'doughnut',
-    data: {
-      labels: _dishesData.map(d => d.name),
-      datasets: [{
-        data: _dishesData.map(d => Number(d.revenue_lei)),
-        backgroundColor: DISH_PALETTE,
-        borderColor: '#1A1A1A',
-        borderWidth: 3,
-        hoverOffset: 5,
-      }],
-    },
+    data: empty
+      ? { labels: ['Fără date'], datasets: [{ data: [1], backgroundColor: [EMPTY_DONUT_COLOR], borderColor: '#221D18', borderWidth: 3 }] }
+      : {
+          labels: _dishesData.map(d => d.name),
+          datasets: [{
+            data: _dishesData.map(d => Number(d.revenue_lei)),
+            backgroundColor: DISH_PALETTE,
+            borderColor: '#221D18',
+            borderWidth: 3,
+            hoverOffset: 5,
+          }],
+        },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       cutout: '68%',
+      // Custom-legend is rendered separately (below the ring, in normal HTML flow) instead of
+      // Chart.js's built-in one, so the ring always fills this box fully and .donut-center's
+      // centering assumption holds regardless of how many/how-long the dish names are.
+      events: empty ? [] : ['mousemove', 'mouseout', 'click', 'touchstart', 'touchmove'],
       plugins: {
-        legend: {
-          position: 'bottom',
-          labels: {
-            color: '#737373',
-            font: { size: 11, family: 'Inter, system-ui' },
-            boxWidth: 9, boxHeight: 9,
-            padding: 10,
-            usePointStyle: true, pointStyle: 'circle',
-          },
-        },
+        legend: { display: false },
         tooltip: {
-          backgroundColor: '#1A1A1A',
-          borderColor: '#2A2A2A', borderWidth: 1,
-          titleColor: '#A3A3A3', bodyColor: '#F0F0F0',
+          enabled: !empty,
+          backgroundColor: '#221D18',
+          borderColor: '#362F26', borderWidth: 1,
+          titleColor: '#B5AB9B', bodyColor: '#F5F0E8',
           padding: 11,
           callbacks: {
             label: ctx => {
@@ -2334,9 +2533,9 @@ async function loadHourly() {
 function initRevenueChart(labels, data) {
   const ctx  = document.getElementById('revenue-chart').getContext('2d');
   const grad = ctx.createLinearGradient(0, 0, 0, 176);
-  grad.addColorStop(0,   'rgba(16,185,129,.22)');
-  grad.addColorStop(0.65,'rgba(16,185,129,.05)');
-  grad.addColorStop(1,   'rgba(16,185,129,.00)');
+  grad.addColorStop(0,   'rgba(197,160,89,.22)');
+  grad.addColorStop(0.65,'rgba(197,160,89,.05)');
+  grad.addColorStop(1,   'rgba(197,160,89,.00)');
 
   revenueChart = new Chart(ctx, {
     type: 'line',
@@ -2344,14 +2543,14 @@ function initRevenueChart(labels, data) {
       labels,
       datasets: [{
         data,
-        borderColor: '#10B981',
+        borderColor: '#C5A059',
         backgroundColor: grad,
         fill: true,
         tension: 0.4,
         pointRadius: 0,
         pointHoverRadius: 4,
-        pointHoverBackgroundColor: '#10B981',
-        pointHoverBorderColor: '#1A1A1A',
+        pointHoverBackgroundColor: '#C5A059',
+        pointHoverBorderColor: '#221D18',
         pointHoverBorderWidth: 2,
         borderWidth: 2,
       }],
@@ -2363,28 +2562,28 @@ function initRevenueChart(labels, data) {
       plugins: {
         legend: { display: false },
         tooltip: {
-          backgroundColor: '#1A1A1A',
-          borderColor: '#2A2A2A', borderWidth: 1,
-          titleColor: '#737373', bodyColor: '#F0F0F0',
+          backgroundColor: '#221D18',
+          borderColor: '#362F26', borderWidth: 1,
+          titleColor: '#8A8071', bodyColor: '#F5F0E8',
           padding: 11,
           callbacks: { label: c => ` ${Math.round(c.raw)} lei` },
         },
       },
       scales: {
         x: {
-          grid: { color: 'rgba(42,42,42,.7)', drawTicks: false },
+          grid: { color: 'rgba(54,47,38,.7)', drawTicks: false },
           border: { color: 'transparent' },
           ticks: {
-            color: '#4A4A4A',
+            color: '#6B6152',
             font: { size: 10, family: 'Inter, system-ui' },
             maxTicksLimit: 8, maxRotation: 0,
           },
         },
         y: {
-          grid: { color: 'rgba(42,42,42,.7)', drawTicks: false },
+          grid: { color: 'rgba(54,47,38,.7)', drawTicks: false },
           border: { color: 'transparent' },
           ticks: {
-            color: '#4A4A4A',
+            color: '#6B6152',
             font: { size: 10, family: 'Inter, system-ui' },
             callback: v => v > 0 ? `${v} lei` : '',
           },
@@ -2590,7 +2789,7 @@ function addWaiterFeedEntry(tableNumber) {
   div.dataset.waiter = tableNumber;
   div.style.borderLeft = '2px solid var(--red)';
   div.innerHTML = `
-    <div class="pay-icon-wrap" style="background:var(--red-bg);border-color:rgba(239,68,68,.2)">
+    <div class="pay-icon-wrap" style="background:var(--red-bg);border-color:rgba(217,96,92,.2)">
       <span style="font-size:16px">🔔</span>
     </div>
     <div class="pay-info">
@@ -2598,7 +2797,7 @@ function addWaiterFeedEntry(tableNumber) {
       <div class="pay-meta" style="color:var(--red)">cheamă ospătarul</div>
     </div>
     <div class="pay-right">
-      <button data-dismiss-waiter="${tableNumber}" style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Rezolvat</button>
+      <button data-dismiss-waiter="${tableNumber}" style="background:var(--red-bg);border:1px solid rgba(217,96,92,.3);color:var(--red);padding:4px 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit">Rezolvat</button>
     </div>`;
   feed.prepend(div);
 }
@@ -3479,7 +3678,7 @@ function renderFeedbackStats(data) {
       const canReply  = fb.reachable && !fb.replied_at;
       const statusTxt = fb.replied_at ? '✓ Ai răspuns' : fb.reachable ? '' : 'Oaspete necontactabil';
       return `
-      <div style="background:var(--card);border:1px solid rgba(239,68,68,.25);border-radius:10px;padding:12px 14px" data-fb-card="${fb.id}">
+      <div style="background:var(--card);border:1px solid rgba(217,96,92,.25);border-radius:10px;padding:12px 14px" data-fb-card="${fb.id}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
           <span style="color:#ef4444;font-weight:700">${'★'.repeat(fb.rating)}${'☆'.repeat(5-fb.rating)}</span>
           <span style="font-size:11px;color:var(--muted)">${timeAgo(fb.created_at)}</span>
@@ -3562,6 +3761,57 @@ async function uploadCoverPhoto(file) {
 }
 document.getElementById('cover-photo-pick').addEventListener('click', () => document.getElementById('cover-photo-input').click());
 document.getElementById('cover-photo-input').addEventListener('change', e => { if (e.target.files[0]) uploadCoverPhoto(e.target.files[0]); });
+
+// ── Dashboard branding logo (sidebar header + top-bar mark) ────────────────────────────────────
+// Falls back to a gold monogram of the restaurant's initial wherever no logo is set — never a
+// broken image or blank box.
+function applyBranding(name, logoThumbUrl) {
+  const initial = (name || 'R').charAt(0).toUpperCase();
+  const markup  = logoThumbUrl ? `<img src="${esc(logoThumbUrl)}" alt="">` : initial;
+  ['sb-logo', 'topbar-logo', 'logo-preview'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.innerHTML = markup;
+  });
+  const removeBtn = document.getElementById('logo-remove');
+  if (removeBtn) removeBtn.style.display = logoThumbUrl ? '' : 'none';
+}
+
+async function loadLogo() {
+  try {
+    const res = await api('/api/dashboard/profile/logo');
+    applyBranding(restaurant?.name, res?.logo?.thumbUrl || null);
+  } catch { /* non-critical — monogram fallback already showing */ }
+}
+
+async function uploadLogo(file) {
+  if (!file.type.startsWith('image/')) return toast('Fișierul trebuie să fie o imagine.');
+  const statusEl = document.getElementById('logo-status');
+  statusEl.textContent = 'Se încarcă…';
+  const form = new FormData();
+  form.append('photo', file);
+  try {
+    const res = await fetch('/api/dashboard/profile/logo', {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` }, body: form,
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) { statusEl.textContent = ''; return toast('Eroare: ' + (data.error || 'upload eșuat')); }
+    applyBranding(restaurant?.name, data.thumbUrl);
+    statusEl.textContent = 'Salvat ✓';
+    toast('Logo salvat!', 'success');
+  } catch {
+    statusEl.textContent = '';
+    toast('Eroare la încărcarea imaginii.');
+  }
+}
+document.getElementById('logo-pick').addEventListener('click', () => document.getElementById('logo-input').click());
+document.getElementById('logo-input').addEventListener('change', e => { if (e.target.files[0]) uploadLogo(e.target.files[0]); });
+document.getElementById('logo-remove').addEventListener('click', async () => {
+  const res = await apiMut('DELETE', '/api/dashboard/profile/logo');
+  if (res.error) return toast('Eroare: ' + res.error);
+  applyBranding(restaurant?.name, null);
+  document.getElementById('logo-status').textContent = '';
+  toast('Logo eliminat.', 'success');
+});
 
 async function saveGoogleUrl() {
   const url = document.getElementById('google-url-inp').value.trim();
@@ -3756,7 +4006,7 @@ function renderTableAssignGrid() {
     byWaiter.set(t.staff_member_id, cur);
   }
   document.getElementById('active-shifts-row').innerHTML = [...byWaiter.entries()].map(([id, v]) => `
-    <button data-end-shift="${id}" style="background:var(--red-bg);border:1px solid rgba(239,68,68,.3);color:var(--red);border-radius:8px;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:inherit">Termină tura — ${esc(v.name)} (${v.count})</button>
+    <button data-end-shift="${id}" style="background:var(--red-bg);border:1px solid rgba(217,96,92,.3);color:var(--red);border-radius:8px;font-size:12px;font-weight:600;padding:6px 12px;cursor:pointer;font-family:inherit">Termină tura — ${esc(v.name)} (${v.count})</button>
   `).join('');
 }
 
