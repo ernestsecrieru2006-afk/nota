@@ -72,8 +72,8 @@ button, input { font-family: inherit; }
    nothing per-tile animates, so this is far cheaper than a Ken-Burns/crossfade treatment. Each
    column's tile sequence is long enough to exceed any real viewport height before it repeats,
    then that whole sequence is duplicated once more so the -50% loop never shows a seam or gap.
-   Paused via .s-paused (tab hidden) and prefers-reduced-motion (falls back to a static grid --
-   every animated property has a sane default with animation:none). */
+   Paused via .s-paused (tab hidden/backgrounded) and slowed drastically (not stopped) under
+   prefers-reduced-motion -- see the media query below for why. */
 .splash-scene { position: absolute; inset: 0; overflow: hidden; background: #000; display: flex; gap: 10px; }
 
 .s-col { flex: 1 1 0; display: flex; flex-direction: column; gap: 10px; will-change: transform; }
@@ -90,8 +90,21 @@ button, input { font-family: inherit; }
   background-size: cover; background-position: center; background-repeat: no-repeat;
 }
 
+/* Deliberate choice: slow the columns to a near-still crawl (~5x slower, same relative speed
+   ratios so it still reads as "alive," not identical/mechanical) rather than animation:none.
+   A fully frozen full-screen background reads as broken to anyone who forgot Reduce Motion is
+   on -- and both halves of each column's doubled tile sequence are identical, so the static
+   starting frame is already a deliberately composed grid either way, not an arbitrary crop.
+   This keeps faith with the accessibility intent (drastically less motion, no fast/vertiginous
+   scrolling) without the page looking dead. The small glow-breathe effects elsewhere on the
+   splash still stop completely here -- they're decorative, not "the page," and pure opacity
+   pulses aren't what Reduce Motion exists to suppress the way parallax scrolling is. */
 @media (prefers-reduced-motion: reduce) {
-  .s-col { animation: none !important; }
+  .s-col:nth-child(1) { animation-duration: 260s; }
+  .s-col:nth-child(2) { animation-duration: 320s; }
+  .s-col:nth-child(3) { animation-duration: 280s; }
+  .s-col:nth-child(4) { animation-duration: 340s; }
+  .s-col:nth-child(5) { animation-duration: 300s; }
 }
 /* Tab hidden -- pause every animation to save battery (class toggled by a visibilitychange
    listener, not by per-frame JS). */
@@ -110,22 +123,25 @@ button, input { font-family: inherit; }
   background: radial-gradient(ellipse 80% 58% at 50% 100%, rgba(0,0,0,.93) 0%, rgba(0,0,0,.72) 42%, transparent 74%);
 }
 
-/* Fixed luminous gold frame around the whole viewport -- sits above the scrolling tiles and
+/* Luminous gold glow hugging the whole viewport edge -- sits above the scrolling tiles and
    stays perfectly still (it's positioned off #screen-splash itself, not the scrolling columns).
-   Inset by the device safe-area so it never sits under a notch/home indicator. The crisp border
-   never animates (so it can't read as blinking); only the glow bloom's opacity breathes, via a
-   separate ::before layer, kept subtle per spec. Highest z-index on the splash, but
-   pointer-events:none + edge-only footprint means it never blocks taps or crowds the copy. */
+   Inset by the device safe-area so it never sits under a notch/home indicator. No border/stroke
+   of any kind -- purely a diffuse box-shadow bloom (a tighter inner glow layered with a wider,
+   softer outer fade) so the edge reads as light, not a drawn line. Highest z-index on the
+   splash, but pointer-events:none + edge-only footprint means it never blocks taps or crowds
+   the copy. */
 .splash-frame {
   position: fixed; z-index: 5; pointer-events: none;
   top: env(safe-area-inset-top, 0px); right: env(safe-area-inset-right, 0px);
   bottom: env(safe-area-inset-bottom, 0px); left: env(safe-area-inset-left, 0px);
-  border: 3px solid rgba(197,160,89,.8);
   border-radius: 18px;
 }
 .splash-frame::before {
   content: ''; position: absolute; inset: 0; border-radius: inherit;
-  box-shadow: 0 0 12px 1px rgba(197,160,89,.5), inset 0 0 26px 3px rgba(197,160,89,.3);
+  box-shadow:
+    inset 0 0 10px 0px rgba(197,160,89,.45),
+    inset 0 0 44px 6px rgba(197,160,89,.24),
+    0 0 14px 2px rgba(197,160,89,.28);
   animation: s-frame-breathe 4.2s ease-in-out infinite;
 }
 @keyframes s-frame-breathe { 0%, 100% { opacity: .78; } 50% { opacity: 1; } }
@@ -615,9 +631,23 @@ button, input { font-family: inherit; }
 
 // Pause the splash's CSS animations while the tab is hidden (battery) — a single event-driven
 // class toggle, not a per-frame animation loop; the animations themselves stay pure CSS.
-document.addEventListener('visibilitychange', () => {
+//
+// visibilitychange alone is not enough on iOS Safari: when a page is restored from the
+// back-forward cache (bfcache) — the common case of backgrounding Safari or switching apps and
+// returning — WebKit does not reliably re-fire visibilitychange with the correct state, so a
+// tab that was paused before being backgrounded can come back still stuck in .s-paused forever
+// (this is the diagnosed cause of "tiles render but never move" on iPhone). `pageshow` is
+// WebKit's documented signal for a bfcache restore; `focus` is a second defensive trigger for
+// resume paths (e.g. returning to a backgrounded/installed PWA) that fire focus without a
+// matching visibilitychange. All three funnel through the same sync function, and it also runs
+// once immediately so the correct state is set even if the page is ever first painted hidden.
+function syncSplashPause() {
   document.body.classList.toggle('s-paused', document.hidden);
-});
+}
+document.addEventListener('visibilitychange', syncSplashPause);
+window.addEventListener('pageshow', syncSplashPause);
+window.addEventListener('focus', syncSplashPause);
+syncSplashPause();
 
 // ── i18n ─────────────────────────────────────────────────────────────────────
 const TRANS = {

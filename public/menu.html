@@ -159,6 +159,22 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   const isPreview = new URLSearchParams(location.search).get('preview') === '1';
   document.getElementById('btn-pay').href = `/bill?t=${encodeURIComponent(token)}`;
 
+  // ── Guest session (privacy hardening — see server/guest.js) ────────────────────
+  // Shared with index.html's bill page via the same localStorage key, so a guest bouncing
+  // between menu and bill for the same table keeps a single consistent session.
+  function getStoredGuestSession() {
+    try {
+      const raw = localStorage.getItem('nota_guest_session');
+      if (!raw) return undefined;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.t === token ? parsed.gs : undefined;
+    } catch { return undefined; }
+  }
+  function storeGuestSession(gs) {
+    if (!gs) return;
+    try { localStorage.setItem('nota_guest_session', JSON.stringify({ t: token, gs })); } catch {}
+  }
+
   let menuData = null;
   let lastUnpaidLei = 0;
   let searchQuery = '';
@@ -380,9 +396,12 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   async function refreshUnpaidTotal() {
     if (isPreview) { document.getElementById('pay-bar').style.display = 'none'; return; }
     try {
-      const res = await fetch(`/api/table/by-token/${encodeURIComponent(token)}`);
+      const gs = getStoredGuestSession();
+      const url = `/api/table/by-token/${encodeURIComponent(token)}` + (gs ? `?gs=${encodeURIComponent(gs)}` : '');
+      const res = await fetch(url);
       if (!res.ok) return;
       const order = await res.json();
+      if (order.guestSession) storeGuestSession(order.guestSession);
       applyUnpaidItems(order.items);
     } catch {}
   }
@@ -393,8 +412,12 @@ html, body { font-family: 'Manrope', system-ui, sans-serif; background-color: va
   function connectLiveTotal() {
     if (isPreview || !token) return;
     const socket = io({ transports: ['websocket', 'polling'] });
-    socket.on('connect', () => socket.emit('join-table', { token }));
-    socket.on('order-update', data => { lastItems = data.items || []; applyUnpaidItems(lastItems); });
+    socket.on('connect', () => socket.emit('join-table', { token, guestSession: getStoredGuestSession() }));
+    socket.on('order-update', data => {
+      if (data.guestSession) storeGuestSession(data.guestSession);
+      lastItems = data.items || [];
+      applyUnpaidItems(lastItems);
+    });
     socket.on('items-patch', patches => {
       const byId = new Map(lastItems.map(i => [i.id, i]));
       for (const p of patches) { const it = byId.get(p.id); if (it) Object.assign(it, p); }

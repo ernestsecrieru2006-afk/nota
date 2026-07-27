@@ -547,6 +547,20 @@
   </div>
 </div>
 
+<!-- ══ SCREEN: NO ACTIVE ORDER ══════════════════════════════ -->
+<!-- Shown whenever this table token doesn't currently resolve to a real, visible bill (no open
+     order with items, or a stale session from a table that's since turned over to new guests) —
+     see server/guest.js. Neutral by design: never hints at whether an order used to exist. -->
+<div class="screen" id="screen-no-order">
+  <div class="col">
+    <div class="center-screen">
+      <div class="cs-icon"><span class="msym" style="font-size:48px">table_restaurant</span></div>
+      <div class="sec-title" data-i18n="no_order_title">Nu există o comandă activă la această masă</div>
+      <div class="sec-sub" data-i18n="no_order_sub">Cere unui ospătar să vină la masă sau scanează din nou codul QR.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ SCREEN: PAYMENT FAILED ═══════════════════════════════ -->
 <div class="screen" id="screen-fail">
   <div class="col">
@@ -727,6 +741,8 @@
       btn_back_order: 'Înapoi la comandă',
       error_title: 'Masă invalidă',
       error_sub: 'Codul QR nu este valid sau masa nu există. Scanați din nou.',
+      no_order_title: 'Nu există o comandă activă la această masă',
+      no_order_sub: 'Cere unui ospătar să vină la masă sau scanează din nou codul QR.',
       fail_title: 'Plata nu a reușit',
       fail_reason_default: 'A apărut o problemă la procesarea plății.',
       fail_note: 'Nicio sumă nu a fost debitată. Preparatele selectate sunt din nou disponibile.',
@@ -818,6 +834,8 @@
       btn_back_order: 'К заказу',
       error_title: 'Неверный стол',
       error_sub: 'QR-код недействителен или стол не существует. Отсканируйте снова.',
+      no_order_title: 'Нет активного заказа за этим столом',
+      no_order_sub: 'Позовите официанта или отсканируйте QR-код снова.',
       fail_title: 'Оплата не удалась',
       fail_reason_default: 'Произошла ошибка при обработке платежа.',
       fail_note: 'Никакая сумма не была списана. Выбранные позиции снова доступны.',
@@ -926,6 +944,25 @@
   const params = new URLSearchParams(location.search);
   const token  = params.get('t') || '';
 
+  // ── Guest session (privacy hardening — see server/guest.js) ────────────────────
+  // A short-lived, server-issued session binding this browser to a specific order, stored
+  // alongside the table token it was minted for so a stale session never leaks across tables.
+  function getStoredGuestSession() {
+    try {
+      const raw = localStorage.getItem('nota_guest_session');
+      if (!raw) return undefined;
+      const parsed = JSON.parse(raw);
+      return parsed && parsed.t === token ? parsed.gs : undefined;
+    } catch { return undefined; }
+  }
+  function storeGuestSession(gs) {
+    if (!gs) return;
+    try { localStorage.setItem('nota_guest_session', JSON.stringify({ t: token, gs })); } catch {}
+  }
+  function clearGuestSession() {
+    try { localStorage.removeItem('nota_guest_session'); } catch {}
+  }
+
   // Fire-and-forget: only reveal "← Meniu" if this table's restaurant actually has a published
   // menu. Never blocks anything else on the page — the bill flow works identically either way.
   if (token) {
@@ -970,7 +1007,7 @@
   socket.on('connect', () => {
     if (!token) return showScreen('error');
     const memberToken = localStorage.getItem('nota_club_token') || undefined;
-    socket.emit('join-table', { token, paymentId: pendingPaymentId, memberToken });
+    socket.emit('join-table', { token, paymentId: pendingPaymentId, memberToken, guestSession: getStoredGuestSession() });
   });
 
   socket.on('error', ({ message } = {}) => {
@@ -979,6 +1016,17 @@
   });
 
   socket.on('order-update', incoming => {
+    // Privacy hardening: the server withholds bill contents entirely (no open order with items,
+    // or this browser's session was tied to an order the table has since moved on from) — show
+    // the neutral state, never stale/foreign bill data. Drop any stale session so a later
+    // legitimate visit re-binds cleanly instead of getting stuck.
+    if (incoming.neutral) {
+      clearGuestSession();
+      order = null;
+      showScreen('no-order');
+      return;
+    }
+    if (incoming.guestSession) storeGuestSession(incoming.guestSession);
     activeOffer = incoming.activeOffer || null;
     order = incoming;
     if (!resolvedTable && order?.table_number) {
@@ -993,6 +1041,7 @@
       }
     }
     refreshOfferBanner();
+    if (document.getElementById('screen-no-order').classList.contains('active')) showScreen('bill');
     render();
   });
 
