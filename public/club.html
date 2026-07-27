@@ -110,6 +110,30 @@ button, input { font-family: inherit; }
   background: radial-gradient(ellipse 80% 58% at 50% 100%, rgba(0,0,0,.93) 0%, rgba(0,0,0,.72) 42%, transparent 74%);
 }
 
+/* Fixed luminous gold frame around the whole viewport -- sits above the scrolling tiles and
+   stays perfectly still (it's positioned off #screen-splash itself, not the scrolling columns).
+   Inset by the device safe-area so it never sits under a notch/home indicator. The crisp border
+   never animates (so it can't read as blinking); only the glow bloom's opacity breathes, via a
+   separate ::before layer, kept subtle per spec. Highest z-index on the splash, but
+   pointer-events:none + edge-only footprint means it never blocks taps or crowds the copy. */
+.splash-frame {
+  position: fixed; z-index: 5; pointer-events: none;
+  top: env(safe-area-inset-top, 0px); right: env(safe-area-inset-right, 0px);
+  bottom: env(safe-area-inset-bottom, 0px); left: env(safe-area-inset-left, 0px);
+  border: 3px solid rgba(197,160,89,.8);
+  border-radius: 18px;
+}
+.splash-frame::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  box-shadow: 0 0 12px 1px rgba(197,160,89,.5), inset 0 0 26px 3px rgba(197,160,89,.3);
+  animation: s-frame-breathe 4.2s ease-in-out infinite;
+}
+@keyframes s-frame-breathe { 0%, 100% { opacity: .78; } 50% { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  .splash-frame::before { animation: none !important; opacity: .9; }
+}
+.s-paused .splash-frame::before { animation-play-state: paused; }
+
 .splash-content { position: relative; z-index: 2; display: flex; flex-direction: column; align-items: center; }
 .splash-brand { font-size: 12px; font-weight: 700; letter-spacing: .14em; color: var(--text2); text-transform: uppercase; margin-bottom: 10px; }
 .splash-brand span { color: var(--gold-hi); }
@@ -442,6 +466,7 @@ button, input { font-family: inherit; }
     <p class="splash-tagline" id="splash-tagline">Bucură-te de reduceri luând masa la localurile tale preferate.</p>
     <button class="splash-cta" id="btn-splash-join">Alătură-te</button>
   </div>
+  <div class="splash-frame" aria-hidden="true"></div>
 </section>
 
 <!-- ══════════════════════════════ Auth ══════════════════════════════ -->
