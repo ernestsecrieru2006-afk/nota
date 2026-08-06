@@ -34,7 +34,8 @@ import { pool, poolStats } from './db.js';
 import { getOpenOrder, parseIikoWebhook } from './iiko.js';
 import { requestPayment, getPaymentStatus, parseCallbackFields, verifyAndParseCallback, cancelPayment,
          refundPayment, simulatePayment, setMockFailNext, MIA_DEFAULT_MODE,
-         sweepMiaTokenCache, miaTokenCacheSize } from './mia.js';
+         sweepMiaTokenCache, miaTokenCacheSize, testConnection as testMiaConnection,
+         invalidateTokenCacheFor as invalidateMiaTokenCacheFor } from './mia.js';
 import { register, login, me, requireAuth, verifyJWT, sweepLoginAttempts, loginAttemptsSize } from './auth.js';
 import { memberRegister, memberLogin, memberMe, memberReferral, memberStats, getActiveMemberBonus,
          requireMemberAuth, verifyMemberJWT, sweepMemberAttempts, memberAttemptsSize } from './members.js';
@@ -49,28 +50,57 @@ import { resolveGuestOrder } from './guest.js';
 import multer from 'multer';
 import { processAndStore } from './storage.js';
 
-// Per-restaurant maib credentials, decrypted — or null to force mock (see mia.js doc comment).
-// A restaurant is only ever taken out of demo mode by its own maib_status='active' + stored
-// credentials; there is no server-wide fallback that could put a restaurant live by accident.
-async function getRestaurantMiaCreds(restaurantId) {
-  if (!restaurantId) return null;
+// Column names for each maib credential set — 'sandbox' and 'production' are stored completely
+// separately (see setup-db.js) so a restaurant can hold both at once and switch which is live
+// without overwriting the other. env is validated against this map's own keys before ever being
+// interpolated into SQL — never passed through from unvalidated input.
+const MAIB_ENV_COLUMNS = {
+  sandbox:    { clientId: 'maib_sandbox_client_id',    secret: 'maib_sandbox_client_secret_enc',    sig: 'maib_sandbox_signature_key_enc' },
+  production: { clientId: 'maib_production_client_id', secret: 'maib_production_client_secret_enc', sig: 'maib_production_signature_key_enc' },
+};
+
+// Resolves a restaurant's credentials for ONE SPECIFIC env, independent of maib_status and of
+// which env is currently "live". Used for any operation on an EXISTING payment (webhook verify,
+// reconciliation poll, cancel, refund) — that payment must always be checked against the
+// credentials it was actually created under, so a later sandbox↔production switch (or even the
+// restaurant's status later regressing) can never change what an in-flight or historical payment
+// resolves to. Returns null (never throws) if credentials are absent OR fail to decrypt — either
+// way the caller degrades to mock/no-op, exactly as if nothing were configured. A decrypt failure
+// is logged with restaurant+env context here (see also secrets.js's own generic log line) so it's
+// distinguishable in ops logs from "never configured".
+async function getRestaurantMiaCredsForEnv(restaurantId, env) {
+  if (!restaurantId || !MAIB_ENV_COLUMNS[env]) return null;
+  const cols = MAIB_ENV_COLUMNS[env];
   const { rows: [rest] } = await pool.query(
-    `SELECT maib_status, maib_env, maib_client_id, maib_client_secret_enc, maib_signature_key_enc
+    `SELECT ${cols.clientId} AS client_id, ${cols.secret} AS secret_enc, ${cols.sig} AS sig_enc
      FROM restaurants WHERE id=$1`,
     [restaurantId]
   );
-  if (!rest || rest.maib_status !== 'active' || !rest.maib_client_id || !rest.maib_client_secret_enc) return null;
-  return {
-    clientId:     rest.maib_client_id,
-    clientSecret: decryptSecret(rest.maib_client_secret_enc),
-    signatureKey: decryptSecret(rest.maib_signature_key_enc),
-    env:          rest.maib_env,
-  };
+  if (!rest || !rest.client_id || !rest.secret_enc) return null;
+  const clientSecret = decryptSecret(rest.secret_enc);
+  if (!clientSecret) {
+    console.error(`[maib-creds] restaurant ${restaurantId} (${env}): stored client secret failed to decrypt — degrading to mock for this operation`);
+    return null;
+  }
+  return { clientId: rest.client_id, clientSecret, signatureKey: decryptSecret(rest.sig_enc) || null, env };
 }
 
+// Resolves the restaurant's CURRENTLY LIVE credentials — used only to INITIATE a new payment.
+// A restaurant is only ever taken out of demo mode by its own maib_status='active' AND its live
+// env's credentials being present and decryptable; there is no server-wide fallback that could
+// put a restaurant live by accident.
+async function getRestaurantMiaCreds(restaurantId) {
+  if (!restaurantId) return null;
+  const { rows: [rest] } = await pool.query(`SELECT maib_status, maib_env FROM restaurants WHERE id=$1`, [restaurantId]);
+  if (!rest || rest.maib_status !== 'active' || !rest.maib_env) return null;
+  return getRestaurantMiaCredsForEnv(restaurantId, rest.maib_env);
+}
+
+// Returns { restaurant_id, mia_env } | null — mia_env is the env THIS payment was actually
+// created under, which the webhook handler must verify against, not whatever's live right now.
 async function getRestaurantForQrId(qrId) {
-  const { rows: [row] } = await pool.query(`SELECT restaurant_id FROM payments WHERE mia_payment_id=$1`, [qrId]);
-  return row?.restaurant_id ?? null;
+  const { rows: [row] } = await pool.query(`SELECT restaurant_id, mia_env FROM payments WHERE mia_payment_id=$1`, [qrId]);
+  return row || null;
 }
 
 // Per-restaurant Poster credentials, decrypted — or null to leave the attribution chain's POS
@@ -548,8 +578,11 @@ app.post('/api/payment/webhook', limiterPaymentHttp, async (req, res) => {
     const parsed = parseCallbackFields(req.body);
     if (!parsed) return res.status(401).send('Bad payload');
 
-    const restaurantId = parsed.result?.qrId ? await getRestaurantForQrId(parsed.result.qrId) : null;
-    const creds = restaurantId ? await getRestaurantMiaCreds(restaurantId) : null;
+    // The payment's OWN recorded env, not whatever the restaurant currently has live — a
+    // sandbox↔production switch after this QR was created must never change which signature
+    // key the webhook is checked against.
+    const pmtRow = parsed.result?.qrId ? await getRestaurantForQrId(parsed.result.qrId) : null;
+    const creds = pmtRow ? await getRestaurantMiaCredsForEnv(pmtRow.restaurant_id, pmtRow.mia_env) : null;
     if (!creds) return res.status(401).send('Bad signature');
 
     const payload = verifyAndParseCallback(parsed, creds.signatureKey);
@@ -683,7 +716,7 @@ app.post('/api/dashboard/payments/:id/refund', requireAuth, async (req, res) => 
   try {
     await client.query('BEGIN');
     const { rows: [pmt] } = await client.query(
-      `SELECT id, status, mia_pay_id, amount_lei, tip_lei
+      `SELECT id, status, mia_pay_id, mia_env, amount_lei, tip_lei
        FROM payments WHERE id = $1 AND restaurant_id = $2 FOR UPDATE`,
       [paymentId, rId]
     );
@@ -705,7 +738,8 @@ app.post('/api/dashboard/payments/:id/refund', requireAuth, async (req, res) => 
 
     let refund;
     try {
-      const miaCreds = await getRestaurantMiaCreds(rId);
+      // The env THIS payment was made under, not whichever is live now — see mia_env doc comment.
+      const miaCreds = await getRestaurantMiaCredsForEnv(rId, pmt.mia_env);
       refund = await refundPayment({
         payId:  pmt.mia_pay_id,
         reason: (req.body && req.body.reason) || 'Refund solicitat de restaurant',
@@ -2017,8 +2051,7 @@ app.get('/api/dashboard/onboarding', requireAuth, async (req, res) => {
       pool.query(
         `SELECT name, email, address, city, phone, timezone, logo_url, google_review_url,
                 opening_hours, table_count, onboarding_step, onboarding_complete, menu_skipped,
-                menu_published, qr_downloaded, maib_status, maib_env, maib_client_id,
-                (maib_client_secret_enc IS NOT NULL) AS maib_has_credentials
+                menu_published, qr_downloaded, maib_status, maib_env
          FROM restaurants WHERE id=$1`,
         [rId]
       ),
@@ -2138,37 +2171,149 @@ app.put('/api/dashboard/tables/:id', requireAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// maib credentials — tenant-scoped, encrypted at rest, never echoed back (not even encrypted
-// form). clientSecret/signatureKey omitted on an update keep whatever's already stored, so a
-// restaurant can change just its status (e.g. confirm activation) without re-pasting secrets.
+// maib credentials — tenant-scoped, encrypted at rest, NEVER echoed back (not even encrypted
+// form, not even a masked partial). Sandbox and production are two fully independent credential
+// sets (see MAIB_ENV_COLUMNS / setup-db.js) so a restaurant can hold both and switch which is
+// live without overwriting the other. clientSecret/signatureKey omitted on an update keep
+// whatever's already stored — the dashboard never needs to read a secret back to "keep" it.
+//
+// GET returns presence/health flags only: whether each field is set, and whether the stored
+// secret actually decrypts right now (credentialError) — never the values themselves. A true
+// credentialError means the stored ciphertext exists but decryptSecret returned null (corrupt
+// data, or JWT_SECRET rotated with no CREDENTIAL_ENCRYPTION_KEY set) — the dashboard shows this
+// as "needs re-entry", and getRestaurantMiaCreds/-ForEnv already independently degrade to mock
+// for actual payments the same way, so nothing here can put a broken credential into use.
+app.get('/api/dashboard/maib-credentials', requireAuth, async (req, res) => {
+  try {
+    const { rows: [r] } = await pool.query(
+      `SELECT maib_status, maib_status_updated_at, maib_env,
+              maib_sandbox_client_id, maib_sandbox_client_secret_enc, maib_sandbox_signature_key_enc,
+              maib_production_client_id, maib_production_client_secret_enc, maib_production_signature_key_enc
+       FROM restaurants WHERE id=$1`,
+      [req.restaurant.restaurantId]
+    );
+    if (!r) return res.status(404).json({ error: 'Not found' });
+
+    const envSummary = prefix => {
+      const secretEnc = r[`maib_${prefix}_client_secret_enc`];
+      const hasSecret = !!secretEnc;
+      // credentialError only makes sense to check when a secret is actually stored — an empty
+      // field isn't an "error", it's just not configured yet.
+      const credentialError = hasSecret && decryptSecret(secretEnc) === null;
+      return {
+        clientId: r[`maib_${prefix}_client_id`] || null,
+        hasSecret,
+        hasSignatureKey: !!r[`maib_${prefix}_signature_key_enc`],
+        credentialError,
+      };
+    };
+
+    res.json({
+      status: r.maib_status,
+      statusUpdatedAt: r.maib_status_updated_at,
+      liveEnv: r.maib_env || null,
+      sandbox: envSummary('sandbox'),
+      production: envSummary('production'),
+    });
+  } catch (err) {
+    console.error('[maib-credentials GET]', err.message);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
 app.post('/api/dashboard/maib-credentials', requireAuth, async (req, res) => {
-  const { clientId, clientSecret, signatureKey, env, status } = req.body || {};
-  if (env && !['sandbox', 'production'].includes(env)) return res.status(400).json({ error: 'Invalid env' });
+  const { credEnv, clientId, clientSecret, signatureKey, status } = req.body || {};
+  if (!['sandbox', 'production'].includes(credEnv)) return res.status(400).json({ error: 'Invalid credEnv' });
   if (status && !MAIB_STATUSES.includes(status)) return res.status(400).json({ error: 'Invalid status' });
   if (clientId && (typeof clientId !== 'string' || clientId.length > 200)) return res.status(400).json({ error: 'Invalid clientId' });
   try {
     const rId = req.restaurant.restaurantId;
+    const cols = MAIB_ENV_COLUMNS[credEnv];
     const sets = [];
     const params = [];
     const push = (col, val) => { params.push(val); sets.push(`${col} = $${params.length}`); };
 
-    if (clientId !== undefined) push('maib_client_id', clientId || null);
-    if (clientSecret) push('maib_client_secret_enc', encryptSecret(clientSecret));
-    if (signatureKey) push('maib_signature_key_enc', encryptSecret(signatureKey));
-    if (env) push('maib_env', env);
+    if (clientId !== undefined) push(cols.clientId, clientId || null);
+    if (clientSecret) push(cols.secret, encryptSecret(clientSecret));
+    if (signatureKey) push(cols.sig, encryptSecret(signatureKey));
+
+    let statusChanged = false;
     if (status) {
       push('maib_status', status);
+      statusChanged = true;
     } else if (clientId && clientSecret) {
-      // Submitting real credentials for the first time is itself evidence of progress.
-      push(`maib_status`, 'in_progress');
+      // Submitting real credentials for the first time is itself evidence of progress. Only
+      // advances from not_started — doesn't downgrade an already-active restaurant just because
+      // it's editing its OTHER env's credentials.
+      const { rows: [cur] } = await pool.query('SELECT maib_status FROM restaurants WHERE id=$1', [rId]);
+      if (cur?.maib_status === 'not_started') { push('maib_status', 'in_progress'); statusChanged = true; }
     }
+    if (statusChanged) push('maib_status_updated_at', new Date());
     if (!sets.length) return res.status(400).json({ error: 'Nimic de salvat' });
 
     params.push(rId);
     await pool.query(`UPDATE restaurants SET ${sets.join(', ')} WHERE id=$${params.length}`, params);
+
+    // A changed clientSecret must invalidate any cached token for this env's clientId — otherwise
+    // a stale cached access token (from before the edit) could keep authenticating real calls
+    // even though we just told the owner their new secret was saved. Read the clientId back from
+    // the DB rather than trusting the request body, since this request may have left clientId
+    // unset (meaning "keep the existing one") while still changing the secret.
+    if (clientSecret) {
+      const { rows: [after] } = await pool.query(`SELECT ${cols.clientId} AS client_id FROM restaurants WHERE id=$1`, [rId]);
+      invalidateMiaTokenCacheFor(after?.client_id);
+    }
+
     res.json({ ok: true });
   } catch (err) {
-    console.error('[maib-credentials]', err.message); // never log clientSecret/signatureKey themselves
+    console.error('[maib-credentials POST]', err.message); // never log clientSecret/signatureKey themselves
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// Switches which credential set is actually used to initiate new guest payments. Going live on
+// production specifically requires an explicit confirmation flag from the client (backing the
+// UI's own confirm dialog) — this is enforced server-side, not just in the dashboard, since this
+// single flag is the entire difference between "testing" and "real money moves."
+app.post('/api/dashboard/maib-set-live-env', requireAuth, async (req, res) => {
+  const { env, confirmProduction } = req.body || {};
+  if (!['sandbox', 'production'].includes(env)) return res.status(400).json({ error: 'Invalid env' });
+  if (env === 'production' && confirmProduction !== true) {
+    return res.status(400).json({ error: 'Confirmare necesară pentru a trece pe producție' });
+  }
+  try {
+    const rId = req.restaurant.restaurantId;
+    const cols = MAIB_ENV_COLUMNS[env];
+    const { rows: [r] } = await pool.query(
+      `SELECT ${cols.clientId} AS client_id, ${cols.secret} AS secret_enc FROM restaurants WHERE id=$1`, [rId]
+    );
+    if (!r?.client_id || !r?.secret_enc) {
+      return res.status(400).json({ error: `Introdu mai întâi datele de ${env === 'production' ? 'producție' : 'sandbox'}.` });
+    }
+    await pool.query('UPDATE restaurants SET maib_env=$1 WHERE id=$2', [env, rId]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('[maib-set-live-env]', err.message);
+    res.status(500).json({ error: 'Eroare internă' });
+  }
+});
+
+// Real token-generation call against maib using the restaurant's OWN saved credentials for the
+// given env — lets an owner verify their setup themselves instead of finding out only when a
+// real guest payment fails. Tests the SAVED credentials (not values passed in the request body —
+// there's no legitimate reason to test anything but what's actually stored, and accepting
+// arbitrary creds in the body here would be a pointless way to widen this endpoint's blast radius
+// for no UX benefit). Never returns the credentials themselves, only ok/error.
+app.post('/api/dashboard/maib-test-connection', requireAuth, async (req, res) => {
+  const { env } = req.body || {};
+  if (!['sandbox', 'production'].includes(env)) return res.status(400).json({ error: 'Invalid env' });
+  try {
+    const creds = await getRestaurantMiaCredsForEnv(req.restaurant.restaurantId, env);
+    if (!creds) return res.json({ ok: false, error: 'Date de acces lipsă sau incomplete' });
+    const result = await testMiaConnection(creds);
+    res.json(result);
+  } catch (err) {
+    console.error('[maib-test-connection]', err.message);
     res.status(500).json({ error: 'Eroare internă' });
   }
 });
@@ -2287,14 +2432,33 @@ function requireAdminAuth(req, res, next) {
   return res.status(401).json({ error: 'Unauthorized' });
 }
 
+// maib_status_updated_at + per-env credential presence (booleans only — never the values) let us
+// see who's stuck at a given onboarding step and for how long. credentialError is computed live
+// (decryptSecret on the stored ciphertext) rather than stored, so it can never go stale.
 app.get('/api/admin/restaurants', requireAdminAuth, async (_req, res) => {
   try {
     const { rows } = await pool.query(`
       SELECT id, name, email, table_count, onboarding_step, onboarding_complete,
-             menu_published, menu_skipped, qr_downloaded, maib_status, maib_env, created_at
+             menu_published, menu_skipped, qr_downloaded,
+             maib_status, maib_status_updated_at, maib_env,
+             (maib_sandbox_client_id IS NOT NULL)    AS maib_sandbox_configured,
+             (maib_production_client_id IS NOT NULL) AS maib_production_configured,
+             maib_sandbox_client_secret_enc, maib_production_client_secret_enc,
+             created_at
       FROM restaurants ORDER BY created_at DESC
     `);
-    res.json(rows);
+    const out = rows.map(r => ({
+      id: r.id, name: r.name, email: r.email, table_count: r.table_count,
+      onboarding_step: r.onboarding_step, onboarding_complete: r.onboarding_complete,
+      menu_published: r.menu_published, menu_skipped: r.menu_skipped, qr_downloaded: r.qr_downloaded,
+      maib_status: r.maib_status, maib_status_updated_at: r.maib_status_updated_at, maib_env: r.maib_env,
+      maib_sandbox_configured: r.maib_sandbox_configured,
+      maib_production_configured: r.maib_production_configured,
+      maib_sandbox_credential_error: !!(r.maib_sandbox_client_secret_enc && decryptSecret(r.maib_sandbox_client_secret_enc) === null),
+      maib_production_credential_error: !!(r.maib_production_client_secret_enc && decryptSecret(r.maib_production_client_secret_enc) === null),
+      created_at: r.created_at,
+    }));
+    res.json(out);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -3187,7 +3351,7 @@ io.on('connection', socket => {
       if (paymentId && typeof paymentId === 'string' && paymentId.length < 128) {
         try {
           const { rows: [pmt] } = await pool.query(
-            `SELECT p.status, p.amount_lei, p.tip_lei, p.mode
+            `SELECT p.status, p.amount_lei, p.tip_lei, p.mode, p.mia_env
              FROM payments p JOIN orders o ON o.id = p.order_id
              WHERE p.mia_payment_id = $1 AND o.restaurant_id = $2`,
             [paymentId, resolvedRestaurantId]
@@ -3197,7 +3361,7 @@ io.on('connection', socket => {
               socket.emit('payment-confirmed', {
                 amountLei: pmt.amount_lei, tipLei: pmt.tip_lei,
                 total: Number(pmt.amount_lei) + Number(pmt.tip_lei),
-                mode: pmt.mode, itemIds: [],
+                mode: pmt.mode, itemIds: [], isMock: !pmt.mia_env,
               });
             } else if (['failed', 'expired', 'cancelled', 'duplicate'].includes(pmt.status)) {
               socket.emit('payment-failed', { reason: 'Plata nu a putut fi confirmată' });
@@ -3377,9 +3541,9 @@ io.on('connection', socket => {
         memberId: currentMemberId,
       });
 
-      let payment;
+      let payment, miaCreds;
       try {
-        const miaCreds = await getRestaurantMiaCreds(currentRestaurantId);
+        miaCreds = await getRestaurantMiaCreds(currentRestaurantId);
         payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl }, miaCreds);
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
@@ -3396,13 +3560,16 @@ io.on('connection', socket => {
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
       }
 
-      await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
+      // mia_env: recorded once, here, at creation — every later operation on this payment
+      // (webhook, reconciliation, cancel) must check against THIS env, not whatever's live now.
+      await pool.query(`UPDATE payments SET mia_payment_id=$1, mia_env=$2 WHERE id=$3`, [payment.paymentId, miaCreds?.env || null, dbPmtId]);
 
       const meta = {
         dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl,
         restaurantId: currentRestaurantId, orderId: order.id,
         amountLei: netAmount, tipLei: tip, grossLei: gross, discountLei,
         mode: 'claimed', itemIds: mine.map(i => i.id), memberId: currentMemberId,
+        env: miaCreds?.env || null, // null ⇒ mock — used to label the guest UI "demo mode"
         bonusApplied: !!(memberBonus && memberBonus.bonus_pct > 0),
         bonusPct: memberBonus?.bonus_pct || 0,
         bonusExpires: memberBonus?.bonus_expires || null,
@@ -3475,22 +3642,23 @@ io.on('connection', socket => {
         memberId: currentMemberId,
       });
 
-      let payment;
+      let payment, miaCreds;
       try {
-        const miaCreds = await getRestaurantMiaCreds(currentRestaurantId);
+        miaCreds = await getRestaurantMiaCreds(currentRestaurantId);
         payment = await requestPayment({ amountLei: netAmount, tipLei: tip, orderId: order.id, tableNumber: tbl }, miaCreds);
       } catch (err) {
         await pool.query(`UPDATE payments SET status='failed' WHERE id=$1`, [dbPmtId]);
         return ack?.({ error: 'Plata nu a putut fi inițiată' });
       }
 
-      await pool.query(`UPDATE payments SET mia_payment_id=$1 WHERE id=$2`, [payment.paymentId, dbPmtId]);
+      await pool.query(`UPDATE payments SET mia_payment_id=$1, mia_env=$2 WHERE id=$3`, [payment.paymentId, miaCreds?.env || null, dbPmtId]);
 
       const meta = {
         dbPaymentId: dbPmtId, socketId: socket.id, tableNumber: tbl,
         restaurantId: currentRestaurantId, orderId: order.id,
         amountLei: netAmount, tipLei: tip, grossLei: grossAmount, discountLei,
         mode: 'flat', memberId: currentMemberId,
+        env: miaCreds?.env || null, // null ⇒ mock — used to label the guest UI "demo mode"
         bonusApplied: !!(memberBonus && memberBonus.bonus_pct > 0),
         bonusPct: memberBonus?.bonus_pct || 0,
         bonusExpires: memberBonus?.bonus_expires || null,
@@ -3733,7 +3901,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) 
     // Server restart: recover from DB
     const { rows: [pmt] } = await pool.query(
       `SELECT p.id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
-              p.gross_lei, p.discount_lei, p.member_id, o.table_number, o.restaurant_id
+              p.gross_lei, p.discount_lei, p.member_id, p.mia_env, o.table_number, o.restaurant_id
        FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
       [miaPaymentId]
@@ -3743,7 +3911,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) 
   }
 
   const { dbPaymentId, socketId, tableNumber, restaurantId, orderId, amountLei, tipLei,
-          grossLei, discountLei = 0, mode, itemIds, timer, memberId = null,
+          grossLei, discountLei = 0, mode, itemIds, timer, memberId = null, env = null,
           bonusApplied = false, bonusPct = 0, bonusExpires = null } = meta;
   if (timer) clearTimeout(timer);
 
@@ -3828,6 +3996,7 @@ async function settlePayment(miaPaymentId, confirmedMiaId = null, payId = null) 
         orderId,
         restaurantId,
         googleReviewUrl: rest?.google_review_url || null,
+        isMock: !env, // no real provider env ⇒ this "payment" never touched real money
       });
     }
 
@@ -3865,7 +4034,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
   const meta = paymentMeta.get(miaPaymentId);
   if (!meta) {
     const { rows: [pmt] } = await pool.query(
-      `SELECT p.id, p.socket_id, p.mode, p.order_id, p.member_id, p.mia_payment_id, o.table_number, o.restaurant_id
+      `SELECT p.id, p.socket_id, p.mode, p.order_id, p.member_id, p.mia_payment_id, p.mia_env, o.table_number, o.restaurant_id
        FROM payments p JOIN orders o ON o.id = p.order_id
        WHERE p.mia_payment_id = $1 AND p.status = 'pending'`,
       [miaPaymentId]
@@ -3874,7 +4043,7 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     return;
   }
 
-  const { dbPaymentId, socketId, tableNumber, restaurantId, mode, timer,
+  const { dbPaymentId, socketId, tableNumber, restaurantId, mode, timer, env = null,
           memberId = null, bonusApplied = false, bonusPct = 0, bonusExpires = null } = meta;
   if (timer) clearTimeout(timer);
 
@@ -3910,7 +4079,8 @@ async function releasePayment(miaPaymentId, reason = 'Plata a eșuat') {
     await client.query('COMMIT');
 
     // Best-effort: tell maib this QR is dead so it can't be paid after we've released the items.
-    getRestaurantMiaCreds(restaurantId).then(creds => cancelPayment(miaPaymentId, reason, creds));
+    // Uses THIS payment's own recorded env, not whatever's live now — see mia_env doc comment.
+    getRestaurantMiaCredsForEnv(restaurantId, env).then(creds => cancelPayment(miaPaymentId, reason, creds));
 
     const s = io.sockets.sockets.get(socketId);
     if (s) s.emit('payment-failed', { reason });
@@ -3991,6 +4161,7 @@ async function settleFromDB(pmt, confirmedMiaId = null, payId = null) {
         orderId: pmt.order_id,
         restaurantId: pmt.restaurant_id,
         googleReviewUrl: rest?.google_review_url || null,
+        isMock: !pmt.mia_env,
       });
     }
 
@@ -4041,7 +4212,8 @@ async function releaseFromDB(pmt, reason = '') {
     }
     await client.query('COMMIT');
 
-    if (pmt.mia_payment_id) getRestaurantMiaCreds(pmt.restaurant_id).then(creds => cancelPayment(pmt.mia_payment_id, reason, creds));
+    // Uses THIS payment's own recorded env, not whatever's live now — see mia_env doc comment.
+    if (pmt.mia_payment_id) getRestaurantMiaCredsForEnv(pmt.restaurant_id, pmt.mia_env).then(creds => cancelPayment(pmt.mia_payment_id, reason, creds));
 
     const [order, activeOffer] = await Promise.all([
       getOpenOrder(pmt.table_number, pmt.restaurant_id),
@@ -4068,7 +4240,7 @@ function cleanupMeta(miaPaymentId, socketId) {
 async function reconcilePendingPayments() {
   try {
     const { rows: pending } = await pool.query(`
-      SELECT p.id, p.mia_payment_id, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
+      SELECT p.id, p.mia_payment_id, p.mia_env, p.socket_id, p.mode, p.amount_lei, p.tip_lei, p.order_id,
              p.gross_lei, p.discount_lei, p.member_id, o.table_number, o.restaurant_id, o.created_at
       FROM payments p
       JOIN orders o ON o.id = p.order_id
@@ -4090,8 +4262,9 @@ async function reconcilePendingPayments() {
         continue;
       }
 
-      // 30s–3min and this restaurant has an active maib merchant → poll for status
-      const miaCreds = miaId ? await getRestaurantMiaCreds(pmt.restaurant_id) : null;
+      // 30s–3min and this payment was made under real (non-mock) credentials → poll for status.
+      // Uses the payment's OWN recorded env, not whatever's live now — see mia_env doc comment.
+      const miaCreds = miaId ? await getRestaurantMiaCredsForEnv(pmt.restaurant_id, pmt.mia_env) : null;
       if (ageMs > 30_000 && miaId && miaCreds) {
         try {
           const { status, payId } = await getPaymentStatus(miaId, miaCreds);

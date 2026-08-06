@@ -238,6 +238,9 @@
     .mia-ttl   { font-size: 18px; font-weight: 700; margin-bottom: 4px; }
     .mia-sub   { font-size: 14px; color: var(--on-sv); margin-bottom: 22px; }
     .spinner   { width: 36px; height: 36px; margin: 0 auto; border: 3px solid rgba(0,0,0,0.1); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    /* Demo-mode: shown whenever a payment isn't backed by real maib credentials — must never let
+       a guest believe money moved when it didn't. Amber, not red — this isn't an error. */
+    .demo-banner { display: flex; align-items: center; gap: 8px; background: #fef3c7; border: 1px solid #f5cb7a; color: #92610d; border-radius: 10px; padding: 10px 14px; font-size: 12.5px; font-weight: 700; margin: 0 0 16px; text-align: left; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
     #ov-suc    { align-items: flex-start; }
@@ -588,6 +591,9 @@
 <div class="overlay" id="ov-mia">
   <div class="mia-sheet">
     <div class="sh-handle"></div>
+    <!-- Shown only when this payment isn't backed by real maib credentials (restaurant hasn't
+         activated MIA yet) — must be unmistakable that no real money is about to move. -->
+    <div class="demo-banner" id="mia-demo-banner" style="display:none" data-i18n="demo_banner_text">⚠️ Mod demo — nicio plată reală nu are loc</div>
     <div class="mia-ico">M</div>
     <div class="mia-ttl" data-i18n="mia_processing_title">Se procesează plata</div>
     <div class="mia-sub" data-i18n="mia_processing_sub">Așteptăm confirmarea băncii…</div>
@@ -604,6 +610,7 @@
 <div class="overlay" id="ov-suc">
   <div class="suc-sheet">
     <div class="suc-inner">
+      <div class="demo-banner" id="suc-demo-banner" style="display:none" data-i18n="demo_banner_text">⚠️ Mod demo — nicio plată reală nu are loc</div>
       <div class="suc-hero">
         <div class="suc-icon">✓</div>
         <div class="suc-ttl" data-i18n="suc_title">Plată confirmată!</div>
@@ -750,6 +757,7 @@
       mia_processing_title: 'Se procesează plata',
       mia_processing_sub: 'Așteptăm confirmarea băncii…',
       mia_open_app: 'Deschide în aplicația MIA',
+      demo_banner_text: '⚠️ Mod demo — nicio plată reală nu are loc',
       suc_title: 'Plată confirmată!',
       receipt_hdr: 'Bon Fiscal Electronic',
       rcpt_tip: 'Bacșiș',
@@ -843,6 +851,7 @@
       mia_processing_title: 'Обрабатываем платёж',
       mia_processing_sub: 'Ожидаем подтверждения банка…',
       mia_open_app: 'Открыть в приложении MIA',
+      demo_banner_text: '⚠️ Демо-режим — реальный платёж не выполняется',
       suc_title: 'Оплата подтверждена!',
       receipt_hdr: 'Электронный фискальный чек',
       rcpt_tip: 'Чаевые',
@@ -1086,10 +1095,11 @@
   });
 
   socket.on('payment-confirmed', ({ amountLei, tipLei, total, mode: paidMode, itemIds = [], savingLei,
-                                    dbPaymentId, orderId, restaurantId: confirmedRestaurantId, googleReviewUrl }) => {
+                                    dbPaymentId, orderId, restaurantId: confirmedRestaurantId, googleReviewUrl, isMock }) => {
     confirming       = false;
     pendingPaymentId = null;
     document.getElementById('ov-mia').classList.remove('show');
+    document.getElementById('suc-demo-banner').style.display = isMock ? '' : 'none';
 
     const tva = Number(total) * 20 / 120;
     const now = new Date().toLocaleDateString('ro-MD', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
@@ -1466,9 +1476,11 @@
     payTotal  = net + payTipLei;
 
     document.getElementById('ov-mia').classList.add('show');
-    // Reset from any previous attempt — only show QR/link again if this ack actually has one.
+    // Reset from any previous attempt — only show QR/link again if this ack actually has one,
+    // and hide the demo banner until we actually know (server hasn't responded yet).
     document.getElementById('mia-qr-wrap').style.display = 'none';
     document.getElementById('mia-qr-svg').innerHTML = '';
+    document.getElementById('mia-demo-banner').style.display = 'none';
 
     const deviceId = localStorage.getItem('nota_device_id') || null;
 
@@ -1481,6 +1493,9 @@
         return;
       }
       if (ack.paymentId) pendingPaymentId = ack.paymentId;
+      // No real maib credentials behind this payment — must be unmistakable to the guest that
+      // no real money is about to move, not just silent to match the (also mock) success screen.
+      document.getElementById('mia-demo-banner').style.display = ack._mock ? '' : 'none';
       // Real (sandbox/production) MIA payment: guest is already on their phone, so offer a
       // tap-to-open link into the MIA app plus a QR they can show/scan as a fallback.
       if (ack.miaQrSvg && ack.deepLinkUrl) {

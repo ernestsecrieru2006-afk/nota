@@ -795,13 +795,14 @@ html, body {
 .export-csv-btn { background:transparent; border:1px solid var(--border); color:var(--muted); padding:6px 12px; border-radius:20px; font-size:11px; font-weight:600; cursor:pointer; font-family:inherit; transition:all .15s; }
 .export-csv-btn:hover { border-color:var(--em); color:var(--em); }
 /* ── Onboarding banners ──────────────────────────────────────────────────── */
-#demo-mode-banner, #setup-banner {
+#demo-mode-banner, #setup-banner, #maib-cred-error-banner {
   display: none; align-items: center; justify-content: center; gap: 14px;
   padding: 9px 16px; font-size: 12.5px; font-weight: 600; text-align: center;
 }
 #demo-mode-banner { background: var(--amber-bg); color: var(--amber-hi); border-bottom: 1px solid rgba(201,122,69,.3); }
 #setup-banner { background: var(--blue-bg); color: var(--blue); border-bottom: 1px solid rgba(108,147,184,.3); }
-#setup-banner button, #demo-mode-banner button {
+#maib-cred-error-banner { background: var(--red-bg); color: var(--red); border-bottom: 1px solid rgba(217,96,92,.3); }
+#setup-banner button, #demo-mode-banner button, #maib-cred-error-banner button {
   background: none; border: 1px solid currentColor; color: inherit; font-family: inherit;
   font-size: 12px; font-weight: 700; padding: 4px 12px; border-radius: 6px; cursor: pointer;
 }
@@ -943,6 +944,10 @@ html, body {
 <!-- ══ DASHBOARD ══════════════════════════════════════════ -->
 <div id="dashboard">
 
+  <div id="maib-cred-error-banner" style="display:none">
+    <span>⚠️ Datele de acces maib salvate nu pot fi citite — plățile au revenit la modul demo. Te rugăm să le introduci din nou.</span>
+    <button id="maib-cred-error-btn">Reintrodu datele</button>
+  </div>
   <div id="demo-mode-banner">
     <span>⚠️ Mod demo — plățile nu sunt reale</span>
     <button id="demo-mode-btn">Activează plăți reale</button>
@@ -1808,15 +1813,18 @@ html, body {
       <!-- Step 5 — Plăți -->
       <div class="ob-step" data-ob-step="5">
         <div class="ob-title">Plăți reale prin MIA</div>
-        <div class="ob-sub">Pentru a accepta plăți reale, restaurantul trebuie să activeze serviciul MIA QR cu maib (banca ta). Acest pas depinde de maib, nu de noi — îl urmărim separat, nu te blocăm.</div>
+        <div class="ob-sub">Restaurantul aplică direct la maib (banca ta) pentru serviciul MIA QR Merchant — noi nu suntem intermediar. Primești mai întâi date de acces de <strong>sandbox</strong> (testare, fără bani reali), apoi, când ești gata, date de <strong>producție</strong>. Le introduci mai jos; acest pas depinde de maib, nu de noi — îl urmărim separat, nu te blocăm.</div>
 
         <div class="ob-demo-notice" id="ob-demo-notice">⚠️ Mod demo — plățile nu sunt reale până când activarea maib e confirmată.</div>
+        <div class="ob-demo-notice" id="ob-cred-error-notice" style="display:none;background:var(--red-bg);border-color:var(--red-bd, var(--red));color:var(--red)">
+          ⚠️ Datele de acces salvate nu pot fi citite (posibil corupte) — te rugăm să le introduci din nou mai jos.
+        </div>
 
         <div class="ob-maib-checklist">
           <strong>Ce îți cere maib:</strong><br>
           • Cont de business activ la maib (IDNO)<br>
           • Cerere de activare serviciu MIA QR Merchant<br>
-          • Datele de acces (Client ID / Client Secret / Signature Key) primite de la maib
+          • Datele de acces (Client ID / Client Secret / Signature Key) — primești un set separat pentru sandbox și unul pentru producție
         </div>
 
         <div class="offer-field" style="margin-bottom:14px">
@@ -1826,25 +1834,30 @@ html, body {
             <div class="ob-status-opt" data-ob-status="in_progress">În curs</div>
             <div class="ob-status-opt" data-ob-status="active">Activ</div>
           </div>
+          <div id="ob-status-updated-note" style="font-size:11px;color:var(--muted);margin-top:6px"></div>
         </div>
 
+        <div class="style-toggle" style="margin-bottom:14px">
+          <button type="button" class="style-opt sel" id="ob-credenv-tab-sandbox" data-cred-env="sandbox">Sandbox (testare)</button>
+          <button type="button" class="style-opt" id="ob-credenv-tab-production" data-cred-env="production">Producție</button>
+        </div>
+
+        <div id="ob-live-env-note" style="font-size:12px;color:var(--text2);margin-bottom:12px"></div>
+
         <div class="offer-form-grid">
-          <div class="offer-field"><label>Mediu</label>
-            <select id="ob-maib-env">
-              <option value="sandbox">Sandbox (testare)</option>
-              <option value="production">Producție</option>
-            </select>
-          </div>
           <div class="offer-field"><label>Client ID</label><input type="text" id="ob-maib-client-id" placeholder="de la maib"></div>
           <div class="offer-field"><label>Client Secret</label><input type="password" id="ob-maib-client-secret" placeholder="•••••• (lasă gol ca să păstrezi valoarea salvată)"></div>
           <div class="offer-field"><label>Signature Key</label><input type="password" id="ob-maib-signature-key" placeholder="•••••• (lasă gol ca să păstrezi valoarea salvată)"></div>
         </div>
         <div id="ob-maib-saved-note" style="font-size:11.5px;color:var(--muted);margin-bottom:10px"></div>
 
-        <div class="offer-form-actions" style="margin-bottom:18px">
+        <div class="offer-form-actions" style="margin-bottom:10px;flex-wrap:wrap">
           <button class="btn-save-offer" id="btn-ob-save-maib">Salvează</button>
+          <button class="btn-cancel-offer" id="btn-ob-test-maib" type="button">Testează conexiunea</button>
+          <button class="btn-cancel-offer" id="btn-ob-set-live" type="button"></button>
           <a class="btn-cancel-offer" style="text-decoration:none" href="mailto:ernest@paynota.com?subject=Ajutor%20activare%20MIA%20QR">Contactează-ne pentru ajutor</a>
         </div>
+        <div id="ob-maib-test-result" style="font-size:12px;margin-bottom:18px"></div>
 
         <div class="ob-actions">
           <button class="ob-skip-btn" data-ob-next="5">Continuă mai târziu</button>
@@ -2135,8 +2148,19 @@ async function loadOnboarding(autoOpen) {
 function updateOnboardingBanners() {
   if (!onboardingData) return;
   document.getElementById('setup-banner').style.display = onboardingData.onboarding_complete ? 'none' : 'flex';
+
+  // A decrypt failure on the LIVE env's stored secret gets its own distinct red banner — this is
+  // not "haven't set it up yet" (the amber demo-mode banner below), it's "was working, now
+  // broken, needs action" — and getRestaurantMiaCreds already independently forces mock for
+  // actual payments the same way, so this banner is purely a "come fix this" signal, never a
+  // gate on payment safety itself.
+  const liveEnv = maibCredData?.liveEnv;
+  const credError = liveEnv && maibCredData?.[liveEnv]?.credentialError;
+  document.getElementById('maib-cred-error-banner').style.display = credError ? 'flex' : 'none';
+
   document.getElementById('demo-mode-banner').style.display = onboardingData.maib_status !== 'active' ? 'flex' : 'none';
 }
+document.getElementById('maib-cred-error-btn').addEventListener('click', () => openWizard(5));
 
 document.getElementById('setup-banner-btn').addEventListener('click', () => openWizard(onboardingData?.onboarding_step || 1));
 document.getElementById('demo-mode-btn').addEventListener('click', () => openWizard(5));
@@ -2252,19 +2276,72 @@ document.getElementById('btn-ob-qr-done').addEventListener('click', async () => 
 });
 
 // ── Step 5: Plăți (maib) ─────────────────────────────────────────────────────
+// Sandbox and production are two independent credential sets (see server.js's MAIB_ENV_COLUMNS)
+// — obCredEnv is which SET this form is currently editing/testing, entirely separate from
+// maibCredData.liveEnv (which set actually processes real guest payments right now).
+let obCredEnv = 'sandbox';
+let maibCredData = null;
+
+async function loadMaibCredentials() {
+  try {
+    maibCredData = await api('/api/dashboard/maib-credentials');
+  } catch (err) { console.error('[maib-credentials]', err); maibCredData = null; }
+}
+
 function renderObMaib() {
   const d = onboardingData || {};
   obSelectedStatus = d.maib_status || 'not_started';
   document.querySelectorAll('.ob-status-opt').forEach(el => el.classList.toggle('sel', el.dataset.obStatus === obSelectedStatus));
-  document.getElementById('ob-maib-env').value = d.maib_env || 'sandbox';
-  document.getElementById('ob-maib-client-id').value = d.maib_client_id || '';
+  document.getElementById('ob-demo-notice').style.display = d.maib_status === 'active' ? 'none' : '';
+
+  loadMaibCredentials().then(renderObCredEnvForm);
+}
+
+function renderObCredEnvForm() {
+  const c = maibCredData;
+  document.querySelectorAll('[data-cred-env]').forEach(el => el.classList.toggle('sel', el.dataset.credEnv === obCredEnv));
+
+  document.getElementById('ob-maib-client-id').value = '';
   document.getElementById('ob-maib-client-secret').value = '';
   document.getElementById('ob-maib-signature-key').value = '';
-  document.getElementById('ob-maib-saved-note').textContent = d.maib_has_credentials
-    ? 'Client Secret și Signature Key sunt deja salvate — lasă câmpurile goale ca să le păstrezi.'
+  document.getElementById('ob-maib-test-result').textContent = '';
+  document.getElementById('ob-status-updated-note').textContent = c?.statusUpdatedAt
+    ? `Ultima schimbare de status: ${new Date(c.statusUpdatedAt).toLocaleString('ro-MD')}`
     : '';
-  document.getElementById('ob-demo-notice').style.display = d.maib_status === 'active' ? 'none' : '';
+
+  if (!c) return;
+  const envData = c[obCredEnv]; // { clientId, hasSecret, hasSignatureKey, credentialError }
+  document.getElementById('ob-maib-client-id').value = envData?.clientId || '';
+  document.getElementById('ob-cred-error-notice').style.display = envData?.credentialError ? '' : 'none';
+
+  const savedBits = [];
+  if (envData?.hasSecret) savedBits.push('Client Secret');
+  if (envData?.hasSignatureKey) savedBits.push('Signature Key');
+  document.getElementById('ob-maib-saved-note').textContent = savedBits.length
+    ? `${savedBits.join(' și ')} deja salvat(e) — lasă câmpurile goale ca să le păstrezi.`
+    : 'Niciun set salvat încă pentru acest mediu.';
+
+  const isLive = c.liveEnv === obCredEnv;
+  const liveEnvLabel = c.liveEnv === 'production' ? 'Producție' : c.liveEnv === 'sandbox' ? 'Sandbox' : 'niciunul';
+  document.getElementById('ob-live-env-note').textContent = isLive
+    ? `✓ Acest mediu (${obCredEnv === 'production' ? 'Producție' : 'Sandbox'}) este cel activ — folosit acum pentru plățile oaspeților.`
+    : `Mediul activ acum: ${liveEnvLabel}.`;
+
+  const setLiveBtn = document.getElementById('btn-ob-set-live');
+  if (isLive) {
+    setLiveBtn.style.display = 'none';
+  } else {
+    setLiveBtn.style.display = '';
+    setLiveBtn.textContent = obCredEnv === 'production' ? 'Activează Producție (bani reali)' : 'Comută pe Sandbox';
+  }
 }
+
+document.querySelectorAll('[data-cred-env]').forEach(el => {
+  el.addEventListener('click', () => {
+    obCredEnv = el.dataset.credEnv;
+    renderObCredEnvForm();
+  });
+});
 
 document.querySelectorAll('.ob-status-opt').forEach(el => {
   el.addEventListener('click', () => {
@@ -2275,10 +2352,10 @@ document.querySelectorAll('.ob-status-opt').forEach(el => {
 
 document.getElementById('btn-ob-save-maib').addEventListener('click', async () => {
   const body = {
+    credEnv: obCredEnv,
     clientId: document.getElementById('ob-maib-client-id').value.trim(),
     clientSecret: document.getElementById('ob-maib-client-secret').value.trim(),
     signatureKey: document.getElementById('ob-maib-signature-key').value.trim(),
-    env: document.getElementById('ob-maib-env').value,
     status: obSelectedStatus,
   };
   try {
@@ -2289,6 +2366,41 @@ document.getElementById('btn-ob-save-maib').addEventListener('click', async () =
     updateOnboardingBanners();
     toast('Salvat.', 'success');
   } catch { toast('Eroare la salvare.'); }
+});
+
+document.getElementById('btn-ob-test-maib').addEventListener('click', async () => {
+  const resultEl = document.getElementById('ob-maib-test-result');
+  resultEl.style.color = 'var(--muted)';
+  resultEl.textContent = 'Se testează…';
+  try {
+    const res = await apiMut('POST', '/api/dashboard/maib-test-connection', { env: obCredEnv });
+    if (res.ok) {
+      resultEl.style.color = 'var(--em-hi)';
+      resultEl.textContent = '✓ Conexiune reușită — datele de acces funcționează.';
+    } else {
+      resultEl.style.color = 'var(--red)';
+      resultEl.textContent = '✗ Conexiune eșuată: ' + (res.error || 'eroare necunoscută');
+    }
+  } catch { resultEl.style.color = 'var(--red)'; resultEl.textContent = '✗ Eroare la testare.'; }
+});
+
+document.getElementById('btn-ob-set-live').addEventListener('click', async () => {
+  const body = { env: obCredEnv };
+  if (obCredEnv === 'production') {
+    const confirmed = confirm(
+      'Treci pe Producție: de acum, plățile oaspeților vor mișca bani reali prin contul vostru maib. Continui?'
+    );
+    if (!confirmed) return;
+    body.confirmProduction = true;
+  }
+  try {
+    const res = await apiMut('POST', '/api/dashboard/maib-set-live-env', body);
+    if (res.error) return toast('Eroare: ' + res.error);
+    await loadOnboarding(false);
+    renderObMaib();
+    updateOnboardingBanners();
+    toast(obCredEnv === 'production' ? 'Producție activată.' : 'Comutat pe sandbox.', 'success');
+  } catch { toast('Eroare la comutare.'); }
 });
 
 // ── Step 6: Gata ─────────────────────────────────────────────────────────────
@@ -2335,7 +2447,7 @@ document.getElementById('onboarding-wizard').addEventListener('click', async e =
 });
 
 async function loadAll() {
-  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings(), loadLoyalty(), loadLogo()]);
+  await Promise.all([loadStats(), loadTopDishes(), loadHourly(), loadTables(), loadRecentPayments(), loadClubEats(), loadFeedback(), loadSettings(), loadMenu(), loadStaffLinkStatus(), loadTelegramSettings(), loadLoyalty(), loadLogo(), loadMaibCredentials().then(updateOnboardingBanners)]);
   // Staff members must load before table assignments / Poster mapping (both render options from
   // staffMembersCache) and before the Bacșișuri view's assign dropdowns.
   await loadStaffMembers();

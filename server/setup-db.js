@@ -134,6 +134,11 @@ async function setup() {
       // mia_pay_id: maib's real payId (only exists once a QR is paid) — needed for refunds,
       // separate from mia_payment_id which holds our correlation key (the qrId).
       await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS mia_pay_id TEXT`);
+      // mia_env: which credential set (sandbox|production) this specific payment was created
+      // under — recorded once at creation, never inferred from the restaurant's CURRENT live env.
+      // A restaurant switching sandbox↔production must never change which credentials an
+      // in-flight or historical payment is verified/polled/refunded against.
+      await client.query(`ALTER TABLE payments ADD COLUMN IF NOT EXISTS mia_env TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS iiko_url TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS iiko_api_key TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS iiko_org_id TEXT`);
@@ -307,6 +312,9 @@ async function setup() {
     // ── Per-restaurant maib MIA credentials (encrypted at rest, tenant-scoped) ──
     // maib_status: not_started | in_progress | active — explicitly tracked, never inferred,
     // so a restaurant is only ever taken out of demo mode by a deliberate status change.
+    // maib_env: which credential set (sandbox|production) is currently LIVE — i.e. actually used
+    // to initiate new guest payments. Separate from maib_status: a restaurant can be fully
+    // onboarded (active) while still live on sandbox, testing before it commits to production.
     try {
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_client_id TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_client_secret_enc TEXT`);
@@ -314,6 +322,49 @@ async function setup() {
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_env TEXT`);
       await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_status TEXT NOT NULL DEFAULT 'not_started'`);
     } catch { /* already exist */ }
+
+    // ── maib credentials, split into separate sandbox/production sets ──────────────────────────
+    // Superseding the single maib_client_id/secret/signature set above: a restaurant now holds
+    // TWO independent credential sets so it can test in sandbox without touching (or being
+    // blocked by) its production credentials, and switch which one is live explicitly. The old
+    // maib_client_id/_client_secret_enc/_signature_key_enc columns are deliberately left in place
+    // (never dropped) — this database is shared with the running production server, and dropping
+    // columns a not-yet-redeployed process still queries would break it out from under itself.
+    // They become dead weight once this migrates, not a hazard.
+    try {
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_sandbox_client_id TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_sandbox_client_secret_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_sandbox_signature_key_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_production_client_id TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_production_client_secret_enc TEXT`);
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_production_signature_key_enc TEXT`);
+      // Timestamped whenever maib_status changes — the internal admin view (GET /api/admin/
+      // restaurants) surfaces this so we can see which restaurants have been stuck at a given
+      // step for a long time, not just what step they're currently on.
+      await client.query(`ALTER TABLE restaurants ADD COLUMN IF NOT EXISTS maib_status_updated_at TIMESTAMPTZ`);
+    } catch { /* already exist */ }
+
+    // One-time, non-destructive backfill: any restaurant that entered credentials under the old
+    // single-set schema keeps them, filed under whichever env maib_env was set to at the time.
+    // Only touches rows where the new columns are still empty, so it's safe to run on every boot.
+    try {
+      await client.query(`
+        UPDATE restaurants SET
+          maib_sandbox_client_id         = CASE WHEN maib_env = 'sandbox'    THEN maib_client_id             ELSE maib_sandbox_client_id END,
+          maib_sandbox_client_secret_enc = CASE WHEN maib_env = 'sandbox'    THEN maib_client_secret_enc      ELSE maib_sandbox_client_secret_enc END,
+          maib_sandbox_signature_key_enc = CASE WHEN maib_env = 'sandbox'    THEN maib_signature_key_enc      ELSE maib_sandbox_signature_key_enc END,
+          maib_production_client_id         = CASE WHEN maib_env = 'production' THEN maib_client_id             ELSE maib_production_client_id END,
+          maib_production_client_secret_enc = CASE WHEN maib_env = 'production' THEN maib_client_secret_enc      ELSE maib_production_client_secret_enc END,
+          maib_production_signature_key_enc = CASE WHEN maib_env = 'production' THEN maib_signature_key_enc      ELSE maib_production_signature_key_enc END
+        WHERE maib_client_id IS NOT NULL
+          AND maib_sandbox_client_id IS NULL AND maib_production_client_id IS NULL
+      `);
+      // Best-effort: give any restaurant already past 'not_started' a starting timestamp so the
+      // admin view isn't full of nulls the moment this ships. Approximate (it's "as of this
+      // migration", not the true original transition time) — acceptable for an ops-visibility
+      // field that only needs to answer "how long has this been sitting here," not be exact.
+      await client.query(`UPDATE restaurants SET maib_status_updated_at = NOW() WHERE maib_status != 'not_started' AND maib_status_updated_at IS NULL`);
+    } catch (err) { console.error('[setup-db] maib sandbox/production credential backfill failed (non-fatal):', err.message); }
 
     // ── Premium menu: images, dietary tags, featured items, presentation style ──
     // menu_images holds either DB-stored bytes (full_data/thumb_data) or, when an S3-compatible

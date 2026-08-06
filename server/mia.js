@@ -131,6 +131,39 @@ export function sweepMiaTokenCache() {
 // Read-only size for the internal metrics endpoint.
 export function miaTokenCacheSize() { return _tokenCache.size; }
 
+// Called whenever a restaurant's stored clientId/clientSecret changes (dashboard save route) —
+// a stale cached token under the OLD secret would otherwise keep authenticating real payments
+// even though the credential we'd report as "saved" is the new (possibly wrong) one. Clears
+// both the sandbox and production cache entries for this clientId, since a changed secret could
+// apply to either.
+export function invalidateTokenCacheFor(clientId) {
+  if (!clientId) return;
+  for (const key of _tokenCache.keys()) {
+    if (key.endsWith(`:${clientId}`)) _tokenCache.delete(key);
+  }
+}
+
+/**
+ * testConnection(creds)
+ * Performs a real token-generation call against maib with the given credential set, so an owner
+ * can verify their setup themselves before relying on it for real guest payments. Always forces
+ * a fresh network call (never reuses a cached token) — the whole point is to prove that THESE
+ * credentials, right now, actually authenticate; a stale cache hit would prove nothing.
+ * Returns { ok: true, mode } or { ok: false, error }. Never throws, never includes the tested
+ * credentials in its return value.
+ */
+export async function testConnection(creds) {
+  const ctx = resolveCreds(creds);
+  if (ctx.mode === 'mock') return { ok: false, error: 'Date de acces lipsă sau incomplete' };
+  invalidateTokenCacheFor(ctx.clientId);
+  try {
+    await getAccessToken(ctx);
+    return { ok: true, mode: ctx.mode };
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+}
+
 async function authedFetch(ctx, path, { method = 'GET', body } = {}) {
   const token = await getAccessToken(ctx);
   const res = await fetch(`${ctx.base}${path}`, {
